@@ -1,0 +1,39 @@
+# Framework principal
+Django>=5.0,<6.0
+Django>=6.0,<7.0
+
+# API REST
+djangorestframework>=3.14,<4.0
+djangorestframework-simplejwt>=5.2,<6.0
+
+# Base de données MySQL
+mysqlclient>=2.2,<3.0
+
+# Gestion des fichiers et images
+Pillow>=10.0,<11.0
+
+# Cloudinary pour hébergement médias
+cloudinary>=1.39,<2.0
+django-cloudinary-storage==0.3.0
+
+# Excel
+openpyxl>=3.1
+
+# Config
+python-decouple==3.8
+
+# Service discovery
+py-eureka-client==0.11.8
+
+# CORS
+django-cors-headers>=4.0
+django-cloudinary-storage==0.3.0      
+#excel
+openpyxl>=3.1
+python-decouple==3.8
+py-eureka-client==0.11.8
+django-cors-headers
+pandas>=2.0
+reportlab>=4.0
+xmltodict
+rest_framework_simplejwt

@@ -1,0 +1,72 @@
+# version: "3.8"
+
+# services:
+#   registry:
+#     build:
+#       context: ./registry
+#       dockerfile: Dockerfile
+#     image: rgestry-pfe
+#     container_name: registry
+#     ports:
+#       - "8761:8761"
+#     networks:
+#       - backend
+
+#   gateway:
+#     build:
+#       context: ./gateway
+#       dockerfile: Dockerfile
+#     image: gateway-pfe
+#     container_name: gateway
+#     depends_on:
+#       - registry
+#     environment:
+#       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry:8761/eureka
+#     ports:
+#       - "8080:8080"
+#     networks:
+#       - backend
+
+#   mysql:                          # ← added 2 spaces indent
+#     image: mysql:8.0
+#     container_name: mysql-service1
+#     restart: always
+#     environment:
+#       MYSQL_ROOT_PASSWORD: root
+#       MYSQL_DATABASE: service1
+#     ports:
+#       - "3307:3306"
+#     volumes:
+#       - mysql_data1:/var/lib/mysql
+#       - ./mysql-init:/docker-entrypoint-initdb.d
+#     networks:
+#       - backend
+
+#   service1-auth:                  # ← added 2 spaces indent
+#     build:
+#       context: ./authentification
+#       dockerfile: Dockerfile
+#     container_name: service1-auth
+#     environment:
+#       - EUREKA_SERVER=http://registry:8761/eureka/
+#       - EUREKA_APP_NAME=SERVICE1-CLIENT
+#       - EUREKA_HOST=service1-auth
+#       - EUREKA_PORT=8000
+#       - MYSQL_HOST=mysql
+#       - MYSQL_PORT=3306
+#       - MYSQL_DATABASE=service1
+#       - MYSQL_USER=root
+#       - MYSQL_PASSWORD=root
+#     depends_on:
+#       - mysql
+#       - registry
+#     ports:
+#       - "8000:8000"
+#     networks:
+#       - backend
+
+# volumes:
+#   mysql_data1:
+
+# networks:
+#   backend:
