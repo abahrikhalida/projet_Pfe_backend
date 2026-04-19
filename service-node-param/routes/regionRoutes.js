@@ -9,6 +9,8 @@ router.use(authMiddleware);
 
 // Routes accessibles à tous les utilisateurs authentifiés
 router.get('/',     regionController.getAllRegions);
+
+router.get('/id/:id', regionController.getRegionById);
 router.get('/:code', regionController.getRegionByCode);
 
 // Routes réservées aux chefs/admins

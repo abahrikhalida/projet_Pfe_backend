@@ -147,3 +147,84 @@ exports.deleteRegion = async (req, res) => {
         });
     }
 };
+// @desc    Get region by ID
+// @route   GET /api/regions/id/:id
+// @access  Private
+// exports.getRegionById = async (req, res) => {
+//     try {
+//         const { id } = req.params;
+
+//         const region = await Region.findOne({
+//             _id: id,
+//             is_active: true
+//         });
+
+//         if (!region) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Region not found'
+//             });
+//         }
+
+//         res.status(200).json({
+//             success: true,
+//             data: region
+//         });
+
+//     } catch (error) {
+//         console.error('Get region by ID error:', error);
+
+//         // Handle invalid ObjectId (very important)
+//         if (error.name === 'CastError') {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: 'Invalid region ID'
+//             });
+//         }
+
+//         res.status(500).json({
+//             success: false,
+//             message: 'Error fetching region',
+//             error: error.message
+//         });
+//     }
+// };
+exports.getRegionById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const region = await Region.findOne({
+            _id: id,
+            is_active: true
+        });
+
+        if (!region) {
+            return res.status(404).json({
+                success: false,
+                message: 'Region not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: region
+        });
+
+    } catch (error) {
+        console.error('Get region by ID error:', error);
+
+        // Handle invalid ObjectId (very important)
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid region ID'
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching region',
+            error: error.message
+        });
+    }
+};

@@ -1,23 +1,13 @@
-// middleware/auth.js — VERSION FINALE
-//
-// Flux :
-//  1. jwt.verify(token, SECRET_KEY)  →  vérifie signature + expiry LOCALEMENT (0 réseau)
-//  2. Cache hit ?                    →  retour immédiat (0 réseau)
-//  3. GET /api/users/<id>/           →  1 seul appel pour récupérer role, nom, email
-//
-// .env requis :
-//   JWT_SECRET=<valeur exacte de SECRET_KEY dans settings.py Django>
-//   AUTH_SERVICE_URL=http://127.0.0.1:8000/api
-
+// middleware/auth.js
 const axios = require('axios');
 const jwt   = require('jsonwebtoken');
 
 // ── Config ───────────────────────────────────────────────────
 const CONFIG = {
-    AUTH_URL:   process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:8000/api',
-    JWT_SECRET: process.env.JWT_SECRET,          // même valeur que SECRET_KEY Django
-    CACHE_TTL:  10 * 60 * 1000,                  // 10 minutes
-    TIMEOUT:    5000,
+    GATEWAY_URL: process.env.GATEWAY_URL || 'http://localhost:8083',
+    JWT_SECRET:  process.env.JWT_SECRET,
+    CACHE_TTL:   10 * 60 * 1000,  // 10 minutes
+    TIMEOUT:     5000,
 };
 
 // ── Cache mémoire ────────────────────────────────────────────
@@ -34,9 +24,29 @@ function cacheSet(key, data) {
     _cache.set(key, { data, exp: Date.now() + CONFIG.CACHE_TTL });
 }
 
-// ── Étape 1 : vérifier JWT localement ───────────────────────
-// Django SimpleJWT utilise HS256 + SECRET_KEY → on peut vérifier sans appel réseau
-// Retourne le payload décodé ou null si invalide/expiré
+// ── Fetch user via Gateway ────────────────────────────────────
+async function fetchUserFromDjango(userId, token) {
+    try {
+        const url = `${CONFIG.GATEWAY_URL}/api/all_users/${userId}/`;
+        console.log(`🌐 Appel via Gateway: ${url}`);
+
+        const res = await axios.get(url, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: CONFIG.TIMEOUT
+        });
+
+        console.log(`✅ /all_users/${userId}/ →`, { role: res.data?.role, email: res.data?.email });
+        return res.data;
+
+    } catch (err) {
+        const status = err.response?.status;
+        const detail = err.response?.data?.detail || err.message;
+        console.log(`❌ /all_users/${userId}/ échoué: ${status} — ${detail}`);
+        return null;
+    }
+}
+
+// ── Vérification JWT locale ───────────────────────────────────
 function verifyLocal(token) {
     if (!CONFIG.JWT_SECRET) {
         console.error('❌ JWT_SECRET non défini dans .env !');
@@ -45,7 +55,6 @@ function verifyLocal(token) {
     try {
         const payload = jwt.verify(token, CONFIG.JWT_SECRET, { algorithms: ['HS256'] });
 
-        // Vérifier que c'est un access token (pas un refresh)
         if (payload.token_type !== 'access') {
             console.log('❌ Token de type:', payload.token_type, '— access token requis');
             return null;
@@ -55,37 +64,15 @@ function verifyLocal(token) {
         return payload;
 
     } catch (err) {
-        // TokenExpiredError, JsonWebTokenError, etc.
         console.log(`❌ JWT invalide: ${err.message}`);
         return null;
     }
 }
 
-// ── Étape 2 : récupérer les données user depuis Django ───────
-// GET /api/users/<id>/  →  { id, role, nom_complet, email, is_staff, ... }
-async function fetchUserFromDjango(userId, token) {
-    try {
-        const res = await axios.get(
-            `${CONFIG.AUTH_URL}/users/${userId}/`,
-            {
-                headers: { Authorization: `Bearer ${token}` },
-                timeout: CONFIG.TIMEOUT
-            }
-        );
-        console.log(`✅ /users/${userId}/ →`, { role: res.data?.role, email: res.data?.email });
-        return res.data;
-    } catch (err) {
-        const status = err.response?.status;
-        const detail = err.response?.data?.detail || err.message;
-        console.log(`❌ /users/${userId}/ échoué: ${status} — ${detail}`);
-        return null;
-    }
-}
-
-// ── Résolution principale ────────────────────────────────────
+// ── Résolution principale ─────────────────────────────────────
 async function resolveUser(token) {
 
-    // 1. Vérification locale (signature + expiry)
+    // 1. Vérification locale JWT
     const payload = verifyLocal(token);
     if (!payload) return null;
 
@@ -99,11 +86,10 @@ async function resolveUser(token) {
         return cached;
     }
 
-    // 3. 1 appel Django pour récupérer le rôle
+    // 3. Appel Django via Gateway
     const data = await fetchUserFromDjango(userId, token);
+    if (!data) return null;
 
-    // Construire l'objet user
-    // api_get_user retourne: { id, email, nom_complet, role, photo_profil, is_staff, is_superuser }
     const user = {
         id:          userId,
         role:        data?.role || (data?.is_staff ? 'admin' : 'user'),
@@ -119,7 +105,7 @@ async function resolveUser(token) {
     return user;
 }
 
-// ── authMiddleware ───────────────────────────────────────────
+// ── authMiddleware ────────────────────────────────────────────
 const authMiddleware = async (req, res, next) => {
     console.log('\n🔐 ===== AUTH =====');
     try {
@@ -151,8 +137,7 @@ const authMiddleware = async (req, res, next) => {
     }
 };
 
-// ── checkRole ────────────────────────────────────────────────
-// Usage: checkRole(['chef'])  ou  checkRole(['chef', 'admin'])
+// ── checkRole ─────────────────────────────────────────────────
 const checkRole = (allowedRoles) => (req, res, next) => {
     if (!req.user) {
         return res.status(401).json({
@@ -174,7 +159,7 @@ const checkRole = (allowedRoles) => (req, res, next) => {
     next();
 };
 
-// ── Utilitaire : invalider cache après update rôle ───────────
+// ── Invalider cache ───────────────────────────────────────────
 const invalidateUser = (userId) => {
     _cache.delete(`user:${userId}`);
     console.log(`🗑️  Cache invalidé pour user ${userId}`);

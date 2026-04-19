@@ -5,9 +5,11 @@ const perimetreController = require('../controllers/perimetreController');
 
 // All routes require authentication
 router.use(authMiddleware);
+router.get('/region/:regionId', perimetreController.getPerimetresByRegionId);
 
 // Routes accessibles à tous les utilisateurs authentifiés
 router.get('/', perimetreController.getAllPerimetres);
+router.get('/id/:id', perimetreController.getPerimetreById);
 router.get('/:code', perimetreController.getPerimetreByCode);
 
 // Routes réservées aux chefs (authentifiés)
