@@ -49,6 +49,8 @@ urlpatterns = [
     path('users/<int:user_id>/affecter-structure/', views.api_affecter_structure, name='affecter-structure'),
     path('users/responsables-structure/', views.api_list_responsables_structure, name='list-responsables-structure'),
     path('users/responsables-structure/affectes/', views.api_list_responsables_structure_affectes, name='list-responsables-affectes'),
+    path('users/directeurs-region/', views.api_list_directeurs_region, name='list-directeurs-region'),
+    path('users/directeurs-region/affectes/', views.api_list_directeurs_region_affectes, name='list-directeurs-region-affectes'),
     # affectation role
     path('assign-role/',views.api_assign_role,name='api_assign_role'),
 

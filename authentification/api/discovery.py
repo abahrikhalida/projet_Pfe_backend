@@ -1,23 +1,4 @@
-# import requests
-# import xmltodict
-# from functools import lru_cache
 
-# EUREKA_BASE = 'http://localhost:8761/eureka'
-
-
-# @lru_cache(maxsize=10)
-# def discover_service(app_name: str) -> str:
-#     url = f"{EUREKA_BASE}/apps/{app_name}"
-
-#     resp = requests.get(url, timeout=5)
-#     resp.raise_for_status()
-
-#     data = xmltodict.parse(resp.content)
-
-#     instances = data['application']['instance']
-#     first = instances[0] if isinstance(instances, list) else instances
-
-#     return first['homePageUrl'].rstrip('/')
 import requests
 import xmltodict
 from functools import lru_cache
