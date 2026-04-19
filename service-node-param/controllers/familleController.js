@@ -1,6 +1,7 @@
 const Famille = require('../models/Famille');
 const Region = require('../models/Region');
 const Perimetre = require('../models/Perimetre');
+const mongoose = require('mongoose');
 
 // @desc    Create new famille
 // @route   POST /api/familles
@@ -173,6 +174,94 @@ exports.deleteFamille = async (req, res) => {
         res.status(500).json({ 
             message: 'Error deleting famille', 
             error: error.message 
+        });
+    }
+};
+// @desc    Get familles by region ObjectId and perimetre code
+// @route   GET /api/familles/region/:regionId/perimetre/:perimetreCode
+// @access  Private
+exports.getFamillesByRegionIdAndPerimetre = async (req, res) => {
+    try {
+        const { regionId, perimetreCode } = req.params;
+        
+        console.log("=== DEBUG getFamillesByRegionIdAndPerimetre ===");
+        console.log("regionId reçu:", regionId);
+        console.log("perimetreCode reçu:", perimetreCode);
+        
+        // Vérifier si l'ID de région est valide
+        const isValidObjectId = mongoose.Types.ObjectId.isValid(regionId);
+        if (!isValidObjectId) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID de région invalide'
+            });
+        }
+        
+        // 1. Trouver la région par son ObjectId
+        const region = await Region.findById(regionId);
+        if (!region) {
+            return res.status(404).json({
+                success: false,
+                message: 'Région non trouvée'
+            });
+        }
+        
+        console.log("Code région trouvé:", region.code_region);
+        
+        // 2. Récupérer les familles avec le code_region et le perimetre
+        const familles = await Famille.find({ 
+            region: region.code_region,
+            perimetre: perimetreCode,
+            is_active: true 
+        }).sort({ created_at: -1 });
+        
+        console.log("Nombre de familles trouvées:", familles.length);
+        
+        res.json({
+            success: true,
+            count: familles.length,
+            data: familles
+        });
+        
+    } catch (error) {
+        console.error('Get familles by region ID error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error fetching familles', 
+            error: error.message 
+        });
+    }
+};
+// @desc    Get famille by code_famille
+// @route   GET /api/familles/by-code/:code
+// @access  Private
+exports.getFamilleByCode = async (req, res) => {
+    try {
+        const { code } = req.params;
+
+        const famille = await Famille.findOne({
+            code_famille: code,
+            is_active: true
+        });
+
+        if (!famille) {
+            return res.status(404).json({
+                success: false,
+                message: 'Famille not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: famille
+        });
+
+    } catch (error) {
+        console.error('Get famille by code error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching famille',
+            error: error.message
         });
     }
 };

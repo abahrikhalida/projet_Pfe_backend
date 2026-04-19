@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const regionRoutes = require('./routes/regionRoutes');
 const familleRoutes = require('./routes/familleRoutes');
 const perimetreRoutes = require('./routes/perimetreRoutes');
+const structureRoutes = require('./routes/structureRoutes');
 
 dotenv.config({ path: './config.env' });
 
@@ -20,7 +21,7 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.set('trust proxy', 1);
 // Rate limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -32,6 +33,7 @@ app.use('/api', limiter);
 app.use('/api/regions', regionRoutes);
 app.use('/api/familles', familleRoutes);
 app.use('/api/perimetres', perimetreRoutes);
+app.use('/api/structures', structureRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

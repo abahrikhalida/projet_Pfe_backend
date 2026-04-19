@@ -1,5 +1,6 @@
 const Perimetre = require('../models/Perimetre');
 const Region = require('../models/Region');
+const mongoose = require('mongoose');  
 
 // @desc    Create new perimetre
 // @route   POST /api/perimetres
@@ -162,6 +163,94 @@ exports.deletePerimetre = async (req, res) => {
         console.error('Delete perimetre error:', error);
         res.status(500).json({ 
             message: 'Error deleting perimetre', 
+            error: error.message 
+        });
+    }
+};
+// @desc    Get perimetre by ID
+// @route   GET /api/perimetres/id/:id
+// @access  Private
+exports.getPerimetreById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const perimetre = await Perimetre.findOne({
+            _id: id,
+            is_active: true
+        });
+
+        if (!perimetre) {
+            return res.status(404).json({
+                success: false,
+                message: 'Perimetre not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: perimetre
+        });
+
+    } catch (error) {
+        console.error('Get perimetre by ID error:', error);
+
+        // 🔥 Gestion erreur ObjectId invalide
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid perimetre ID'
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching perimetre',
+            error: error.message
+        });
+    }
+};
+
+// @desc    Get perimetres by region ObjectId
+// @route   GET /api/perimetres/region/:regionId
+// @access  Private
+exports.getPerimetresByRegionId = async (req, res) => {
+    try {
+        const { regionId } = req.params;
+        
+        // Vérifier si l'ID est valide
+        const isValidObjectId = mongoose.Types.ObjectId.isValid(regionId);
+        if (!isValidObjectId) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID de région invalide'
+            });
+        }
+        
+        // 1. Trouver la région par son ObjectId
+        const region = await Region.findById(regionId);
+        if (!region) {
+            return res.status(404).json({
+                success: false,
+                message: 'Région non trouvée'
+            });
+        }
+        
+        // 2. Récupérer les périmètres avec le code_region de cette région
+        const perimetres = await Perimetre.find({ 
+            region: region.code_region,
+            is_active: true 
+        }).sort({ created_at: -1 });
+        
+        res.json({
+            success: true,
+            count: perimetres.length,
+            data: perimetres
+        });
+    } catch (error) {
+        console.error('Get perimetres by region ID error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error fetching perimetres', 
             error: error.message 
         });
     }
