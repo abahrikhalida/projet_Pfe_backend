@@ -20,6 +20,10 @@ class IsDivisionnaire(BasePermission):
 class IsChef(BasePermission):
     def has_permission(self, request, view):
         return get_role(request.user) == 'chef'
+class IsAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return get_role(request.user) == 'admin'
+
 
 
 class IsAgent(BasePermission):

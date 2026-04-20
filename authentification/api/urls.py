@@ -1,22 +1,4 @@
-# # api/urls.py
-# from django.urls import path
-# from . import views
-# from rest_framework_simplejwt.views import (
-#     TokenObtainPairView,
-#     TokenRefreshView,
-# )
 
-# urlpatterns = [
-#     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-#     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-#     path('login/', views.api_login, name='api_login'),
-#     path('agents/', views.api_list_agents, name='api_list_agents'),
-#     path('agents/excel/', views.api_create_agents_excel, name='agents_excel'),
-#     path('agents/create/', views.api_create_agent, name='api_create_agent'),
-#     path('agents/update/<int:agent_id>/', views.api_update_agent, name='api_update_agent'),
-#     path('agents/delete/<int:agent_id>/', views.api_delete_agent, name='api_delete_agent'),
-
-# ]
 from django.urls import path
 from . import views
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -54,10 +36,4 @@ urlpatterns = [
     # affectation role
     path('assign-role/',views.api_assign_role,name='api_assign_role'),
 
-    # Agents
-    # path('agents/', views.api_list_agents, name='api_list_agents'),
-    # path('agents/create/', views.api_create_agent, name='api_create_agent'),
-    # path('agents/excel/', views.api_create_agents_excel, name='agents_excel'),
-    # path('agents/update/<int:agent_id>/', views.api_update_agent, name='api_update_agent'),
-    # path('agents/delete/<int:agent_id>/', views.api_delete_agent, name='api_delete_agent'),
 ]
