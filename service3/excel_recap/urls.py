@@ -17,7 +17,9 @@ urlpatterns = [
     path('region-famille/', RecapRegionFamilleView.as_view(), name='recap-region-famille'),#valider
     path('verification/', VerificationCalculsView.as_view(), name='verification-calculs'),
     path('budget/nouveau-projet/', NouveauProjetView.as_view(), name='create-budget-manuel'),#valider
-    path('budget/modifier-projet/<str:code_division>/', ModifierProjetView.as_view(), name='modifier-projet'),#valider
+    # path('budget/modifier-projet/<str:code_division>/', ModifierProjetView.as_view(), name='modifier-projet'),#valider
+    path('budget/admin/patch-projet/<str:code_division>/',PatchProjetAdminView.as_view(),name='admin-patch-projet',),
+    path('budget/responsable/modifier-projet/<str:code_division>/',ModifierProjetResponsableView.as_view(),name='responsable-modifier-projet',),
     # path('budget/restaurer/<str:code_division>/<int:version>/',RestaurerVersionView.as_view(),name='restaurer-version'),
     # path('budget/historique/<str:code_division>/', HistoriqueProjetView.as_view(), name='historique-projet'),
     
