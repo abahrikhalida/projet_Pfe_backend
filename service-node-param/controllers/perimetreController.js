@@ -255,3 +255,27 @@ exports.getPerimetresByRegionId = async (req, res) => {
         });
     }
 };
+exports.getPerimetresByCodeRegion = async (req, res) => {
+    try {
+        const { codeRegion } = req.params;
+
+        const perimetres = await Perimetre.find({
+            region: codeRegion,
+            is_active: true
+        }).sort({ created_at: -1 });
+
+        res.json({
+            success: true,
+            count: perimetres.length,
+            data: perimetres
+        });
+
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching perimetres',
+            error: error.message
+        });
+    }
+};
