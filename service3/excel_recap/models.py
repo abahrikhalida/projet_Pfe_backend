@@ -83,6 +83,7 @@ class BudgetRecord(models.Model):
     statut = models.CharField(max_length=50, choices=STATUT_CHOICES, default='brouillon')
 
     # Validation workflow fields
+    commentaire_agent = models.TextField(blank=True, null=True)
     valide_par_directeur_region = models.CharField(max_length=255, blank=True, null=True)
     date_validation_directeur_region = models.DateTimeField(blank=True, null=True)
     commentaire_directeur_region = models.TextField(blank=True, null=True)
