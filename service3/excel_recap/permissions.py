@@ -39,6 +39,18 @@ class IsAgent(BasePermission):
         #     'responsable_structure',
         #     'agent',
         # )
+class IsAll(BasePermission):
+    """Tous les rôles authentifiés"""
+    def has_permission(self, request, view):
+
+        return get_role(request.user) in (
+            'directeur',
+            'directeur_region',
+            'divisionnaire',
+            'chef',
+            'responsable_structure',
+            'agent',
+        )
     
 class IsUser(BasePermission):
     """Tous les rôles authentifiés"""

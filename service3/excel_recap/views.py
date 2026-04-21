@@ -6,7 +6,8 @@ from django.db.models import Sum
 from .models import ExcelUpload, BudgetRecord
 from .serializers import ExcelUploadSerializer, BudgetRecordSerializer, ExcelFileSerializer
 from .utils import auto_correct_records, parse_excel
-from .mappings import REGION_MAPPING, ACTIVITE_MAPPING, FAMILLE_ORDER, get_famille_nom
+# from .mappings import REGION_MAPPING, ACTIVITE_MAPPING, FAMILLE_ORDER, get_famille_nom
+from .mappings import  ACTIVITE_MAPPING
 from .discovery import discover_service
 from django.utils import timezone
 # External service URLs
@@ -165,29 +166,29 @@ def clean_queryset(qs):
              .exclude(famille__in=FAMILLE_EXCLUSIONS)
 
 
-def group_by_famille(data):
-    grouped = {}
+# def group_by_famille(data):
+#     grouped = {}
 
-    for row in data:
-        code = str(row.get('famille', '') or '').strip()
-        if not code:
-            continue
+#     for row in data:
+#         code = str(row.get('famille', '') or '').strip()
+#         if not code:
+#             continue
 
-        nom = get_famille_nom(code)
+#         nom = get_famille_nom(code)
 
-        if nom not in grouped:
-            grouped[nom] = {field: 0 for field in NUMERIC_FIELDS}
-            grouped[nom]['famille_nom'] = nom
+#         if nom not in grouped:
+#             grouped[nom] = {field: 0 for field in NUMERIC_FIELDS}
+#             grouped[nom]['famille_nom'] = nom
 
-        for field in NUMERIC_FIELDS:
-            val = row.get(field) or 0
-            grouped[nom][field] += float(val)
+#         for field in NUMERIC_FIELDS:
+#             val = row.get(field) or 0
+#             grouped[nom][field] += float(val)
 
-    return sorted(
-        grouped.values(),
-        key=lambda x: FAMILLE_ORDER.index(x['famille_nom'])
-        if x['famille_nom'] in FAMILLE_ORDER else 99
-    )
+#     return sorted(
+#         grouped.values(),
+#         key=lambda x: FAMILLE_ORDER.index(x['famille_nom'])
+#         if x['famille_nom'] in FAMILLE_ORDER else 99
+#     )
 
 
 # ─────────────────────────────────────────
@@ -339,7 +340,78 @@ class RecapParRegionView(APIView):
             "regions": result,
             "total_division": total
         })
+# class GetProjetByIdView(APIView):
+#     """
+#     GET /recap/budget/projet/<id>/
+#     Récupère un projet spécifique par son ID
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
 
+#     def get(self, request, id):
+#         try:
+#             # Récupérer le projet par son ID
+#             projet = BudgetRecord.objects.get(id=id)
+            
+#             # Vérifier les droits d'accès (optionnel, basé sur BudgetRecordListView)
+#             user = request.user
+#             role = getattr(user, 'role', None)
+#             structure_id = getattr(user, 'structure_id', None)
+#             region_id = getattr(user, 'region_id', None)
+            
+#             has_access = False
+            
+#             if role == 'responsable_structure':
+#                 if projet.structure_id == structure_id:
+#                     has_access = True
+#             elif role == 'directeur_region':
+#                 if projet.region_id == region_id:
+#                     has_access = True
+#             elif role == 'agent':
+#                 if projet.created_by == user.id:
+#                     has_access = True
+#             elif role in ['chef', 'directeur', 'divisionnaire', 'admin', 'superadmin']:
+#                 has_access = True
+            
+#             if not has_access:
+#                 return Response(
+#                     {'error': 'Vous n\'avez pas accès à ce projet'},
+#                     status=403
+#                 )
+            
+#             # Sérialiser et retourner
+#             serializer = BudgetRecordSerializer(projet)
+#             return Response({
+#                 'success': True,
+#                 'data': serializer.data
+#             })
+            
+#         except BudgetRecord.DoesNotExist:
+#             return Response(
+#                 {'error': f'Projet avec ID {id} non trouvé'},
+#                 status=404
+#             )
+        
+class GetProjetByIdView(APIView):
+    """
+    GET /recap/budget/projet/<id>/
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id):
+        try:
+            projet = BudgetRecord.objects.get(id=id)
+            serializer = BudgetRecordSerializer(projet)
+            return Response({
+                'success': True,
+                'data': serializer.data
+            })
+        except BudgetRecord.DoesNotExist:
+            return Response(
+                {'error': f'Projet avec ID {id} non trouvé'},
+                status=404
+            )
 class RecapParFamilleView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -1071,6 +1143,180 @@ class VerificationCalculsView(APIView):
 from rest_framework import status as drf_status
 
 
+# class NouveauProjetView(APIView):
+#     """
+#     POST /api/budget/nouveau-projet/
+    
+#     Crée la première version d'un projet (sans historique)
+#     Tous les champs de réalisation sont NULL
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsResponsableStructure]
+
+#     @staticmethod
+#     def _to_float_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return float(val)
+#         except (ValueError, TypeError):
+#             return None
+
+#     @staticmethod
+#     def _safe_sum(values):
+#         filtered = [v for v in values if v is not None]
+#         return round(sum(filtered), 2) if filtered else None
+
+#     def post(self, request):
+#         data = request.data
+        
+#         # 1. Informations depuis le token
+#         region_id = getattr(request.user, 'region_id', None)
+#         structure_id = getattr(request.user, 'structure_id', None)
+#         created_by = request.user.id
+
+#         if not region_id or not structure_id:
+#             return Response({'error': 'region_id ou structure_id manquant'}, status=400)
+
+#         # 2. Champs obligatoires
+#         activite = data.get('activite')
+#         perimetre_code = data.get('perimetre')
+#         famille_code = data.get('famille')
+#         code_division = data.get('code_division')
+#         libelle = data.get('libelle')
+
+#         missing = [f for f, v in {
+#             'activite': activite, 'perimetre': perimetre_code,
+#             'famille': famille_code, 'code_division': code_division, 'libelle': libelle
+#         }.items() if not v]
+
+#         if missing:
+#             return Response({'error': f"Champs manquants: {', '.join(missing)}"}, status=400)
+
+#         # 3. Vérifier que le code_division n'existe pas déjà
+#         if BudgetRecord.objects.filter(code_division=code_division).exists():
+#             return Response({
+#                 'error': f"Le code_division '{code_division}' existe déjà. Utilisez l'API de modification."
+#             }, status=400)
+
+#         # 4. Intervalle PMT
+#         intervalle_pmt = data.get('intervalle_pmt')
+#         if intervalle_pmt and isinstance(intervalle_pmt, list) and len(intervalle_pmt) == 2:
+#             annee_debut_pmt = int(intervalle_pmt[0])
+#             annee_fin_pmt = int(intervalle_pmt[1])
+#         else:
+#             annee_debut_pmt = data.get('annee_debut_pmt')
+#             annee_fin_pmt = data.get('annee_fin_pmt')
+
+#         # 5. Résolution région via service param
+#         service_url = get_service_param_url()
+#         token = request.headers.get('Authorization', '')
+
+#         try:
+#             region_resp = requests.get(
+#                 f"{service_url}/params/regions/id/{region_id}",
+#                 headers={'Authorization': token},
+#                 timeout=5
+#             )
+#             if region_resp.status_code != 200:
+#                 return Response({'error': 'Erreur région'}, status=400)
+#             region_data = region_resp.json().get('data', {})
+#             code_region = region_data.get('code_region')
+#         except Exception as e:
+#             return Response({'error': f'Erreur service région: {e}'}, status=503)
+
+#         # 6. Lecture des champs financiers
+#         PREVISIONS_KEYS = ['prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5']
+#         MOIS_KEYS = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#                      'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']
+
+#         v = {}
+#         for key in PREVISIONS_KEYS:
+#             v[f'{key}_total'] = self._to_float_or_none(data.get(f'{key}_total'))
+#             v[f'{key}_dont_dex'] = self._to_float_or_none(data.get(f'{key}_dont_dex'))
+#         for mois in MOIS_KEYS:
+#             v[f'{mois}_total'] = self._to_float_or_none(data.get(f'{mois}_total'))
+#             v[f'{mois}_dont_dex'] = self._to_float_or_none(data.get(f'{mois}_dont_dex'))
+
+#         # 7. Calculs pour nouveau projet
+#         prev_n_plus1_total = self._safe_sum([v[f'{m}_total'] for m in MOIS_KEYS])
+#         prev_n_plus1_dex = self._safe_sum([v[f'{m}_dont_dex'] for m in MOIS_KEYS])
+#         rar_total = self._safe_sum([v[f'{k}_total'] for k in PREVISIONS_KEYS])
+#         rar_dex = self._safe_sum([v[f'{k}_dont_dex'] for k in PREVISIONS_KEYS])
+#         cout_total = self._safe_sum([prev_n_plus1_total, rar_total])
+#         cout_dex = self._safe_sum([prev_n_plus1_dex, rar_dex])
+
+#         # 8. Création
+#         upload = ExcelUpload.objects.create(
+#             file_name=f"nouveau_projet_{code_division}",
+#             status='processed'
+#         )
+
+#         record = BudgetRecord.objects.create(
+#             upload=upload,
+#             activite=activite,
+#             region=code_region,
+#             perm=perimetre_code,
+#             famille=famille_code,
+#             code_division=code_division,
+#             libelle=libelle,
+#             annee_debut_pmt=annee_debut_pmt,
+#             annee_fin_pmt=annee_fin_pmt,
+#             region_id=region_id,
+#             structure_id=structure_id,
+#             created_by=created_by,
+#             type_projet='nouveau',
+#             description_technique=data.get('description_technique'),
+#             opportunite_projet=data.get('opportunite_projet'),
+            
+#             # Versionnement
+#             parent_id=None,
+#             version=1,
+#             is_active=True,
+#             version_comment="Création initiale",
+            
+#             # Champs de réalisation (NULL pour nouveau projet)
+#             realisation_cumul_n_mins1_total=None,
+#             realisation_cumul_n_mins1_dont_dex=None,
+#             real_s1_n_total=None,
+#             real_s1_n_dont_dex=None,
+#             prev_s2_n_total=None,
+#             prev_s2_n_dont_dex=None,
+#             prev_cloture_n_total=None,
+#             prev_cloture_n_dont_dex=None,
+            
+#             # Champs calculés
+#             prev_n_plus1_total=prev_n_plus1_total,
+#             prev_n_plus1_dont_dex=prev_n_plus1_dex,
+#             reste_a_realiser_total=rar_total,
+#             reste_a_realiser_dont_dex=rar_dex,
+#             cout_initial_total=cout_total,
+#             cout_initial_dont_dex=cout_dex,
+            
+#             # Prévisions
+#             **{k: v[k] for k in [f'{key}_total' for key in PREVISIONS_KEYS] + 
+#                [f'{key}_dont_dex' for key in PREVISIONS_KEYS] +
+#                [f'{mois}_total' for mois in MOIS_KEYS] +
+#                [f'{mois}_dont_dex' for mois in MOIS_KEYS]}
+#         )
+
+#         serializer = BudgetRecordSerializer(record)
+#         return Response({
+#             'success': True,
+#             'message': 'Projet créé avec succès (version 1)',
+#             'data': serializer.data
+#         }, status=201)
+import logging
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.core.cache import cache
+import requests
+import traceback
+
+# Configuration du logger
+logger = logging.getLogger(__name__)
+
 class NouveauProjetView(APIView):
     """
     POST /api/budget/nouveau-projet/
@@ -1096,15 +1342,35 @@ class NouveauProjetView(APIView):
         return round(sum(filtered), 2) if filtered else None
 
     def post(self, request):
+        logger.info("=" * 80)
+        logger.info("🔵 NOUVEAU PROJET - Début de la requête")
+        logger.info(f"📅 Timestamp: {datetime.now()}")
+        logger.info(f"🔑 Headers: {dict(request.headers)}")
+        logger.info(f"👤 User: {request.user}")
+        logger.info(f"🆔 User ID: {request.user.id if request.user else 'None'}")
+        
         data = request.data
+        logger.info(f"📦 Données reçues: {data}")
         
         # 1. Informations depuis le token
         region_id = getattr(request.user, 'region_id', None)
         structure_id = getattr(request.user, 'structure_id', None)
-        created_by = request.user.id
+        created_by = request.user.id if request.user else None
+
+        logger.info(f"📍 region_id: {region_id}")
+        logger.info(f"🏢 structure_id: {structure_id}")
+        logger.info(f"👨‍💻 created_by: {created_by}")
 
         if not region_id or not structure_id:
-            return Response({'error': 'region_id ou structure_id manquant'}, status=400)
+            logger.error(f"❌ region_id ou structure_id manquant - region_id={region_id}, structure_id={structure_id}")
+            return Response({
+                'error': 'region_id ou structure_id manquant',
+                'debug': {
+                    'region_id': region_id,
+                    'structure_id': structure_id,
+                    'user_attrs': dir(request.user) if request.user else 'No user'
+                }
+            }, status=400)
 
         # 2. Champs obligatoires
         activite = data.get('activite')
@@ -1113,19 +1379,37 @@ class NouveauProjetView(APIView):
         code_division = data.get('code_division')
         libelle = data.get('libelle')
 
+        logger.info(f"📋 Champs obligatoires:")
+        logger.info(f"  - activite: {activite}")
+        logger.info(f"  - perimetre: {perimetre_code}")
+        logger.info(f"  - famille: {famille_code}")
+        logger.info(f"  - code_division: {code_division}")
+        logger.info(f"  - libelle: {libelle}")
+
         missing = [f for f, v in {
-            'activite': activite, 'perimetre': perimetre_code,
-            'famille': famille_code, 'code_division': code_division, 'libelle': libelle
+            'activite': activite, 
+            'perimetre': perimetre_code,
+            'famille': famille_code, 
+            'code_division': code_division, 
+            'libelle': libelle
         }.items() if not v]
 
         if missing:
-            return Response({'error': f"Champs manquants: {', '.join(missing)}"}, status=400)
+            logger.error(f"❌ Champs manquants: {missing}")
+            return Response({
+                'error': f"Champs manquants: {', '.join(missing)}",
+                'debug': {'missing_fields': missing, 'received_data': list(data.keys())}
+            }, status=400)
 
         # 3. Vérifier que le code_division n'existe pas déjà
+        logger.info(f"🔍 Vérification existence code_division: {code_division}")
         if BudgetRecord.objects.filter(code_division=code_division).exists():
+            logger.error(f"❌ code_division existe déjà: {code_division}")
             return Response({
-                'error': f"Le code_division '{code_division}' existe déjà. Utilisez l'API de modification."
+                'error': f"Le code_division '{code_division}' existe déjà. Utilisez l'API de modification.",
+                'debug': {'code_division': code_division}
             }, status=400)
+        logger.info(f"✅ code_division disponible")
 
         # 4. Intervalle PMT
         intervalle_pmt = data.get('intervalle_pmt')
@@ -1135,25 +1419,73 @@ class NouveauProjetView(APIView):
         else:
             annee_debut_pmt = data.get('annee_debut_pmt')
             annee_fin_pmt = data.get('annee_fin_pmt')
+        
+        logger.info(f"📅 PMT Intervalle: debut={annee_debut_pmt}, fin={annee_fin_pmt}")
 
-        # 5. Résolution région via service param
+        # 5. Récupérer le code région via service param
         service_url = get_service_param_url()
         token = request.headers.get('Authorization', '')
+        
+        logger.info(f"🌐 Service Param URL: {service_url}")
+        logger.info(f"🔑 Token (first 50 chars): {token[:50]}..." if token else "🔑 Token: None")
+        logger.info(f"📍 Region ID pour appel: {region_id}")
+
+        code_region = None
+        region_nom = None
 
         try:
+            api_url = f"{service_url}/params/regions/id/{region_id}"
+            logger.info(f"📡 Appel API: {api_url}")
+            
             region_resp = requests.get(
-                f"{service_url}/params/regions/id/{region_id}",
+                api_url,
                 headers={'Authorization': token},
                 timeout=5
             )
-            if region_resp.status_code != 200:
-                return Response({'error': 'Erreur région'}, status=400)
-            region_data = region_resp.json().get('data', {})
-            code_region = region_data.get('code_region')
+            
+            logger.info(f"📊 Status code: {region_resp.status_code}")
+            logger.info(f"📄 Response text: {region_resp.text[:200]}" if region_resp.text else "📄 Response: empty")
+            
+            if region_resp.status_code == 200:
+                region_data = region_resp.json().get('data', {})
+                code_region = region_data.get('code_region')
+                region_nom = region_data.get('nom')
+                logger.info(f"✅ Région trouvée - code: {code_region}, nom: {region_nom}")
+            else:
+                logger.error(f"❌ Erreur région - Status: {region_resp.status_code}")
+                return Response({
+                    'error': f'Erreur lors de la récupération de la région',
+                    'debug': {
+                        'status_code': region_resp.status_code,
+                        'response': region_resp.text,
+                        'region_id': region_id,
+                        'url': api_url
+                    }
+                }, status=400)
+                
+        except requests.exceptions.Timeout:
+            logger.error(f"⏰ Timeout sur l'appel au service param (5 secondes)")
+            return Response({
+                'error': 'Timeout du service param',
+                'debug': {'url': api_url, 'region_id': region_id}
+            }, status=503)
         except Exception as e:
-            return Response({'error': f'Erreur service région: {e}'}, status=503)
+            logger.error(f"💥 Exception lors de l'appel au service param: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response({
+                'error': f'Erreur service région: {str(e)}',
+                'debug': {'exception': str(e), 'region_id': region_id}
+            }, status=503)
+
+        if not code_region:
+            logger.error(f"❌ Code région non trouvé pour region_id={region_id}")
+            return Response({
+                'error': 'Code région non trouvé',
+                'debug': {'region_id': region_id, 'region_data': region_data if 'region_data' in locals() else None}
+            }, status=404)
 
         # 6. Lecture des champs financiers
+        logger.info("💰 Lecture des champs financiers...")
         PREVISIONS_KEYS = ['prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5']
         MOIS_KEYS = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
                      'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']
@@ -1162,79 +1494,129 @@ class NouveauProjetView(APIView):
         for key in PREVISIONS_KEYS:
             v[f'{key}_total'] = self._to_float_or_none(data.get(f'{key}_total'))
             v[f'{key}_dont_dex'] = self._to_float_or_none(data.get(f'{key}_dont_dex'))
+            logger.debug(f"  {key}_total: {v[f'{key}_total']}, {key}_dont_dex: {v[f'{key}_dont_dex']}")
+            
         for mois in MOIS_KEYS:
             v[f'{mois}_total'] = self._to_float_or_none(data.get(f'{mois}_total'))
             v[f'{mois}_dont_dex'] = self._to_float_or_none(data.get(f'{mois}_dont_dex'))
+        
+        logger.info(f"✅ {len([x for x in v if v[x] is not None])} champs financiers chargés")
 
         # 7. Calculs pour nouveau projet
+        logger.info("🧮 Calculs en cours...")
         prev_n_plus1_total = self._safe_sum([v[f'{m}_total'] for m in MOIS_KEYS])
         prev_n_plus1_dex = self._safe_sum([v[f'{m}_dont_dex'] for m in MOIS_KEYS])
         rar_total = self._safe_sum([v[f'{k}_total'] for k in PREVISIONS_KEYS])
         rar_dex = self._safe_sum([v[f'{k}_dont_dex'] for k in PREVISIONS_KEYS])
         cout_total = self._safe_sum([prev_n_plus1_total, rar_total])
         cout_dex = self._safe_sum([prev_n_plus1_dex, rar_dex])
+        
+        logger.info(f"📊 Résultats calculs:")
+        logger.info(f"  - prev_n_plus1_total: {prev_n_plus1_total}")
+        logger.info(f"  - prev_n_plus1_dex: {prev_n_plus1_dex}")
+        logger.info(f"  - rar_total: {rar_total}")
+        logger.info(f"  - rar_dex: {rar_dex}")
+        logger.info(f"  - cout_total: {cout_total}")
+        logger.info(f"  - cout_dex: {cout_dex}")
 
-        # 8. Création
+        # 8. Création en base
+        logger.info("💾 Création de l'upload...")
         upload = ExcelUpload.objects.create(
             file_name=f"nouveau_projet_{code_division}",
             status='processed'
         )
+        logger.info(f"✅ Upload créé: id={upload.id}")
 
-        record = BudgetRecord.objects.create(
-            upload=upload,
-            activite=activite,
-            region=code_region,
-            perm=perimetre_code,
-            famille=famille_code,
-            code_division=code_division,
-            libelle=libelle,
-            annee_debut_pmt=annee_debut_pmt,
-            annee_fin_pmt=annee_fin_pmt,
-            region_id=region_id,
-            structure_id=structure_id,
-            created_by=created_by,
-            type_projet='nouveau',
-            description_technique=data.get('description_technique'),
-            opportunite_projet=data.get('opportunite_projet'),
-            
-            # Versionnement
-            parent_id=None,
-            version=1,
-            is_active=True,
-            version_comment="Création initiale",
-            
-            # Champs de réalisation (NULL pour nouveau projet)
-            realisation_cumul_n_mins1_total=None,
-            realisation_cumul_n_mins1_dont_dex=None,
-            real_s1_n_total=None,
-            real_s1_n_dont_dex=None,
-            prev_s2_n_total=None,
-            prev_s2_n_dont_dex=None,
-            prev_cloture_n_total=None,
-            prev_cloture_n_dont_dex=None,
-            
-            # Champs calculés
-            prev_n_plus1_total=prev_n_plus1_total,
-            prev_n_plus1_dont_dex=prev_n_plus1_dex,
-            reste_a_realiser_total=rar_total,
-            reste_a_realiser_dont_dex=rar_dex,
-            cout_initial_total=cout_total,
-            cout_initial_dont_dex=cout_dex,
-            
-            # Prévisions
-            **{k: v[k] for k in [f'{key}_total' for key in PREVISIONS_KEYS] + 
-               [f'{key}_dont_dex' for key in PREVISIONS_KEYS] +
-               [f'{mois}_total' for mois in MOIS_KEYS] +
-               [f'{mois}_dont_dex' for mois in MOIS_KEYS]}
-        )
+        logger.info("💾 Création du BudgetRecord...")
+        try:
+            record = BudgetRecord.objects.create(
+                upload=upload,
+                activite=activite,
+                region=code_region,
+                perm=perimetre_code,
+                famille=famille_code,
+                code_division=code_division,
+                libelle=libelle,
+                annee_debut_pmt=annee_debut_pmt,
+                annee_fin_pmt=annee_fin_pmt,
+                region_id=region_id,
+                structure_id=structure_id,
+                created_by=created_by,
+                type_projet='nouveau',
+                description_technique=data.get('description_technique'),
+                opportunite_projet=data.get('opportunite_projet'),
+                
+                # Versionnement
+                parent_id=None,
+                version=1,
+                is_active=True,
+                version_comment="Création initiale",
+                statut='soumis',
+                
+                # Champs de réalisation (NULL pour nouveau projet)
+                realisation_cumul_n_mins1_total=None,
+                realisation_cumul_n_mins1_dont_dex=None,
+                real_s1_n_total=None,
+                real_s1_n_dont_dex=None,
+                prev_s2_n_total=None,
+                prev_s2_n_dont_dex=None,
+                prev_cloture_n_total=None,
+                prev_cloture_n_dont_dex=None,
+                
+                # Champs calculés
+                prev_n_plus1_total=prev_n_plus1_total,
+                prev_n_plus1_dont_dex=prev_n_plus1_dex,
+                reste_a_realiser_total=rar_total,
+                reste_a_realiser_dont_dex=rar_dex,
+                cout_initial_total=cout_total,
+                cout_initial_dont_dex=cout_dex,
+                
+                # Prévisions
+                **{k: v[k] for k in [f'{key}_total' for key in PREVISIONS_KEYS] + 
+                   [f'{key}_dont_dex' for key in PREVISIONS_KEYS] +
+                   [f'{mois}_total' for mois in MOIS_KEYS] +
+                   [f'{mois}_dont_dex' for mois in MOIS_KEYS]}
+            )
+            logger.info(f"✅ BudgetRecord créé: id={record.id}, code_division={record.code_division}")
+        except Exception as e:
+            logger.error(f"💥 Erreur création BudgetRecord: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response({
+                'error': f'Erreur création en base: {str(e)}',
+                'debug': {'exception': str(e)}
+            }, status=500)
 
-        serializer = BudgetRecordSerializer(record)
+        # 9. Sérialisation avec contexte
+        logger.info("🔄 Sérialisation des données...")
+        try:
+            serializer = BudgetRecordSerializer(
+                record, 
+                context={'request': request}
+            )
+            serialized_data = serializer.data
+            logger.info(f"✅ Sérialisation réussie - champs: {list(serialized_data.keys())}")
+        except Exception as e:
+            logger.error(f"💥 Erreur sérialisation: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response({
+                'error': f'Erreur sérialisation: {str(e)}',
+                'debug': {'exception': str(e)}
+            }, status=500)
+        
+        # 10. Réponse finale
+        logger.info("🎉 Succès - Projet créé!")
+        logger.info("=" * 80)
+        
         return Response({
             'success': True,
             'message': 'Projet créé avec succès (version 1)',
-            'data': serializer.data
+            'data': serialized_data,
+            'debug_info': {  # Optionnel: à retirer en production
+                'region_code': code_region,
+                'region_nom': region_nom,
+                'record_id': record.id
+            }
         }, status=201)
-
         
 from decimal import Decimal
 
@@ -2408,6 +2790,65 @@ class SoumettreProjetView(APIView):
 # ================================================================== #
 #  2. DIRECTEUR RÉGION  (valider / rejeter)
 # ================================================================== #
+# class ValiderDirecteurRegionView(APIView):
+#     """
+#     POST /recap/budget/valider/directeur-region/<id>/
+#     Condition : statut = soumis
+#                 OU reserve_agent / reserve_chef / reserve_directeur
+#                    (retour de réserve vers DR)
+#     Actions   : valider | rejeter
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDirecteurRegion]
+
+#     STATUTS_AUTORISÉS = {
+#         'soumis',
+#         'reserve_agent',
+#         'reserve_chef',
+#         'reserve_directeur',
+#     }
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         action      = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'rejeter'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'rejeter'"},
+#                 status=400
+#             )
+
+#         if record.statut not in self.STATUTS_AUTORISÉS:
+#             return Response({
+#                 'error': (
+#                     f"Statut '{record.statut}' non autorisé pour cette action. "
+#                     f"Statuts acceptés : {', '.join(self.STATUTS_AUTORISÉS)}"
+#                 )
+#             }, status=400)
+
+#         if action == 'valider':
+#             record.statut                           = 'valide_directeur_region'
+#             record.valide_par_directeur_region      = request.user.nom_complet
+#             record.date_validation_directeur_region = timezone.now()
+#             record.commentaire_directeur_region     = commentaire
+#             message = 'Projet validé par le directeur région'
+#         else:
+#             record.statut      = 'rejete'
+#             record.rejete_par  = request.user.nom_complet
+#             record.date_rejet  = timezone.now()
+#             record.motif_rejet = commentaire
+#             message = 'Projet rejeté par le directeur région'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut':  record.statut,
+#         })
 class ValiderDirecteurRegionView(APIView):
     """
     POST /recap/budget/valider/directeur-region/<id>/
@@ -2440,6 +2881,12 @@ class ValiderDirecteurRegionView(APIView):
                 status=400
             )
 
+        # Vérification que le commentaire est présent pour un rejet
+        if action == 'rejeter' and not commentaire:
+            return Response({
+                'error': "Le commentaire est obligatoire pour un rejet"
+            }, status=400)
+
         if record.statut not in self.STATUTS_AUTORISÉS:
             return Response({
                 'error': (
@@ -2452,13 +2899,15 @@ class ValiderDirecteurRegionView(APIView):
             record.statut                           = 'valide_directeur_region'
             record.valide_par_directeur_region      = request.user.nom_complet
             record.date_validation_directeur_region = timezone.now()
-            record.commentaire_directeur_region     = commentaire
+            record.commentaire_directeur_region     = commentaire or None
             message = 'Projet validé par le directeur région'
-        else:
-            record.statut      = 'rejete'
-            record.rejete_par  = request.user.nom_complet
-            record.date_rejet  = timezone.now()
-            record.motif_rejet = commentaire
+        else:  # action == 'rejeter'
+            record.statut                           = 'rejete'
+            record.rejete_par                       = request.user.nom_complet
+            record.date_rejet                       = timezone.now()
+            record.motif_rejet                      = commentaire
+            # ✅ AJOUT: Remplir aussi le commentaire_directeur_region
+            record.commentaire_directeur_region     = commentaire
             message = 'Projet rejeté par le directeur région'
 
         record.save()
@@ -2466,8 +2915,8 @@ class ValiderDirecteurRegionView(APIView):
             'success': True,
             'message': message,
             'statut':  record.statut,
+            'commentaire': commentaire  # Optionnel: retourner le commentaire
         })
-
 
 # ================================================================== #
 #  3. AGENT  (valider / réserver)
@@ -2518,8 +2967,8 @@ class ValiderAgentView(APIView):
         else:
             # Réserver → retourne au DR avec commentaire
             record.statut                           = 'reserve_agent'
-            record.commentaire_directeur_region     = (
-                f"[Réservé par agent] {commentaire}"
+            record.commentaire_agent    = (
+                f"{commentaire}"
             )
             message = 'Projet réservé — retourné au directeur région'
 
@@ -2584,7 +3033,7 @@ class ValiderChefView(APIView):
             message = 'Projet validé par le chef'
         else:
             record.statut           = 'reserve_chef'
-            record.commentaire_chef = f"[Réservé par chef] {commentaire}"
+            record.commentaire_chef = f"{commentaire}"
             message = 'Projet réservé — retourné au directeur région'
 
         record.save()
@@ -3385,52 +3834,555 @@ class ListeProjetsResponsableView(APIView):
 #  DIRECTEUR RÉGION
 #  Filtre auto : region_id du token
 # ================================================================== #
-class ListeProjetsDirecteurRegionView(APIView):
+# class ListeProjetsDirecteurRegionView(APIView):
+#     """
+#     GET /recap/budget/projets/directeur-region/
+#     ?statut=soumis|reserve_agent|reserve_chef|reserve_directeur|tous
+#     ?type_projet=nouveau|en_cours
+#     ?code_division=PROJ001
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDirecteurRegion]
+
+#     STATUTS_PAR_DEFAUT = [
+#         'soumis',
+#         'reserve_agent',
+#         'reserve_chef',
+#         'reserve_directeur',
+#     ]
+
+#     def get(self, request):
+#         region_id = getattr(request.user, 'region_id', None)
+
+#         if not region_id:
+#             return Response(
+#                 {'error': "Votre token ne contient pas de region_id."},
+#                 status=403
+#             )
+
+#         qs = BudgetRecord.objects.filter(
+#             region_id=region_id,
+#             is_active=True,
+#         )
+
+#         statut        = request.query_params.get('statut')
+#         type_projet   = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if statut and statut != 'tous':
+#             qs = qs.filter(statut=statut)
+#         else:
+#             qs = qs.filter(statut__in=self.STATUTS_PAR_DEFAUT)
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         qs = qs.order_by('-id')
+
+#         from django.db.models import Count
+#         compteurs = {
+#             item['statut']: item['total']
+#             for item in qs.values('statut').annotate(total=Count('id'))
+#         }
+
+#         return Response({
+#             'count':                qs.count(),
+#             'compteurs_par_statut': compteurs,
+#             'projets':              BudgetRecordSerializer(qs, many=True).data,
+#         })
+
+
+# import logging
+# from django.db.models import Count, Q
+
+# # Configuration du logger
+# logger = logging.getLogger(__name__)
+
+# class ListeProjetsDirecteurRegionView(APIView):
+#     """
+#     GET /recap/budget/projets/directeur-region/
+#     ?statut=soumis|reserve_agent|reserve_chef|reserve_directeur|valide_directeur_region|tous
+#     ?type_projet=nouveau|en_cours
+#     ?code_division=PROJ001
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDirecteurRegion]
+
+#     # ✅ MODIFIÉ : Ajout de 'valide_directeur_region'
+#     STATUTS_PAR_DEFAUT = [
+#         'soumis',
+#         'reserve_agent',
+#         'reserve_chef',
+#         'reserve_directeur',
+#         'valide_directeur_region',  # ← NOUVEAU statut
+#     ]
+
+#     def get(self, request):
+#         print("=" * 80)
+#         print("[DEBUG] === ListeProjetsDirecteurRegionView.get() ===")
+        
+#         # 1. Récupérer region_id du token
+#         region_id = getattr(request.user, 'region_id', None)
+#         print(f"[DEBUG] region_id from token: {region_id}")
+#         print(f"[DEBUG] region_id type: {type(region_id)}")
+#         print(f"[DEBUG] request.user: {request.user}")
+#         print(f"[DEBUG] request.user role: {getattr(request.user, 'role', 'unknown')}")
+
+#         if not region_id:
+#             print("[DEBUG] ❌ Aucun region_id trouvé dans le token")
+#             return Response(
+#                 {'error': "Votre token ne contient pas de region_id."},
+#                 status=403
+#             )
+
+#         # 2. Vérifier tous les projets actifs dans la base
+#         total_all_active = BudgetRecord.objects.filter(is_active=True).count()
+#         print(f"[DEBUG] Total projets actifs dans la base: {total_all_active}")
+        
+#         # 3. Vérifier les projets avec ce region_id
+#         projets_avec_region_id = BudgetRecord.objects.filter(region_id=region_id, is_active=True)
+#         print(f"[DEBUG] Projets avec region_id='{region_id}': {projets_avec_region_id.count()}")
+        
+#         # Afficher les 5 premiers projets trouvés
+#         for p in projets_avec_region_id[:5]:
+#             print(f"[DEBUG]   - ID:{p.id} | code:{p.code_division} | statut:'{p.statut}' | region:'{p.region}' | region_id:'{p.region_id}'")
+
+#         # 4. Vérifier les projets qui ont region = 'REG001' mais region_id NULL
+#         projets_region_null = BudgetRecord.objects.filter(
+#             Q(region='REG001') & Q(region_id__isnull=True),
+#             is_active=True
+#         )
+#         print(f"[DEBUG] Projets avec region='REG001' mais region_id NULL: {projets_region_null.count()}")
+#         for p in projets_region_null[:5]:
+#             print(f"[DEBUG]   - ID:{p.id} | code:{p.code_division} | statut:'{p.statut}' | region:'{p.region}' | region_id:'{p.region_id}'")
+
+#         # 5. Construction du queryset principal
+#         qs = BudgetRecord.objects.filter(
+#             region_id=region_id,
+#             is_active=True,
+#         )
+#         print(f"[DEBUG] Queryset initial (region_id={region_id}): {qs.count()} projets")
+
+#         # 6. Récupérer les paramètres de requête
+#         statut        = request.query_params.get('statut')
+#         type_projet   = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+        
+#         print(f"[DEBUG] Paramètres reçus:")
+#         print(f"[DEBUG]   - statut: {statut}")
+#         print(f"[DEBUG]   - type_projet: {type_projet}")
+#         print(f"[DEBUG]   - code_division: {code_division}")
+
+#         # 7. Application du filtre statut
+#         if statut:
+#             if statut == 'tous':
+#                 statuts_inclus = [
+#                     'soumis', 'reserve_agent', 'reserve_chef', 
+#                     'reserve_directeur', 'valide_directeur_region',
+#                     'valide_chef', 'valide_directeur', 'valide_divisionnaire', 
+#                     'rejete', 'brouillon', 'valide_agent'
+#                 ]
+#                 print(f"[DEBUG] Filtre 'tous' - statuts inclus: {statuts_inclus}")
+#                 qs = qs.filter(statut__in=statuts_inclus)
+#             else:
+#                 print(f"[DEBUG] Filtre spécifique - statut='{statut}'")
+#                 qs = qs.filter(statut=statut)
+#         else:
+#             print(f"[DEBUG] Pas de filtre statut - utilisation des STATUTS_PAR_DEFAUT: {self.STATUTS_PAR_DEFAUT}")
+#             qs = qs.filter(statut__in=self.STATUTS_PAR_DEFAUT)
+
+#         print(f"[DEBUG] Après filtre statut: {qs.count()} projets")
+
+#         # 8. Application des autres filtres
+#         if type_projet:
+#             print(f"[DEBUG] Filtre type_projet='{type_projet}'")
+#             qs = qs.filter(type_projet=type_projet)
+        
+#         if code_division:
+#             print(f"[DEBUG] Filtre code_division__icontains='{code_division}'")
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         qs = qs.order_by('-id')
+#         print(f"[DEBUG] Après tous les filtres: {qs.count()} projets")
+
+#         # 9. Afficher la liste des statuts trouvés
+#         statuts_trouves = qs.values_list('statut', flat=True).distinct()
+#         print(f"[DEBUG] Statuts trouvés dans le résultat: {list(statuts_trouves)}")
+
+#         # 10. Compter par statut
+#         compteurs = {
+#             item['statut']: item['total']
+#             for item in qs.values('statut').annotate(total=Count('id'))
+#         }
+#         print(f"[DEBUG] Compteurs par statut: {compteurs}")
+
+#         # 11. Afficher les détails du projet spécifique (ID 58 si présent)
+#         projet_58 = qs.filter(id=58).first()
+#         if projet_58:
+#             print(f"[DEBUG] ✅ Projet ID 58 trouvé dans le résultat!")
+#             print(f"[DEBUG]   - code_division: {projet_58.code_division}")
+#             print(f"[DEBUG]   - statut: {projet_58.statut}")
+#             print(f"[DEBUG]   - region_id: {projet_58.region_id}")
+#             print(f"[DEBUG]   - is_active: {projet_58.is_active}")
+#         else:
+#             print(f"[DEBUG] ❌ Projet ID 58 NON trouvé dans le résultat")
+#             # Vérifier pourquoi le projet 58 n'est pas trouvé
+#             p58 = BudgetRecord.objects.filter(id=58).first()
+#             if p58:
+#                 print(f"[DEBUG] Projet 58 existe en base:")
+#                 print(f"[DEBUG]   - statut: {p58.statut}")
+#                 print(f"[DEBUG]   - region_id: {p58.region_id} (type: {type(p58.region_id)})")
+#                 print(f"[DEBUG]   - is_active: {p58.is_active}")
+#                 print(f"[DEBUG]   - region_id du token: {region_id} (type: {type(region_id)})")
+#                 if p58.region_id != region_id:
+#                     print(f"[DEBUG] ❌ Mismatch: region_id projet != region_id token")
+#                 if p58.statut not in self.STATUTS_PAR_DEFAUT and statut != p58.statut:
+#                     print(f"[DEBUG] ❌ Statut '{p58.statut}' non inclus dans le filtre")
+#             else:
+#                 print(f"[DEBUG] Projet 58 n'existe pas en base")
+
+#         print("=" * 80)
+#         print(f"[DEBUG] Réponse finale - count: {qs.count()}")
+#         print("=" * 80)
+
+#         return Response({
+#             'count':                qs.count(),
+#             'compteurs_par_statut': compteurs,
+#             'projets':              BudgetRecordSerializer(qs, many=True).data,
+#         })
+# class ListeProjetsDirecteurRegionView(APIView):
+#     """
+#     GET /recap/budget/projets/directeur-region/
+#     ?statut=soumis|reserve_agent|reserve_chef|reserve_directeur|valide_directeur_region|tous
+#     ?type_projet=nouveau|en_cours
+#     ?code_division=PROJ001
+#     ?inclure_inactifs=true   # Force l'inclusion des projets inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDirecteurRegion]
+
+#     STATUTS_PAR_DEFAUT = [
+#         'soumis',
+#         'reserve_agent',
+#         'reserve_chef',
+#         'reserve_directeur',
+#         'valide_directeur_region',
+#     ]
+    
+#     # Statuts pour lesquels on inclut automatiquement les inactifs
+#     STATUTS_AVEC_HISTORIQUE = [
+#         'valide_directeur_region',
+#         'valide_chef', 
+#         'valide_directeur',
+#         'valide_divisionnaire',
+#         'rejete'
+#     ]
+
+#     def get(self, request):
+#         print("=" * 80)
+#         print("[DEBUG] === ListeProjetsDirecteurRegionView.get() ===")
+        
+#         region_id = getattr(request.user, 'region_id', None)
+#         print(f"[DEBUG] region_id from token: {region_id}")
+
+#         if not region_id:
+#             return Response(
+#                 {'error': "Votre token ne contient pas de region_id."},
+#                 status=403
+#             )
+
+#         statut        = request.query_params.get('statut')
+#         type_projet   = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+        
+#         # ✅ Règle intelligente pour inclure/inclure les inactifs
+#         inclure_inactifs_param = request.query_params.get('inclure_inactifs', 'auto').lower()
+        
+#         if inclure_inactifs_param == 'true':
+#             inclure_inactifs = True
+#             print(f"[DEBUG] Force inclusion des inactifs via paramètre")
+#         elif inclure_inactifs_param == 'false':
+#             inclure_inactifs = False
+#             print(f"[DEBUG] Force exclusion des inactifs via paramètre")
+#         else:
+#             # Mode auto : inclure les inactifs seulement pour certains statuts
+#             if statut and statut in self.STATUTS_AVEC_HISTORIQUE:
+#                 inclure_inactifs = True
+#                 print(f"[DEBUG] Mode auto: inclusion des inactifs pour statut='{statut}'")
+#             elif not statut and any(s in self.STATUTS_AVEC_HISTORIQUE for s in self.STATUTS_PAR_DEFAUT):
+#                 inclure_inactifs = True
+#                 print(f"[DEBUG] Mode auto: inclusion des inactifs pour statuts par défaut")
+#             else:
+#                 inclure_inactifs = False
+#                 print(f"[DEBUG] Mode auto: exclusion des inactifs")
+
+#         # Construction du queryset
+#         if inclure_inactifs:
+#             qs = BudgetRecord.objects.filter(region_id=region_id)
+#             print(f"[DEBUG] ✅ Incluant les projets inactifs (is_active=True ou False)")
+#         else:
+#             qs = BudgetRecord.objects.filter(region_id=region_id, is_active=True)
+#             print(f"[DEBUG] ❌ Excluant les projets inactifs (is_active=True uniquement)")
+
+#         # Application des filtres
+#         if statut:
+#             if statut == 'tous':
+#                 qs = qs.filter(
+#                     statut__in=[
+#                         'soumis', 'reserve_agent', 'reserve_chef', 
+#                         'reserve_directeur', 'valide_directeur_region',
+#                         'valide_chef', 'valide_directeur', 'valide_divisionnaire', 
+#                         'rejete', 'brouillon', 'valide_agent'
+#                     ]
+#                 )
+#             else:
+#                 qs = qs.filter(statut=statut)
+#         else:
+#             qs = qs.filter(statut__in=self.STATUTS_PAR_DEFAUT)
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         qs = qs.order_by('-id')
+
+#         # Logging pour le projet 58
+#         projet_58 = qs.filter(id=58).first()
+#         if projet_58:
+#             print(f"[DEBUG] ✅ Projet 58 trouvé! is_active={projet_58.is_active}, statut={projet_58.statut}")
+#         else:
+#             p58 = BudgetRecord.objects.filter(id=58).first()
+#             if p58:
+#                 print(f"[DEBUG] ❌ Projet 58 EXCLU: is_active={p58.is_active}, statut={p58.statut}")
+#                 print(f"[DEBUG]    - inclure_inactifs={inclure_inactifs}")
+#                 print(f"[DEBUG]    - statut demandé={statut}")
+#                 if p58.statut == statut and not inclure_inactifs and not p58.is_active:
+#                     print(f"[DEBUG]    ➜ Solution: Ajoutez &inclure_inactifs=true à l'URL")
+
+#         from django.db.models import Count
+#         compteurs = {
+#             item['statut']: item['total']
+#             for item in qs.values('statut').annotate(total=Count('id'))
+#         }
+
+#         print(f"[DEBUG] Total final: {qs.count()} projets")
+#         print("=" * 80)
+
+#         return Response({
+#             'count':                qs.count(),
+#             'compteurs_par_statut': compteurs,
+#             'filtres_appliques': {
+#                 'inclure_inactifs': inclure_inactifs,
+#                 'statut': statut,
+#                 'type_projet': type_projet,
+#                 'code_division': code_division,
+#             },
+#             'projets': BudgetRecordSerializer(qs, many=True).data,
+#         })
+
+
+
+
+
+
+
+# ================================================================== #
+#  DIRECTEUR RÉGION - LISTES SPÉCIFIQUES (gets)
+# ================================================================== #
+
+class ListeProjetsSoumisDRView(APIView):
     """
-    GET /recap/budget/projets/directeur-region/
-    ?statut=soumis|reserve_agent|reserve_chef|reserve_directeur|tous
-    ?type_projet=nouveau|en_cours
-    ?code_division=PROJ001
+    GET /recap/budget/directeur-region/soumis/
+    Projets soumis (actifs + inactifs)
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsDirecteurRegion]
+    permission_classes = [IsDirecteurRegion]
 
-    STATUTS_PAR_DEFAUT = [
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        # ✅ Inclut TOUS les projets (is_active=True ou False)
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut='soumis'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+# class ListeProjetsValidesDRView(APIView):
+#     """
+#     GET /recap/budget/directeur-region/valides/
+#     Projets validés par DR (actifs + inactifs)
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDirecteurRegion]
+
+#     def get(self, request):
+#         region_id = getattr(request.user, 'region_id', None)
+#         if not region_id:
+#             return Response({'error': 'region_id manquant'}, status=403)
+
+#         # ✅ Inclut TOUS les projets (is_active=True ou False)
+#         qs = BudgetRecord.objects.filter(
+#             region_id=region_id,
+#             statut='valide_directeur_region'
+#         ).order_by('-id')
+
+#         return Response({
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+
+class ListeProjetsValidesDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/valides/
+    
+    Retourne tous les projets que le directeur région a validés,
+    indépendamment de leur statut actuel.
+    
+    Critère : valide_par_directeur_region n'est pas NULL
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        # ✅ Filtre sur le champ de validation, pas sur le statut
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            valide_par_directeur_region__isnull=False  # ← La clé !
+        ).order_by('-date_validation_directeur_region')  # Tri par date de validation
+
+        # Sérialisation avec contexte pour avoir les noms
+        serializer = BudgetRecordSerializer(
+            qs, 
+            many=True, 
+            context={'request': request}
+        )
+
+        return Response({
+            'count': qs.count(),
+            'projets': serializer.data
+        })
+class ListeProjetsReserveAgentDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/reserve-agent/
+    Projets réservés par l'agent (actifs + inactifs)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        # ✅ Inclut TOUS les projets (is_active=True ou False)
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut='reserve_agent'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsReserveChefDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/reserve-chef/
+    Projets réservés par le chef (actifs + inactifs)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        # ✅ Inclut TOUS les projets (is_active=True ou False)
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut='reserve_chef'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsReserveDirecteurDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/reserve-directeur/
+    Projets réservés par le directeur (actifs + inactifs)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        # ✅ Inclut TOUS les projets (is_active=True ou False)
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut='reserve_directeur'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsTousDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/tous/
+    Tous les projets de la région (actifs + inactifs)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    STATUTS_INCLUS = [
         'soumis',
         'reserve_agent',
         'reserve_chef',
         'reserve_directeur',
+        'valide_directeur_region',
+        'valide_agent',
+        'valide_chef',
+        'valide_directeur',
+        'valide_divisionnaire',
+        'rejete',
+        'brouillon'
     ]
 
     def get(self, request):
         region_id = getattr(request.user, 'region_id', None)
-
         if not region_id:
-            return Response(
-                {'error': "Votre token ne contient pas de region_id."},
-                status=403
-            )
+            return Response({'error': 'region_id manquant'}, status=403)
 
+        # ✅ Inclut TOUS les projets (is_active=True ou False)
         qs = BudgetRecord.objects.filter(
             region_id=region_id,
-            is_active=True,
-        )
-
-        statut        = request.query_params.get('statut')
-        type_projet   = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if statut and statut != 'tous':
-            qs = qs.filter(statut=statut)
-        else:
-            qs = qs.filter(statut__in=self.STATUTS_PAR_DEFAUT)
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        qs = qs.order_by('-id')
+            statut__in=self.STATUTS_INCLUS
+        ).order_by('-id')
 
         from django.db.models import Count
         compteurs = {
@@ -3439,12 +4391,91 @@ class ListeProjetsDirecteurRegionView(APIView):
         }
 
         return Response({
-            'count':                qs.count(),
+            'count': qs.count(),
             'compteurs_par_statut': compteurs,
-            'projets':              BudgetRecordSerializer(qs, many=True).data,
+            'projets': BudgetRecordSerializer(qs, many=True).data
         })
 
 
+class ListeProjetsHistoriqueDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/historique/
+    TOUS les projets sans filtre de statut (actifs + inactifs)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        # ✅ Inclut TOUS les projets, TOUS les statuts, is_active=True ou False
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id
+        ).order_by('-id')
+
+        from django.db.models import Count
+        compteurs = {
+            item['statut']: item['total']
+            for item in qs.values('statut').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsRejetesDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/rejetes/
+    Projets rejetés (actifs + inactifs)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        # ✅ Inclut TOUS les projets (is_active=True ou False)
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut='rejete'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsBrouillonDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/brouillon/
+    Projets en brouillon (actifs + inactifs)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        # ✅ Inclut TOUS les projets (is_active=True ou False)
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut='brouillon'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
 # # ================================================================== #
 # #  AGENT
 # #  Pas de filtre auto par structure/région
@@ -3540,82 +4571,159 @@ class ListeProjetsDirecteurRegionView(APIView):
 #             'compteurs_par_statut': compteurs,
 #             'projets':              BudgetRecordSerializer(qs, many=True).data,
 #         })
-# ================================================================== #
-#  AGENT
-# ================================================================== #
-class ListeProjetsAgentView(APIView):
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsAgent]
 
-    # ✅ Tous les statuts que l'agent doit voir
+
+
+
+
+# ================================================================== #
+#  AGENT gets
+# ================================================================== #
+# class ListeProjetsAgentView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsAgent]
+
+#     # ✅ Tous les statuts que l'agent doit voir
+#     STATUTS_AGENT = [
+#         'valide_directeur_region',  # projets à saisir
+#         'reserve_agent',            # projets retournés par le chef
+#     ]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut__in=self.STATUTS_AGENT,  # ✅ était: statut='valide_directeur_region'
+#             is_active=True,
+#         )
+
+#         type_projet   = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         qs = qs.order_by('-id')
+
+#         return Response({
+#             'count':   qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data,
+#         })
+# ================================================================== #
+#  AGENT - LISTES SPÉCIFIQUES
+# ================================================================== #
+
+class ListeProjetsAgentValidesDRView(APIView):
+    """
+    GET /recap/budget/agent/valides-dr/
+    Projets validés par DR (à saisir par l'agent)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAgent]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='valide_directeur_region'
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsAgentReserveView(APIView):
+    """
+    GET /recap/budget/agent/reserve/
+    Projets réservés par l'agent (retournés par le chef)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAgent]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='reserve_agent'
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsAgentValidesView(APIView):
+    """
+    GET /recap/budget/agent/valides/
+    Projets déjà validés par l'agent
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAgent]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='valide_agent'
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsAgentTousView(APIView):
+    """
+    GET /recap/budget/agent/tous/
+    Tous les projets de l'agent (valides DR + réservés + valides agent)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAgent]
+
     STATUTS_AGENT = [
         'valide_directeur_region',  # projets à saisir
         'reserve_agent',            # projets retournés par le chef
+        'valide_agent',             # projets déjà validés par l'agent
     ]
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
-            statut__in=self.STATUTS_AGENT,  # ✅ était: statut='valide_directeur_region'
-            is_active=True,
-        )
+            statut__in=self.STATUTS_AGENT
+        ).order_by('-id')
 
-        type_projet   = request.query_params.get('type_projet')
+        type_projet = request.query_params.get('type_projet')
         code_division = request.query_params.get('code_division')
 
         if type_projet:
             qs = qs.filter(type_projet=type_projet)
         if code_division:
             qs = qs.filter(code_division__icontains=code_division)
-
-        qs = qs.order_by('-id')
-
-        return Response({
-            'count':   qs.count(),
-            'projets': BudgetRecordSerializer(qs, many=True).data,
-        })
-
-
-# ================================================================== #
-#  CHEF
-# ================================================================== #
-class ListeProjetsChefView(APIView):
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsChef]
-
-    # ✅ Inclure valide_chef pour que le chef voie ses projets déjà validés
-    STATUTS_PAR_DEFAUT = ['valide_agent', 'reserve_agent', 'valide_chef', 'reserve_chef']
-
-    # Statuts filtrables via ?statut=
-    STATUTS_AUTORISÉS  = {'valide_agent', 'reserve_agent', 'valide_chef', 'reserve_chef'}
-
-    def get(self, request):
-        qs = BudgetRecord.objects.filter(is_active=True)
-
-        statut        = request.query_params.get('statut')
-        type_projet   = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if statut and statut != 'tous':
-            if statut not in self.STATUTS_AUTORISÉS:  # ✅ vérifie dans le bon set
-                return Response(
-                    {
-                        'error': (
-                            f"Statut '{statut}' non autorisé. "
-                            f"Acceptés : {', '.join(sorted(self.STATUTS_AUTORISÉS))}"
-                        )
-                    },
-                    status=400
-                )
-            qs = qs.filter(statut=statut)
-        else:
-            qs = qs.filter(statut__in=self.STATUTS_PAR_DEFAUT)  # ✅ couvre valide_chef
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        qs = qs.order_by('-id')
 
         from django.db.models import Count
         compteurs = {
@@ -3624,32 +4732,25 @@ class ListeProjetsChefView(APIView):
         }
 
         return Response({
-            'count':                qs.count(),
+            'count': qs.count(),
             'compteurs_par_statut': compteurs,
-            'projets':              BudgetRecordSerializer(qs, many=True).data,
+            'projets': BudgetRecordSerializer(qs, many=True).data
         })
 
-# ================================================================== #
-#  DIRECTEUR
-#  Pas de filtre auto par structure/région
-#  Voit valide_chef
-# ================================================================== #
-class ListeProjetsDirecteurView(APIView):
+
+class ListeProjetsAgentHistoriqueView(APIView):
     """
-    GET /recap/budget/projets/directeur/
-    ?type_projet=nouveau|en_cours
-    ?code_division=PROJ001
+    GET /recap/budget/agent/historique/
+    TOUS les projets (tous statuts) pour historique
+    Inclut actifs + inactifs
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsDirecteur]
+    permission_classes = [IsAgent]
 
     def get(self, request):
-        qs = BudgetRecord.objects.filter(
-            statut='valide_chef',
-            is_active=True,
-        )
+        qs = BudgetRecord.objects.all().order_by('-id')
 
-        type_projet   = request.query_params.get('type_projet')
+        type_projet = request.query_params.get('type_projet')
         code_division = request.query_params.get('code_division')
 
         if type_projet:
@@ -3657,12 +4758,680 @@ class ListeProjetsDirecteurView(APIView):
         if code_division:
             qs = qs.filter(code_division__icontains=code_division)
 
-        qs = qs.order_by('-id')
+        from django.db.models import Count
+        compteurs = {
+            item['statut']: item['total']
+            for item in qs.values('statut').annotate(total=Count('id'))
+        }
 
         return Response({
-            'count':   qs.count(),
-            'projets': BudgetRecordSerializer(qs, many=True).data,
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'projets': BudgetRecordSerializer(qs, many=True).data
         })
+
+# ================================================================== #
+#  CHEF les gets 
+# ================================================================== #
+
+# ================================================================== #
+#  CHEF - LISTES SPÉCIFIQUES
+# ================================================================== #
+
+# class ListeProjetsChefValidesAgentView(APIView):
+#     """
+#     GET /recap/budget/chef/valides-agent/
+#     Projets validés par l'agent (à valider par le chef)
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsChef]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='valide_agent'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         return Response({
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+
+
+# class ListeProjetsChefReserveAgentView(APIView):
+#     """
+#     GET /recap/budget/chef/reserve-agent/
+#     Projets réservés par l'agent (retournés au chef pour révision)
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsChef]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='reserve_agent'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         return Response({
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+
+class ListeProjetsChefView(APIView):
+    """
+    GET /recap/budget/chef/projets/
+    
+    Récupère TOUS les projets de l'agent:
+        - statut = 'valide_agent' (validés par l'agent)
+        - statut = 'reserve_agent' (réservés/retournés par l'agent)
+    
+    Sans aucun paramètre obligatoire
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsChef]
+
+    def get(self, request):
+        # Récupérer TOUS les projets validés ou réservés par l'agent
+        qs = BudgetRecord.objects.filter(
+            statut__in=['valide_agent', 'reserve_agent']
+        ).order_by('-id')
+        
+        # Sérialisation
+        serializer = BudgetRecordSerializer(
+            qs, 
+            many=True, 
+            context={'request': request}
+        )
+        
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'projets': serializer.data
+        })
+# class ListeProjetsChefValidesView(APIView):
+#     """
+#     GET /recap/budget/chef/valides/
+#     Projets déjà validés par le chef
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsChef]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='valide_chef'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         return Response({
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+class ListeProjetsChefValidesView(APIView):
+    """
+    GET /recap/budget/chef/valides/
+    
+    Projets déjà validés par le chef (historique complet)
+    Filtre sur valide_par_chef NOT NULL (indépendant du statut actuel)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsChef]
+
+    def get(self, request):
+        # ✅ Filtre sur le champ de validation, pas sur le statut
+        qs = BudgetRecord.objects.filter(
+            valide_par_chef__isnull=False  # ← La clé !
+        ).order_by('-date_validation_chef')  # Tri par date de validation
+        
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+        
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+        
+        # Sérialisation avec contexte
+        serializer = BudgetRecordSerializer(
+            qs, 
+            many=True, 
+            context={'request': request}
+        )
+        
+        # Statistiques optionnelles
+        stats = {
+            'total': qs.count(),
+            'par_statut_actuel': {
+                'valide_directeur_region': qs.filter(statut='valide_directeur_region').count(),
+                'valide_chef': qs.filter(statut='valide_chef').count(),
+                'valide_directeur_national': qs.filter(statut='valide_directeur_national').count(),
+                'rejete': qs.filter(statut='rejete').count(),
+                'autres': qs.exclude(statut__in=[
+                    'valide_directeur_region', 
+                    'valide_chef', 
+                    'valide_directeur_national',
+                    'rejete'
+                ]).count()
+            }
+        }
+        
+        return Response({
+            'success': True,
+            'stats': stats,
+            'count': qs.count(),
+            'projets': serializer.data
+        })
+
+class ListeProjetsChefReserveChefView(APIView):
+    """
+    GET /recap/budget/chef/reserve-chef/
+    Projets réservés par le chef (retournés à l'agent)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsChef]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='reserve_chef'
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsChefTousView(APIView):
+    """
+    GET /recap/budget/chef/tous/
+    Tous les projets du chef (valides agent + réservés agent + valides chef + réservés chef)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsChef]
+
+    STATUTS_CHEF = [
+        'valide_agent',     # projets à valider
+        'reserve_agent',    # projets réservés par agent
+        'valide_chef',      # projets déjà validés par chef
+        'reserve_chef',     # projets réservés par chef
+    ]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut__in=self.STATUTS_CHEF
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        from django.db.models import Count
+        compteurs = {
+            item['statut']: item['total']
+            for item in qs.values('statut').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsChefHistoriqueView(APIView):
+    """
+    GET /recap/budget/chef/historique/
+    TOUS les projets (tous statuts) pour historique
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsChef]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.all().order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        from django.db.models import Count
+        compteurs = {
+            item['statut']: item['total']
+            for item in qs.values('statut').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+
+
+# class ListeProjetsChefView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsChef]
+
+#     # ✅ Inclure valide_chef pour que le chef voie ses projets déjà validés
+#     STATUTS_PAR_DEFAUT = ['valide_agent', 'reserve_agent', 'valide_chef', 'reserve_chef']
+
+#     # Statuts filtrables via ?statut=
+#     STATUTS_AUTORISÉS  = {'valide_agent', 'reserve_agent', 'valide_chef', 'reserve_chef'}
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(is_active=True)
+
+#         statut        = request.query_params.get('statut')
+#         type_projet   = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if statut and statut != 'tous':
+#             if statut not in self.STATUTS_AUTORISÉS:  # ✅ vérifie dans le bon set
+#                 return Response(
+#                     {
+#                         'error': (
+#                             f"Statut '{statut}' non autorisé. "
+#                             f"Acceptés : {', '.join(sorted(self.STATUTS_AUTORISÉS))}"
+#                         )
+#                     },
+#                     status=400
+#                 )
+#             qs = qs.filter(statut=statut)
+#         else:
+#             qs = qs.filter(statut__in=self.STATUTS_PAR_DEFAUT)  # ✅ couvre valide_chef
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         qs = qs.order_by('-id')
+
+#         from django.db.models import Count
+#         compteurs = {
+#             item['statut']: item['total']
+#             for item in qs.values('statut').annotate(total=Count('id'))
+#         }
+
+#         return Response({
+#             'count':                qs.count(),
+#             'compteurs_par_statut': compteurs,
+#             'projets':              BudgetRecordSerializer(qs, many=True).data,
+#         })
+
+# ================================================================== #
+#  DIRECTEUR
+#  Pas de filtre auto par structure/région
+#  Voit valide_chef
+# ================================================================== #
+
+
+
+
+
+
+
+
+
+
+
+# ================================================================== #
+#  DIRECTEUR - LISTES SPÉCIFIQUES
+# ================================================================== #
+
+# class ListeProjetsDirecteurValidesChefView(APIView):
+#     """
+#     GET /recap/budget/directeur/valides-chef/
+#     Projets validés par le chef (à valider par le directeur)
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDirecteur]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='valide_chef'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         return Response({
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+
+
+# class ListeProjetsDirecteurReserveChefView(APIView):
+#     """
+#     GET /recap/budget/directeur/reserve-chef/
+#     Projets réservés par le chef (retournés au directeur)
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDirecteur]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='reserve_chef'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         return Response({
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+
+class ListeProjetsDirecteurView(APIView):
+    """
+    GET /recap/budget/directeur/projets/
+    
+    Récupère TOUS les projets:
+        - statut = 'valide_chef' (validés par le chef)
+        - statut = 'reserve_chef' (réservés par le chef)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteur]
+
+    def get(self, request):
+        # Tous les projets (validés + réservés par le chef)
+        qs = BudgetRecord.objects.filter(
+            statut__in=['valide_chef', 'reserve_chef']
+        ).order_by('-id')
+        
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+        
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+        
+        # Statistiques
+        stats = {
+            'total': qs.count(),
+            'valides_chef': qs.filter(statut='valide_chef').count(),
+            'reserve_chef': qs.filter(statut='reserve_chef').count(),
+        }
+        
+        # Sérialisation
+        serializer = BudgetRecordSerializer(
+            qs, 
+            many=True, 
+            context={'request': request}
+        )
+        
+        return Response({
+            'success': True,
+            'stats': stats,
+            'count': qs.count(),
+            'projets': serializer.data
+        })
+# class ListeProjetsDirecteurValidesView(APIView):
+#     """
+#     GET /recap/budget/directeur/valides/
+#     Projets déjà validés par le directeur
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDirecteur]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='valide_directeur'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         return Response({
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+class ListeProjetsDirecteurValidesView(APIView):
+    """
+    GET /recap/budget/directeur/valides/
+    
+    Projets déjà validés par le directeur (historique complet)
+    Filtre sur valide_par_directeur NOT NULL (indépendant du statut actuel)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteur]
+
+    def get(self, request):
+        # ✅ Filtre sur le champ de validation, pas sur le statut
+        qs = BudgetRecord.objects.filter(
+            valide_par_directeur__isnull=False  # ← La clé !
+        ).order_by('-date_validation_directeur')  # Tri par date de validation
+        
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+        
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+        
+        # Statistiques optionnelles
+        stats = {
+            'total': qs.count(),
+            'par_statut_actuel': {
+                'valide_divisionnaire': qs.filter(statut='valide_divisionnaire').count(),
+                'valide_directeur': qs.filter(statut='valide_directeur').count(),
+                'rejete': qs.filter(statut='rejete').count(),
+    
+            }
+        }
+        
+        # Sérialisation
+        serializer = BudgetRecordSerializer(
+            qs, 
+            many=True, 
+            context={'request': request}
+        )
+        
+        return Response({
+            'success': True,
+            'stats': stats,
+            'count': qs.count(),
+            'projets': serializer.data
+        })
+
+class ListeProjetsDirecteurReserveDirecteurView(APIView):
+    """
+    GET /recap/budget/directeur/reserve-directeur/
+    Projets réservés par le directeur (retournés au chef)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteur]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='reserve_directeur'
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsDirecteurTousView(APIView):
+    """
+    GET /recap/budget/directeur/tous/
+    Tous les projets du directeur (valides chef + réservés chef + valides directeur + réservés directeur)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteur]
+
+    STATUTS_DIRECTEUR = [
+        'valide_chef',          # projets à valider
+        'reserve_chef',         # projets réservés par chef
+        'valide_directeur',     # projets déjà validés par directeur
+        'reserve_directeur',    # projets réservés par directeur
+    ]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut__in=self.STATUTS_DIRECTEUR
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        from django.db.models import Count
+        compteurs = {
+            item['statut']: item['total']
+            for item in qs.values('statut').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsDirecteurHistoriqueView(APIView):
+    """
+    GET /recap/budget/directeur/historique/
+    TOUS les projets (tous statuts) pour historique
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteur]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.all().order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        from django.db.models import Count
+        compteurs = {
+            item['statut']: item['total']
+            for item in qs.values('statut').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+    
+# class ListeProjetsDirecteurView(APIView):
+#     """
+#     GET /recap/budget/projets/directeur/
+#     ?type_projet=nouveau|en_cours
+#     ?code_division=PROJ001
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDirecteur]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='valide_chef',
+#             is_active=True,
+#         )
+
+#         type_projet   = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         qs = qs.order_by('-id')
+
+#         return Response({
+#             'count':   qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data,
+#         })
 
 
 # ================================================================== #
@@ -3670,30 +5439,159 @@ class ListeProjetsDirecteurView(APIView):
 #  Pas de filtre auto
 #  Voit valide_directeur — toutes régions
 # ================================================================== #
-class ListeProjetsDivisionnnaireView(APIView):
+
+# ================================================================== #
+#  DIVISIONNAIRE - LISTES SPÉCIFIQUES
+# ================================================================== #
+
+# class ListeProjetsDivisionnaireValidesDirecteurView(APIView):
+#     """
+#     GET /recap/budget/divisionnaire/valides-directeur/
+#     Projets validés par le directeur (à valider par le divisionnaire)
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDivisionnaire]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='valide_directeur'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         from django.db.models import Count
+#         par_region = {
+#             item['region_id']: item['total']
+#             for item in qs.values('region_id').annotate(total=Count('id'))
+#         }
+
+#         return Response({
+#             'count': qs.count(),
+#             'par_region': par_region,
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+
+
+# class ListeProjetsDivisionnaireReserveDirecteurView(APIView):
+#     """
+#     GET /recap/budget/divisionnaire/reserve-directeur/
+#     Projets réservés par le directeur (retournés au DR, mais divisionnaire peut voir)
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDivisionnaire]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='reserve_directeur'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         from django.db.models import Count
+#         par_region = {
+#             item['region_id']: item['total']
+#             for item in qs.values('region_id').annotate(total=Count('id'))
+#         }
+
+#         return Response({
+#             'count': qs.count(),
+#             'par_region': par_region,
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
+class ListeProjetsDivisionnaireView(APIView):
     """
-    GET /recap/budget/projets/divisionnaire/
-    ?type_projet=nouveau|en_cours
-    ?code_division=PROJ001
+    GET /recap/budget/divisionnaire/projets/
+    
+    Récupère TOUS les projets:
+        - statut = 'valide_directeur' (validés par le directeur)
+        - statut = 'reserve_directeur' (réservés par le directeur)
+    
+    Inclut comptage par région
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsDivisionnaire]
+    permission_classes = [IsDivisionnaire]
+
+    def get(self, request):
+        from django.db.models import Count
+        
+        # Tous les projets (validés + réservés par le directeur)
+        qs = BudgetRecord.objects.filter(
+            statut__in=['valide_directeur', 'reserve_directeur']
+        ).order_by('-id')
+        
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+        
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+        
+        # Comptage par région
+        par_region = {
+            item['region_id']: item['total']
+            for item in qs.values('region_id').annotate(total=Count('id'))
+        }
+        
+        # Statistiques
+        stats = {
+            'total': qs.count(),
+            'valides_directeur': qs.filter(statut='valide_directeur').count(),
+            'reserve_directeur': qs.filter(statut='reserve_directeur').count(),
+            'par_region': par_region,
+        }
+        
+        # Sérialisation
+        serializer = BudgetRecordSerializer(
+            qs, 
+            many=True, 
+            context={'request': request}
+        )
+        
+        return Response({
+            'success': True,
+            'stats': stats,
+            'count': qs.count(),
+            'par_region': par_region,
+            'projets': serializer.data
+        })
+
+class ListeProjetsDivisionnaireValidesView(APIView):
+    """
+    GET /recap/budget/divisionnaire/valides/
+    Projets déjà validés par le divisionnaire (validation finale)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDivisionnaire]
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
-            statut='valide_directeur',
-            is_active=True,
-        )
+            statut='valide_divisionnaire'
+        ).order_by('-id')
 
-        type_projet   = request.query_params.get('type_projet')
+        type_projet = request.query_params.get('type_projet')
         code_division = request.query_params.get('code_division')
 
         if type_projet:
             qs = qs.filter(type_projet=type_projet)
         if code_division:
             qs = qs.filter(code_division__icontains=code_division)
-
-        qs = qs.order_by('-id')
 
         from django.db.models import Count
         par_region = {
@@ -3702,10 +5600,239 @@ class ListeProjetsDivisionnnaireView(APIView):
         }
 
         return Response({
-            'count':      qs.count(),
+            'count': qs.count(),
             'par_region': par_region,
-            'projets':    BudgetRecordSerializer(qs, many=True).data,
+            'projets': BudgetRecordSerializer(qs, many=True).data
         })
+class ListeProjetsDivisionnaireTerminesView(APIView):
+    """
+    GET /recap/budget/divisionnaire/valides/
+    
+    Projets avec statut final (terminés) :
+        - valide_divisionnaire (validé définitivement)
+        - rejete (rejeté définitivement)
+    
+    Filtre sur valide_par_divisionnaire IS NOT NULL OU rejete_par = divisionnaire
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Q, Count
+        
+        # Projets avec statut final (validés OU rejetés par le divisionnaire)
+        qs = BudgetRecord.objects.filter(
+            Q(statut='valide_divisionnaire') | Q(statut='rejete')
+        ).order_by('-date_validation_divisionnaire')  # Tri par date de validation finale
+        
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+        statut_filter = request.query_params.get('statut')  # 'valide_divisionnaire' ou 'rejete'
+        
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+        if statut_filter and statut_filter in ['valide_divisionnaire', 'rejete']:
+            qs = qs.filter(statut=statut_filter)
+        
+        # Comptage par région
+        par_region = {
+            item['region_id']: item['total']
+            for item in qs.values('region_id').annotate(total=Count('id'))
+        }
+        
+        # Statistiques
+        stats = {
+            'total': qs.count(),
+            'valides_divisionnaire': qs.filter(statut='valide_divisionnaire').count(),
+            'rejetes': qs.filter(statut='rejete').count(),
+            'par_region': par_region,
+        }
+        
+        # Sérialisation
+        serializer = BudgetRecordSerializer(
+            qs, 
+            many=True, 
+            context={'request': request}
+        )
+        
+        return Response({
+            'success': True,
+            'stats': stats,
+            'count': qs.count(),
+            'par_region': par_region,
+            'projets': serializer.data
+        })
+class ListeProjetsDivisionnaireRejetesView(APIView):
+    """
+    GET /recap/budget/divisionnaire/rejetes/
+    Projets rejetés (le divisionnaire peut rejeter)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDivisionnaire]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='rejete'
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        from django.db.models import Count
+        par_region = {
+            item['region_id']: item['total']
+            for item in qs.values('region_id').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'par_region': par_region,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+class ListeProjetsDivisionnaireTousView(APIView):
+    """
+    GET /recap/budget/divisionnaire/tous/
+    Tous les projets du divisionnaire (valides directeur + réservés directeur + valides divisionnaire)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDivisionnaire]
+
+    STATUTS_DIVISIONNAIRE = [
+        'valide_directeur',      # projets à valider
+        'reserve_directeur',     # projets réservés par directeur
+        'valide_divisionnaire',
+          # projets déjà validés par divisionnaire
+    ]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut__in=self.STATUTS_DIVISIONNAIRE
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        from django.db.models import Count
+        compteurs = {
+            item['statut']: item['total']
+            for item in qs.values('statut').annotate(total=Count('id'))
+        }
+
+        par_region = {
+            item['region_id']: item['total']
+            for item in qs.values('region_id').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'par_region': par_region,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+class ListeProjetsDivisionnaireHistoriqueView(APIView):
+    """
+    GET /recap/budget/divisionnaire/historique/
+    TOUS les projets (tous statuts) pour historique
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDivisionnaire]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.all().order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        from django.db.models import Count
+        compteurs = {
+            item['statut']: item['total']
+            for item in qs.values('statut').annotate(total=Count('id'))
+        }
+
+        par_region = {
+            item['region_id']: item['total']
+            for item in qs.values('region_id').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'par_region': par_region,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+
+
+
+
+
+
+
+
+
+
+# class ListeProjetsDivisionnnaireView(APIView):
+#     """
+#     GET /recap/budget/projets/divisionnaire/
+#     ?type_projet=nouveau|en_cours
+#     ?code_division=PROJ001
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDivisionnaire]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='valide_directeur',
+#             is_active=True,
+#         )
+
+#         type_projet   = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         qs = qs.order_by('-id')
+
+#         from django.db.models import Count
+#         par_region = {
+#             item['region_id']: item['total']
+#             for item in qs.values('region_id').annotate(total=Count('id'))
+#         }
+
+#         return Response({
+#             'count':      qs.count(),
+#             'par_region': par_region,
+#             'projets':    BudgetRecordSerializer(qs, many=True).data,
+#         })
 
 
 # ================================================================== #

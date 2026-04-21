@@ -1,8 +1,47 @@
 
 from rest_framework import serializers
 from .models import ExcelUpload, BudgetRecord
-from .mappings import REGION_MAPPING, ACTIVITE_MAPPING, get_famille_nom
+from .mappings import  ACTIVITE_MAPPING
+import requests
 
+
+def get_service_param_url():
+    try:
+        print("[DEBUG] Trying to resolve SERVICE-NODE-PARAM from Eureka...")
+        res = requests.get(
+            "http://localhost:8761/eureka/apps/SERVICE-NODE-PARAM",
+            headers={'Accept': 'application/json'},
+            timeout=5
+        )
+        
+        if res.status_code == 200:
+            data = res.json()
+            instances = data['application']['instance']
+            instance = instances[0] if isinstance(instances, list) else instances
+            host = instance['hostName']
+            port = instance['port']['$']
+            url = f"http://{host}:{port}"
+            print(f"[DEBUG] Service resolved from Eureka: {url}")
+            
+            # Vérifier si le service est accessible
+            try:
+                test_resp = requests.get(f"{url}/params/regions", timeout=2)
+                if test_resp.status_code == 200:
+                    print(f"[DEBUG] Service is accessible on {url}")
+                    return url
+                else:
+                    print(f"[DEBUG] Service on {url} returned {test_resp.status_code}, using fallback")
+            except Exception as test_e:
+                print(f"[DEBUG] Service on {url} not accessible: {test_e}")
+        else:
+            print(f"[DEBUG] Eureka returned status {res.status_code}")
+            
+    except Exception as e:
+        print(f"[DEBUG] Error resolving SERVICE-NODE-PARAM from Eureka: {e}")
+    
+    # Fallback vers le bon port
+    print("[DEBUG] Using fallback URL: http://localhost:8083")
+    return "http://localhost:8083"
 
 class BudgetRecordSerializer(serializers.ModelSerializer):
 
@@ -17,22 +56,133 @@ class BudgetRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = BudgetRecord
         fields = '__all__'  # inclut intervalle_pmt automatiquement
+    
+    def get_region_nom(self, obj):
+        """Récupère le nom de la région depuis le service param"""
+        try:
+            # Récupérer le token depuis le contexte de la requête
+            request = self.context.get('request')
+            token = request.headers.get('Authorization', '') if request else ''
+            
+            service_url = get_service_param_url()
+            
+            # Appel à votre endpoint avec l'ID MongoDB
+            response = requests.get(
+                f"{service_url}/params/regions/id/{obj.region_id}",  # Utilise region_id (ObjectId MongoDB)
+                headers={'Authorization': token},
+                timeout=3
+            )
+            
+            if response.status_code == 200:
+                region_data = response.json().get('data', {})
+                return region_data.get('nom_region')  # Retourne le nom
+            else:
+                return obj.region  # Fallback: retourne le code si erreur
+                
+        except Exception as e:
+            # Log l'erreur mais ne casse pas la sérialisation
+            print(f"Erreur récupération nom région: {e}")
+            return obj.region  # Fallback: retourne le code
+        
+    # def get_activite_nom(self, obj):
+    #         """Récupère le nom de l'activité depuis le service param"""
+    #         try:
+    #             request = self.context.get('request')
+    #             token = request.headers.get('Authorization', '') if request else ''
+                
+    #             service_url = get_service_param_url()
+                
+    #             # Adaptez l'endpoint selon votre API
+    #             response = requests.get(
+    #                 f"{service_url}/params/activites/code/{obj.activite}",
+    #                 headers={'Authorization': token},
+    #                 timeout=3
+    #             )
+                
+    #             if response.status_code == 200:
+    #                 activite_data = response.json().get('data', {})
+    #                 return activite_data.get('nom')
+    #             else:
+    #                 return obj.activie
+                    
+    #         except Exception as e:
+    #             print(f"Erreur récupération nom activité: {e}")
+    #             return obj.activite
+
+    # def get_famille_nom(self, obj):
+    #         """Récupère le nom de la famille depuis le service param"""
+    #         try:
+    #             request = self.context.get('request')
+    #             token = request.headers.get('Authorization', '') if request else ''
+                
+    #             service_url = get_service_param_url()
+                
+    #             # Adaptez l'endpoint selon votre API
+    #             response = requests.get(
+    #                 f"{service_url}/params/familles/by-code/{obj.famille}",
+    #                 headers={'Authorization': token},
+    #                 timeout=3
+    #             )
+                
+    #             if response.status_code == 200:
+    #                 famille_data = response.json().get('data', {})
+    #                 return famille_data.get('nom_famille')
+    #             else:
+    #                 return obj.famille
+                    
+    #         except Exception as e:
+    #             print(f"Erreur récupération nom famille: {e}")
+    #             return obj.famille
+    def get_famille_nom(self, obj):
+        """Récupère le nom de la famille depuis le service param"""
+        try:
+            request = self.context.get('request')
+            token = request.headers.get('Authorization', '') if request else ''
+            
+            service_url = get_service_param_url()
+            
+            # DEBUG: Afficher l'URL complète
+            url = f"{service_url}/params/familles/by-code/{obj.famille}"
+            print(f"[DEBUG FAMILLE] Calling URL: {url}")
+            print(f"[DEBUG FAMILLE] Token: {token[:50]}..." if token else "[DEBUG FAMILLE] No token")
+            
+            response = requests.get(
+                url,
+                headers={'Authorization': token},
+                timeout=3
+            )
+            
+            print(f"[DEBUG FAMILLE] Status: {response.status_code}")
+            print(f"[DEBUG FAMILLE] Response: {response.text[:200]}")
+            
+            if response.status_code == 200:
+                famille_data = response.json().get('data', {})
+                nom = famille_data.get('nom_famille')
+                print(f"[DEBUG FAMILLE] Found nom_famille: {nom}")
+                return nom
+            else:
+                print(f"[DEBUG FAMILLE] Error, returning fallback: {obj.famille}")
+                return obj.famille
+                
+        except Exception as e:
+            print(f"[DEBUG FAMILLE] Exception: {e}")
+            return obj.famille
 
     # ─────────────────────────
     # MAPPINGS
     # ─────────────────────────
 
-    def get_region_nom(self, obj):
-        code = str(obj.region or '').strip()
-        return REGION_MAPPING.get(code, code)
+    # def get_region_nom(self, obj):
+    #     code = str(obj.region or '').strip()
+    #     return REGION_MAPPING.get(code, code)
 
     def get_activite_nom(self, obj):
         code = str(obj.activite or '').strip()
         return ACTIVITE_MAPPING.get(code, code)
 
-    def get_famille_nom(self, obj):
-        code = str(obj.famille or '').strip()
-        return get_famille_nom(code)
+    # def get_famille_nom(self, obj):
+    #     code = str(obj.famille or '').strip()
+    #     return get_famille_nom(code)
 
     # ─────────────────────────
     # INTERVALLE PMT (READ)
