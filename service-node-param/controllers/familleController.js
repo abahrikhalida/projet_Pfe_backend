@@ -265,3 +265,79 @@ exports.getFamilleByCode = async (req, res) => {
         });
     }
 };
+// @desc Get familles by code_region & code_perimetre
+// @route GET /api/familles/by-region-perimetre/:codeRegion/:codePerimetre
+// @access Private
+// exports.getFamillesByCodeRegionAndPerimetre = async (req, res) => {
+//     try {
+//         const { codeRegion, codePerimetre } = req.params;
+
+//         // vérifier région
+//         const region = await Region.findOne({ code_region: codeRegion });
+//         if (!region) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Region not found'
+//             });
+//         }
+
+//         // vérifier périmètre
+//         const perimetre = await Perimetre.findOne({
+//             region: codeRegion,
+//             code_perimetre: codePerimetre
+//         });
+
+//         if (!perimetre) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Perimetre not found in this region'
+//             });
+//         }
+
+//         // récupérer familles
+//         const familles = await Famille.find({
+//             region: codeRegion,
+//             perimetre: codePerimetre,
+//             is_active: true
+//         }).sort({ created_at: -1 });
+
+//         res.json({
+//             success: true,
+//             count: familles.length,
+//             data: familles
+//         });
+
+//     } catch (error) {
+//         console.error('Get familles error:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Error fetching familles',
+//             error: error.message
+//         });
+//     }
+// };
+exports.getFamillesByFilter = async (req, res) => {
+    try {
+        const { codeRegion, codePerimetre } = req.params;
+
+        const familles = await Famille.find({
+            region: codeRegion,
+            perimetre: codePerimetre,
+            is_active: true
+        }).sort({ created_at: -1 });
+
+        res.json({
+            success: true,
+            count: familles.length,
+            data: familles
+        });
+
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching familles',
+            error: error.message
+        });
+    }
+};

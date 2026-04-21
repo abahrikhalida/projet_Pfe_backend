@@ -6,7 +6,8 @@ const familleController = require('../controllers/familleController');
 // All routes require authentication
 router.use(authMiddleware);
 router.get('/region/:regionId/perimetre/:perimetreCode', familleController.getFamillesByRegionIdAndPerimetre);
-
+// GET /api/familles/by-region-perimetre/:codeRegion/:codePerimetre
+router.get('/by-region-perimetre/:codeRegion/:codePerimetre', familleController.getFamillesByFilter);
 // Routes accessibles à tous les utilisateurs authentifiés
 router.get('/', familleController.getAllFamilles);
 router.get('/:id', familleController.getFamilleById);
