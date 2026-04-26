@@ -133,6 +133,78 @@ def api_reset_password(request):
     return Response({"status": "success", "message": "Email de réinitialisation envoyé."})
 
 
+# ==========================
+# desactiver le compte user
+# ==========================
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def api_toggle_user_active(request, user_id):
+    """
+    Désactiver ou réactiver un utilisateur
+    Body: {"is_active": false} pour désactiver, true pour réactiver
+    """
+    # Vérifier que l'admin fait la requête
+    if request.user.role != 'admin':
+        return Response({
+            "status": "error",
+            "code": "FORBIDDEN",
+            "message": "Accès admin uniquement"
+        }, status=403)
+    
+    # Récupérer l'utilisateur cible
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({
+            "status": "error",
+            "code": "USER_NOT_FOUND",
+            "message": "Utilisateur non trouvé"
+        }, status=404)
+    
+    # Empêcher de désactiver son propre compte
+    if request.user.id == user.id:
+        return Response({
+            "status": "error",
+            "code": "CANNOT_DISABLE_SELF",
+            "message": "Vous ne pouvez pas désactiver votre propre compte"
+        }, status=400)
+    
+    # Récupérer la nouvelle valeur
+    is_active = request.data.get('is_active')
+    
+    if is_active is None:
+        return Response({
+            "status": "error",
+            "code": "MISSING_FIELD",
+            "message": "Le champ 'is_active' est requis (true/false)"
+        }, status=400)
+    
+    # Convertir en booléen (au cas où ça arrive en string)
+    if isinstance(is_active, str):
+        is_active = is_active.lower() == 'true'
+    
+    old_status = user.is_active
+    user.is_active = is_active
+    user.save()
+    
+    status_message = "réactivé" if is_active else "désactivé"
+    
+    return Response({
+        "status": "success",
+        "code": "USER_STATUS_UPDATED",
+        "message": f"Utilisateur {user.nom} {user.prenom} {status_message}",
+        "data": {
+            "user_id": user.id,
+            "user_name": f"{user.prenom} {user.nom}",
+            "old_status": old_status,
+            "new_status": is_active,
+            "modified_by": {
+                "id": request.user.id,
+                "name": f"{request.user.prenom} {request.user.nom}",
+                "role": request.user.role
+            }
+        }
+    })
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def api_reset_password_confirm(request):

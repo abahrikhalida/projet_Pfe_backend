@@ -111,6 +111,12 @@ urlpatterns = [
     path('budget/divisionnaire/rejetes/', ListeProjetsDivisionnaireRejetesView.as_view(), name='divisionnaire-rejetes'),
     path('budget/divisionnaire/tous/', ListeProjetsDivisionnaireTousView.as_view(), name='divisionnaire-tous'),
     path('budget/divisionnaire/historique/', ListeProjetsDivisionnaireHistoriqueView.as_view(), name='divisionnaire-historique'),
+
+
+    #export excel:
+    path('budget/export/valides-divisionnaire/',ExportProjetsValidesDivisionnaireView.as_view(), name='export_valides_divisionnaire'),
+    
+    # path('budget/export/filtres/',ExportProjetsFiltresView.as_view(),name='export_filtres'),
     
     
 ]
