@@ -402,7 +402,7 @@ class GetProjetByIdView(APIView):
     def get(self, request, id):
         try:
             projet = BudgetRecord.objects.get(id=id)
-            serializer = BudgetRecordSerializer(projet)
+            serializer = BudgetRecordSerializer(projet, context={'request': request})
             return Response({
                 'success': True,
                 'data': serializer.data
@@ -2395,7 +2395,6 @@ class PatchProjetAdminView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAdmin]
 
-    # Champs autorisés au PATCH (tout sauf les champs système)
     PATCHABLE_FIELDS = {
         # Identitaires
         'region', 'perimetre', 'famille', 'activite',
@@ -2427,11 +2426,9 @@ class PatchProjetAdminView(APIView):
         'prev_s2_n_total',  'prev_s2_n_dont_dex',
     }
 
-    # Champs système — jamais modifiables via ce endpoint
     READONLY_FIELDS = {
         'id', 'version', 'is_active', 'parent_id',
         'created_by', 'region_id', 'structure_id', 'upload',
-        # Calculés automatiquement
         'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
         'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
@@ -2474,9 +2471,8 @@ class PatchProjetAdminView(APIView):
             )
 
         # ── Vérifier les champs envoyés ─────────────────────────────────
-        unknown_fields  = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
-        readonly_sent   = set(data.keys()) & self.READONLY_FIELDS
-        invalid_fields  = set(data.keys()) - self.PATCHABLE_FIELDS
+        unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+        readonly_sent  = set(data.keys()) & self.READONLY_FIELDS
 
         if readonly_sent:
             return Response(
@@ -2503,11 +2499,10 @@ class PatchProjetAdminView(APIView):
             if field not in self.PATCHABLE_FIELDS:
                 continue
 
-            # Conversion Decimal pour les champs financiers
             if field in self.DECIMAL_FIELDS:
                 value = self._to_decimal_or_none(value)
 
-            # Mapping spécial : 'perimetre' dans la requête → 'perm' sur le modèle
+            # Mapping spécial : 'perimetre' → 'perm' sur le modèle
             model_field = 'perm' if field == 'perimetre' else field
 
             setattr(actif, model_field, value)
@@ -2519,19 +2514,24 @@ class PatchProjetAdminView(APIView):
                 status=400
             )
 
+        # ✅ FIX : actif.save() est maintenant APRÈS le return guard, pas avant
         actif.save(update_fields=updated_fields)
+
+        serializer = BudgetRecordSerializer(
+            actif,
+            context={'request': request}
+        )
 
         return Response(
             {
-                'success':         True,
-                'message':         f'{len(updated_fields)} champ(s) mis à jour sur la version active.',
-                'version':         actif.version,
+                'success': True,
+                'message': f'{len(updated_fields)} champ(s) mis à jour sur la version active.',
+                'version': actif.version,
                 'champs_modifies': updated_fields,
-                'data':            BudgetRecordSerializer(actif).data,
+                'data': serializer.data,
             },
             status=200,
         )
-# ─────────────────────────────────────────
 # HELPER — récupérer record par id
 # ─────────────────────────────────────────
 
@@ -5123,32 +5123,32 @@ class ListeProjetsChefHistoriqueView(APIView):
 #  DIRECTEUR - LISTES SPÉCIFIQUES
 # ================================================================== #
 
-# class ListeProjetsDirecteurValidesChefView(APIView):
-#     """
-#     GET /recap/budget/directeur/valides-chef/
-#     Projets validés par le chef (à valider par le directeur)
-#     Inclut actifs + inactifs
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsDirecteur]
+class ListeProjetsDirecteurValidesChefView(APIView):
+    """
+    GET /recap/budget/directeur/valides-chef/
+    Projets validés par le chef (à valider par le directeur)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteur]
 
-#     def get(self, request):
-#         qs = BudgetRecord.objects.filter(
-#             statut='valide_chef'
-#         ).order_by('-id')
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='valide_chef'
+        ).order_by('-id')
 
-#         type_projet = request.query_params.get('type_projet')
-#         code_division = request.query_params.get('code_division')
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
 
-#         if type_projet:
-#             qs = qs.filter(type_projet=type_projet)
-#         if code_division:
-#             qs = qs.filter(code_division__icontains=code_division)
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
 
-#         return Response({
-#             'count': qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data
-#         })
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
 
 
 # class ListeProjetsDirecteurReserveChefView(APIView):
@@ -5444,39 +5444,39 @@ class ListeProjetsDirecteurHistoriqueView(APIView):
 #  DIVISIONNAIRE - LISTES SPÉCIFIQUES
 # ================================================================== #
 
-# class ListeProjetsDivisionnaireValidesDirecteurView(APIView):
-#     """
-#     GET /recap/budget/divisionnaire/valides-directeur/
-#     Projets validés par le directeur (à valider par le divisionnaire)
-#     Inclut actifs + inactifs
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsDivisionnaire]
+class ListeProjetsDivisionnaireValidesDirecteurView(APIView):
+    """
+    GET /recap/budget/divisionnaire/valides-directeur/
+    Projets validés par le directeur (à valider par le divisionnaire)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDivisionnaire]
 
-#     def get(self, request):
-#         qs = BudgetRecord.objects.filter(
-#             statut='valide_directeur'
-#         ).order_by('-id')
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='valide_directeur'
+        ).order_by('-id')
 
-#         type_projet = request.query_params.get('type_projet')
-#         code_division = request.query_params.get('code_division')
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
 
-#         if type_projet:
-#             qs = qs.filter(type_projet=type_projet)
-#         if code_division:
-#             qs = qs.filter(code_division__icontains=code_division)
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
 
-#         from django.db.models import Count
-#         par_region = {
-#             item['region_id']: item['total']
-#             for item in qs.values('region_id').annotate(total=Count('id'))
-#         }
+        from django.db.models import Count
+        par_region = {
+            item['region_id']: item['total']
+            for item in qs.values('region_id').annotate(total=Count('id'))
+        }
 
-#         return Response({
-#             'count': qs.count(),
-#             'par_region': par_region,
-#             'projets': BudgetRecordSerializer(qs, many=True).data
-#         })
+        return Response({
+            'count': qs.count(),
+            'par_region': par_region,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
 
 
 # class ListeProjetsDivisionnaireReserveDirecteurView(APIView):
@@ -5578,7 +5578,7 @@ class ListeProjetsDivisionnaireValidesView(APIView):
     Inclut actifs + inactifs
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDivisionnaire]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
@@ -5673,7 +5673,7 @@ class ListeProjetsDivisionnaireRejetesView(APIView):
     Inclut actifs + inactifs
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDivisionnaire]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
