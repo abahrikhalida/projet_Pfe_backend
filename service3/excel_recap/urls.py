@@ -101,7 +101,7 @@ urlpatterns = [
     path('budget/directeur/historique/', ListeProjetsDirecteurHistoriqueView.as_view(), name='directeur-historique'),
      
     # gets pour dividionnaire:
-    # path('budget/divisionnaire/valides-directeur/', ListeProjetsDivisionnaireValidesDirecteurView.as_view(), name='divisionnaire-valides-directeur'),
+    path('budget/divisionnaire/valides-directeur/', ListeProjetsDivisionnaireValidesDirecteurView.as_view(), name='divisionnaire-valides-directeur'),
     # path('budget/divisionnaire/reserve-directeur/', ListeProjetsDivisionnaireReserveDirecteurView.as_view(), name='divisionnaire-reserve-directeur'),
     path('budget/divisionnaire/directeurStatus/', ListeProjetsDivisionnaireView.as_view(), name='divisionnaire-valides'),
     path('budget/divisionnaire/termines/', ListeProjetsDivisionnaireTerminesView.as_view(), name='divisionnaire-termines'),
@@ -110,6 +110,12 @@ urlpatterns = [
     path('budget/divisionnaire/rejetes/', ListeProjetsDivisionnaireRejetesView.as_view(), name='divisionnaire-rejetes'),
     path('budget/divisionnaire/tous/', ListeProjetsDivisionnaireTousView.as_view(), name='divisionnaire-tous'),
     path('budget/divisionnaire/historique/', ListeProjetsDivisionnaireHistoriqueView.as_view(), name='divisionnaire-historique'),
+
+
+    #export excel:
+    path('budget/export/valides-divisionnaire/',ExportProjetsValidesDivisionnaireView.as_view(), name='export_valides_divisionnaire'),
+    
+    # path('budget/export/filtres/',ExportProjetsFiltresView.as_view(),name='export_filtres'),
     
     
 ]
