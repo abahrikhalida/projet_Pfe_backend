@@ -5,6 +5,7 @@ from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
+
 class ExcelUpload(models.Model):
     file_name = models.CharField(max_length=255)
     uploaded_at = models.DateTimeField(auto_now_add=True)
@@ -173,13 +174,56 @@ class BudgetRecord(models.Model):
         if self.annee_debut_pmt and self.annee_fin_pmt:
             if self.annee_debut_pmt > self.annee_fin_pmt:
                 raise ValidationError("L'année début doit être inférieure à l'année fin")
-
+        
+        
+        # Liste des paires (champ_total, champ_dex)
+        pairs = [
+            ('cout_initial_total', 'cout_initial_dont_dex'),
+            ('realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex'),
+            ('real_s1_n_total', 'real_s1_n_dont_dex'),
+            ('prev_s2_n_total', 'prev_s2_n_dont_dex'),
+            ('prev_cloture_n_total', 'prev_cloture_n_dont_dex'),
+            ('prev_n_plus1_total', 'prev_n_plus1_dont_dex'),
+            ('reste_a_realiser_total', 'reste_a_realiser_dont_dex'),
+            ('prev_n_plus2_total', 'prev_n_plus2_dont_dex'),
+            ('prev_n_plus3_total', 'prev_n_plus3_dont_dex'),
+            ('prev_n_plus4_total', 'prev_n_plus4_dont_dex'),
+            ('prev_n_plus5_total', 'prev_n_plus5_dont_dex'),
+            ('janvier_total', 'janvier_dont_dex'),
+            ('fevrier_total', 'fevrier_dont_dex'),
+            ('mars_total', 'mars_dont_dex'),
+            ('avril_total', 'avril_dont_dex'),
+            ('mai_total', 'mai_dont_dex'),
+            ('juin_total', 'juin_dont_dex'),
+            ('juillet_total', 'juillet_dont_dex'),
+            ('aout_total', 'aout_dont_dex'),
+            ('septembre_total', 'septembre_dont_dex'),
+            ('octobre_total', 'octobre_dont_dex'),
+            ('novembre_total', 'novembre_dont_dex'),
+            ('decembre_total', 'decembre_dont_dex'),
+        ]
+        
+        for total_field, dex_field in pairs:
+            total = getattr(self, total_field)
+            dex = getattr(self, dex_field)
+            
+            if total is not None and dex is not None and total < dex:
+                raise ValidationError({
+                    total_field: f"Le total ({total}) ne peut pas être inférieur au DEX ({dex})",
+                    dex_field: f"Le DEX ({dex}) ne peut pas être supérieur au total ({total})"
+                })
+    
     def save(self, *args, **kwargs):
-        # # Si c'est une nouvelle version, incrémenter automatiquement
-        # if not self.pk and self.parent_id:
-        #     parent = BudgetRecord.objects.get(id=self.parent_id)
-        #     self.version = parent.version + 1
+        # Appeler la validation avant la sauvegarde
+        self.clean()
         super().save(*args, **kwargs)
+
+    # def save(self, *args, **kwargs):
+    #     # # Si c'est une nouvelle version, incrémenter automatiquement
+    #     # if not self.pk and self.parent_id:
+    #     #     parent = BudgetRecord.objects.get(id=self.parent_id)
+    #     #     self.version = parent.version + 1
+    #     super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.libelle} | {self.code_division} v{self.version} | {self.statut}"

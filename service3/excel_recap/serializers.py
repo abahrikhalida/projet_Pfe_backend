@@ -57,32 +57,77 @@ class BudgetRecordSerializer(serializers.ModelSerializer):
         model = BudgetRecord
         fields = '__all__'  # inclut intervalle_pmt automatiquement
     
+    # def get_region_nom(self, obj):
+    #     """Récupère le nom de la région depuis le service param"""
+    #     try:
+    #         # Récupérer le token depuis le contexte de la requête
+    #         request = self.context.get('request')
+    #         token = request.headers.get('Authorization', '') if request else ''
+            
+    #         service_url = get_service_param_url()
+            
+    #         # Appel à votre endpoint avec l'ID MongoDB
+    #         response = requests.get(
+    #             f"{service_url}/params/regions/id/{obj.region_id}",  # Utilise region_id (ObjectId MongoDB)
+    #             headers={'Authorization': token},
+    #             timeout=3
+    #         )
+            
+    #         if response.status_code == 200:
+    #             region_data = response.json().get('data', {})
+    #             return region_data.get('nom_region')  # Retourne le nom
+    #         else:
+    #             return obj.region  # Fallback: retourne le code si erreur
+                
+    #     except Exception as e:
+    #         # Log l'erreur mais ne casse pas la sérialisation
+    #         print(f"Erreur récupération nom région: {e}")
+    #         return obj.region  # Fallback: retourne le code
     def get_region_nom(self, obj):
         """Récupère le nom de la région depuis le service param"""
         try:
-            # Récupérer le token depuis le contexte de la requête
             request = self.context.get('request')
             token = request.headers.get('Authorization', '') if request else ''
             
+            if not token:
+                print("[DEBUG REGION] No token available")
+                return obj.region
+            
             service_url = get_service_param_url()
             
-            # Appel à votre endpoint avec l'ID MongoDB
+            # ✅ Utilisez le code de la région, pas l'ID MongoDB
+            url = f"{service_url}/params/regions/{obj.region}"
+            print(f"[DEBUG REGION] Calling URL: {url}")
+            
             response = requests.get(
-                f"{service_url}/params/regions/id/{obj.region_id}",  # Utilise region_id (ObjectId MongoDB)
+                url,
                 headers={'Authorization': token},
                 timeout=3
             )
             
+            print(f"[DEBUG REGION] Status: {response.status_code}")
+            
             if response.status_code == 200:
-                region_data = response.json().get('data', {})
-                return region_data.get('nom_region')  # Retourne le nom
+                response_data = response.json()
+                print(f"[DEBUG REGION] Response: {response_data}")
+                
+                # Selon votre MongoDB, le champ est 'nom_region'
+                region_data = response_data.get('data', {})
+                nom = region_data.get('nom_region')
+                
+                if nom:
+                    print(f"[DEBUG REGION] Found nom_region: {nom}")
+                    return nom
+                else:
+                    print(f"[DEBUG REGION] No nom_region in response")
+                    return obj.region
             else:
-                return obj.region  # Fallback: retourne le code si erreur
+                print(f"[DEBUG REGION] Error {response.status_code}, response: {response.text}")
+                return obj.region
                 
         except Exception as e:
-            # Log l'erreur mais ne casse pas la sérialisation
-            print(f"Erreur récupération nom région: {e}")
-            return obj.region  # Fallback: retourne le code
+            print(f"[DEBUG REGION] Exception: {e}")
+            return obj.region
         
     # def get_activite_nom(self, obj):
     #         """Récupère le nom de l'activité depuis le service param"""

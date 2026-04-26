@@ -103,7 +103,7 @@ DATABASES = {
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': 'sounatrach_db_service',
+#         'NAME': 'sounatrach_db_service3',
 #         'USER': 'root',  # Ou un autre utilisateur
 #         'PASSWORD': 'root',
 #         'HOST': 'localhost',
@@ -111,10 +111,16 @@ DATABASES = {
 #     }
 # }
 # settings.py
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION": "redis://127.0.0.1:6379/1",
+#     }
+# }
 CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
     }
 }
 

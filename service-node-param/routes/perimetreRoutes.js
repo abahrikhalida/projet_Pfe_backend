@@ -11,7 +11,8 @@ router.get('/region/:regionId', perimetreController.getPerimetresByRegionId);
 router.get('/', perimetreController.getAllPerimetres);
 router.get('/id/:id', perimetreController.getPerimetreById);
 router.get('/:code', perimetreController.getPerimetreByCode);
-
+// GET /api/perimetres/by-region-code/:codeRegion
+router.get('/by-region-code/:codeRegion', perimetreController.getPerimetresByCodeRegion);
 // Routes réservées aux chefs (authentifiés)
 router.post('/', checkRole(['chef', 'admin']), perimetreController.createPerimetre);
 router.put('/:code', checkRole(['chef', 'admin']), perimetreController.updatePerimetre);

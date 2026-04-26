@@ -166,7 +166,7 @@ DATABASES = {
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': 'sounatrach_db',
+#         'NAME': 'lamouche-sonatrach',
 #         'USER': 'root',  # Ou un autre utilisateur
 #         'PASSWORD': 'root',
 #         'HOST': 'localhost',

@@ -21,6 +21,7 @@ urlpatterns = [
     
     path('users/create/', views.api_create_user, name='api_create_user'),
     path('users/<int:user_id>/', views.api_get_user, name='api_get_user'),
+    path('users/<int:user_id>/desactive-user/', views.api_toggle_user_active, name='toggle_user_active'),
     path('users/', views.api_list_users, name='api_list_users'),  
     path('all_users/', views.api_list_all_users, name='api_list_all_users'),
     path('all_users/<int:user_id>/', views.api_get_user_by_id, name='api_get_user_by_id'),     
