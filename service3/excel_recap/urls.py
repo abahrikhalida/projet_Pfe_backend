@@ -39,7 +39,7 @@ urlpatterns = [
 
 
     # procedure  validation par role:
-    path('budget/soumettre/<int:record_id>/',SoumettreProjetView.as_view()),
+    # path('budget/soumettre/<int:record_id>/',SoumettreProjetView.as_view()),
     path('budget/valider/directeur-region/<int:record_id>/',ValiderDirecteurRegionView.as_view()),
     path('budget/valider/agent/<int:record_id>/',ValiderAgentView.as_view()),
     path('budget/valider/chef/<int:record_id>/',ValiderChefView.as_view()),
@@ -49,6 +49,7 @@ urlpatterns = [
     # Listes par rôle
     #http://localhost:8083/recap/budget/projets/responsable/?statut=brouillon
     path('budget/projets/responsable/',ListeProjetsResponsableView.as_view()),#valider
+
     #http://localhost:8083/recap/budget/projets/directeur-region/?statut=soumis
     # path('budget/projets/directeur-region/',ListeProjetsDirecteurRegionView.as_view()),#valider
     
@@ -92,7 +93,7 @@ urlpatterns = [
 
 
     # gets pour directeur:
-    # path('budget/directeur/valides-chef/', ListeProjetsDirecteurValidesChefView.as_view(), name='directeur-valides-chef'),
+    path('budget/directeur/valides-chef/', ListeProjetsDirecteurValidesChefView.as_view(), name='directeur-valides-chef'),
     # path('budget/directeur/reserve-chef/', ListeProjetsDirecteurReserveChefView.as_view(), name='directeur-reserve-chef'),
     path('budget/directeur/ChefStatus/', ListeProjetsDirecteurView.as_view(), name='directeur-projets'),
     path('budget/directeur/valides/', ListeProjetsDirecteurValidesView.as_view(), name='directeur-valides'),
