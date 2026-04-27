@@ -288,61 +288,7 @@ class BudgetRecordListView(generics.ListAPIView):
         
         return qs.order_by('-id')
 
-# ─────────────────────────────────────────
-# RECAPS
-# ─────────────────────────────────────────
-class RecapParRegionView(APIView):
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.all()
-
-        uid = request.query_params.get('upload_id')
-        if uid:
-            qs = qs.filter(upload_id=uid)
-
-        qs = clean_queryset(qs)
-
-        data = list(
-            qs.values('region')
-            .annotate(**build_aggregation())
-            .order_by('region')
-        )
-
-        total = qs.aggregate(**build_aggregation())
-
-        service_url = get_service_param_url()
-        token = request.headers.get('Authorization', '')
-        
-        result = []
-        for row in data:
-            code = str(row.get('region', '') or '').strip()
-            
-            # Récupérer le nom de la région
-            region_name = code  # fallback
-            if code and code not in ['', '-', 'None']:
-                try:
-                    url = f"{service_url}/params/regions/{code}"
-                    response = requests.get(url, headers={'Authorization': token}, timeout=5)
-                    if response.status_code == 200:
-                        region_data = response.json().get('data', {})
-                        region_name = region_data.get('nom_region', code)
-                        print(f"[DEBUG] Region {code} -> {region_name}")
-                except Exception as e:
-                    print(f"[DEBUG] Error: {e}")
-            
-            # Remplacer la clé 'region' par le nom
-            row['region'] = region_name
-            
-            result.append(row)
-
-        return Response({
-            "regions": result,
-            "total_division": total
-        })
-
-        
+#voir plus
 class GetProjetByIdView(APIView):
     """
     GET /recap/budget/projet/<id>/
@@ -363,121 +309,1044 @@ class GetProjetByIdView(APIView):
                 {'error': f'Projet avec ID {id} non trouvé'},
                 status=404
             )
+# ─────────────────────────────────────────
+# RECAPS
+# ─────────────────────────────────────────
+# class RecapParRegionView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.all()
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('region')
+#             .annotate(**build_aggregation())
+#             .order_by('region')
+#         )
+
+#         total = qs.aggregate(**build_aggregation())
+
+#         service_url = get_service_param_url()
+#         token = request.headers.get('Authorization', '')
+        
+#         result = []
+#         for row in data:
+#             code = str(row.get('region', '') or '').strip()
+            
+#             # Récupérer le nom de la région
+#             region_name = code  # fallback
+#             if code and code not in ['', '-', 'None']:
+#                 try:
+#                     url = f"{service_url}/params/regions/{code}"
+#                     response = requests.get(url, headers={'Authorization': token}, timeout=5)
+#                     if response.status_code == 200:
+#                         region_data = response.json().get('data', {})
+#                         region_name = region_data.get('nom_region', code)
+#                         print(f"[DEBUG] Region {code} -> {region_name}")
+#                 except Exception as e:
+#                     print(f"[DEBUG] Error: {e}")
+            
+#             # Remplacer la clé 'region' par le nom
+#             row['region'] = region_name
+            
+#             result.append(row)
+
+#         return Response({
+#             "regions": result,
+#             "total_division": total
+#         })
+
+        
+
+# class RecapParFamilleView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         print("=" * 80)
+#         print("[DEBUG] === Début RecapParFamilleView ===")
+#         print("=" * 80)
+        
+#         qs = BudgetRecord.objects.all()
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('famille')
+#             .annotate(**build_aggregation())
+#             .order_by('famille')
+#         )
+
+#         total = qs.aggregate(**build_aggregation())
+
+#         service_url = get_service_param_url()
+#         print(f"[DEBUG] Service URL: {service_url}")
+        
+#         # Récupérer le token de l'utilisateur actuel
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+#         print(f"[DEBUG] Token present: {bool(token)}")
+        
+#         # Récupérer TOUTES les familles en UNE SEULE requête avec le token
+#         famille_mapping = {}
+#         try:
+#             print("[DEBUG] Fetching all families from service with token...")
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+#             print(f"[DEBUG] Response status: {response.status_code}")
+            
+#             if response.status_code == 200:
+#                 response_data = response.json()
+#                 print(f"[DEBUG] Response keys: {response_data.keys() if isinstance(response_data, dict) else 'list'}")
+                
+#                 # Gérer différentes structures de réponse
+#                 if isinstance(response_data, dict):
+#                     if 'data' in response_data:
+#                         familles_list = response_data['data']
+#                     else:
+#                         familles_list = [response_data] if response_data else []
+#                 elif isinstance(response_data, list):
+#                     familles_list = response_data
+#                 else:
+#                     familles_list = []
+                
+#                 print(f"[DEBUG] Number of families found: {len(familles_list)}")
+                
+#                 for famille in familles_list:
+#                     if isinstance(famille, dict):
+#                         code = famille.get('code_famille') or famille.get('code') or famille.get('id')
+#                         nom = famille.get('nom_famille') or famille.get('name') or famille.get('libelle') or famille.get('nom')
+#                         if code:
+#                             famille_mapping[str(code)] = nom
+#                             print(f"[DEBUG] Mapped {code} -> {nom}")
+                
+#                 print(f"[DEBUG] Total mapped families: {len(famille_mapping)}")
+#             else:
+#                 print(f"[DEBUG] Failed to fetch families: {response.status_code}")
+#                 if response.text:
+#                     print(f"[DEBUG] Response: {response.text[:200]}")
+                    
+#         except Exception as e:
+#             print(f"[DEBUG] Error fetching families: {e}")
+#             import traceback
+#             traceback.print_exc()
+        
+#         # Appliquer le mapping
+#         result = []
+#         for row in data:
+#             code = str(row.get('famille', '') or '').strip()
+#             if code and code not in ['', '-', 'None']:
+#                 row['famille'] = famille_mapping.get(code, code)
+#             else:
+#                 row['famille'] = '-'
+#             print(f"[DEBUG] Mapped: {code} -> {row['famille']}")
+#             result.append(row)
+
+#         print("=" * 80)
+#         print("[DEBUG] === Fin RecapParFamilleView ===")
+#         print("=" * 80)
+
+#         return Response({
+#             "familles": result,
+#             "total_division_production": total
+#         })
+# class RecapParActiviteView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAll]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.all()
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('activite')
+#             .annotate(**build_aggregation())
+#             .order_by('activite')
+#         )
+
+#         total_qs = qs.aggregate(**build_aggregation())
+
+#         return Response({
+#             "activites": apply_mapping(data, 'activite', ACTIVITE_MAPPING),
+#             "total_division": total_qs,
+#         })
+
+
+# class RecapGlobalView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAll]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.all()
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+#         agg = build_aggregation()
+        
+#         # Récupérer le token
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+#         service_url = get_service_param_url()
+        
+#         # Récupérer toutes les régions
+#         region_mapping = {}
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
+            
+#             if response.status_code == 200:
+#                 response_data = response.json()
+#                 regions_list = response_data.get('data', [])
+#                 for region in regions_list:
+#                     code = region.get('code_region')
+#                     nom = region.get('nom_region')
+#                     if code:
+#                         region_mapping[str(code)] = nom
+#         except Exception:
+#             pass
+        
+#         # Récupérer toutes les familles
+#         famille_mapping = {}
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+            
+#             if response.status_code == 200:
+#                 response_data = response.json()
+#                 familles_list = response_data.get('data', [])
+#                 for famille in familles_list:
+#                     code = famille.get('code_famille')
+#                     nom = famille.get('nom_famille')
+#                     if code:
+#                         famille_mapping[str(code)] = nom
+#         except Exception:
+#             pass
+        
+#         # Traiter les régions
+#         regions_data = list(qs.values('region').annotate(**agg))
+#         regions_result = []
+#         for row in regions_data:
+#             code = str(row.get('region', '') or '').strip()
+#             region_nom = region_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
+#             regions_result.append({
+#                 'region_code': code,
+#                 'region_nom': region_nom,
+#                 **{k: v for k, v in row.items() if k != 'region'}
+#             })
+        
+#         # Traiter les familles
+#         familles_data = list(qs.values('famille').annotate(**agg))
+#         familles_result = []
+#         for row in familles_data:
+#             code = str(row.get('famille', '') or '').strip()
+#             famille_nom = famille_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
+#             familles_result.append({
+#                 'famille_code': code,
+#                 'famille_nom': famille_nom,
+#                 **{k: v for k, v in row.items() if k != 'famille'}
+#             })
+        
+#         # Traiter les activités
+#         activites_data = list(qs.values('activite').annotate(**agg))
+#         activites_result = []
+#         for row in activites_data:
+#             code = str(row.get('activite', '') or '').strip()
+#             activite_nom = ACTIVITE_MAPPING.get(code, code)
+#             activites_result.append({
+#                 'activite_code': code,
+#                 'activite_nom': activite_nom,
+#                 **{k: v for k, v in row.items() if k != 'activite'}
+#             })
+
+#         return Response({
+#             'par_region': regions_result,
+#             'par_famille': familles_result,
+#             'par_activite': activites_result,
+#         })
+    
+
+
+
+# class RecapFamilleParActiviteView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     @staticmethod
+#     def _get_familles_ordered(token):
+#         """Récupère les familles dans l'ordre défini par le backend"""
+#         service_url = get_service_param_url()
+#         famille_mapping = {}
+#         famille_order = []
+        
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+            
+#             if response.status_code == 200:
+#                 response_data = response.json()
+#                 familles_list = response_data.get('data', [])
+                
+#                 # Créer le mapping code -> nom
+#                 # et la liste ordonnée des noms
+#                 for famille in familles_list:
+#                     code = famille.get('code_famille')
+#                     nom = famille.get('nom_famille')
+#                     order = famille.get('ordre', 999)  # Récupérer l'ordre depuis l'API
+                    
+#                     if code:
+#                         famille_mapping[str(code)] = nom
+                    
+#                     # Ajouter à la liste ordonnée
+#                     famille_order.append({
+#                         'code': code,
+#                         'nom': nom,
+#                         'ordre': order
+#                     })
+                
+#                 # Trier par l'ordre défini par le backend
+#                 famille_order.sort(key=lambda x: x['ordre'])
+                
+#         except Exception as e:
+#             print(f"Erreur récupération familles: {e}")
+        
+#         return famille_mapping, famille_order
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.all()
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('activite', 'famille')
+#             .annotate(**build_aggregation())
+#             .order_by('activite', 'famille')
+#         )
+
+#         # Récupérer le token
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+        
+#         # Récupérer les familles avec leur ordre
+#         famille_mapping, famille_order_list = self._get_familles_ordered(token)
+        
+#         # Créer un dictionnaire pour l'ordre
+#         famille_order_dict = {}
+#         for idx, fam in enumerate(famille_order_list):
+#             famille_order_dict[fam['nom']] = idx
+#             famille_order_dict[fam['code']] = idx
+
+#         activites = {}
+
+#         for row in data:
+#             act_code = str(row.get('activite') or '').strip()
+#             act_nom = ACTIVITE_MAPPING.get(act_code, act_code)
+#             fam_code = str(row.get('famille') or '').strip()
+#             fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code and fam_code not in ['', '-', 'None'] else '-'
+
+#             if act_code not in activites:
+#                 activites[act_code] = {
+#                     'activite_code': act_code,
+#                     'activite_nom': act_nom,
+#                     'familles': {},
+#                     'total': {f: 0 for f in NUMERIC_FIELDS},
+#                 }
+
+#             if fam_code not in activites[act_code]['familles']:
+#                 activites[act_code]['familles'][fam_code] = {
+#                     'famille_code': fam_code,
+#                     'famille_nom': fam_nom,
+#                     **{f: 0 for f in NUMERIC_FIELDS}
+#                 }
+
+#             for field in NUMERIC_FIELDS:
+#                 val = float(row.get(field) or 0)
+#                 activites[act_code]['familles'][fam_code][field] += val
+#                 activites[act_code]['total'][field] += val
+
+#         result = []
+#         total_global = {f: 0 for f in NUMERIC_FIELDS}
+
+#         for act in activites.values():
+#             # ⭐ Trier selon l'ordre du backend
+#             familles = sorted(
+#                 act['familles'].values(),
+#                 key=lambda x: famille_order_dict.get(x['famille_nom'], 999)
+#             )
+
+#             result.append({
+#                 'activite_code': act['activite_code'],
+#                 'activite_nom': act['activite_nom'],
+#                 'familles': familles,
+#                 'total_activite': act['total'],
+#             })
+
+#             for f in NUMERIC_FIELDS:
+#                 total_global[f] += act['total'][f]
+
+#         return Response({
+#             'detail': result,
+#             'total_global': total_global,
+#         })
+
+# class RecapRegionFamilleView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAll]
+#     """
+#     GET /api/recap/region-famille/?upload_id=1
+#     Retourne chaque région avec ses familles + total par région
+#     """
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.all()
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('region', 'famille')
+#             .annotate(**build_aggregation())
+#             .order_by('region', 'famille')
+#         )
+
+#         # Récupérer le token
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+#         service_url = get_service_param_url()
+        
+#         # Récupérer toutes les régions et familles depuis l'API
+#         headers = {'Authorization': f'Bearer {token}'} if token else {}
+        
+#         region_mapping = {}
+#         famille_mapping = {}
+#         famille_order = []  # Pour stocker l'ordre des familles
+        
+#         try:
+#             # Récupérer les régions
+#             region_response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
+#             if region_response.status_code == 200:
+#                 regions_data = region_response.json().get('data', [])
+#                 for region in regions_data:
+#                     code = region.get('code_region')
+#                     nom = region.get('nom_region')
+#                     if code:
+#                         region_mapping[str(code)] = nom
+            
+#             # Récupérer les familles
+#             famille_response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+#             if famille_response.status_code == 200:
+#                 familles_data = famille_response.json().get('data', [])
+#                 for famille in familles_data:
+#                     code = famille.get('code_famille')
+#                     nom = famille.get('nom_famille')
+#                     ordre = famille.get('ordre', 999)  # Récupérer l'ordre
+#                     if code:
+#                         famille_mapping[str(code)] = nom
+#                         famille_order.append({
+#                             'code': code,
+#                             'nom': nom,
+#                             'ordre': ordre
+#                         })
+                
+#                 # Trier les familles par ordre défini par l'API
+#                 famille_order.sort(key=lambda x: x['ordre'])
+                
+#         except Exception as e:
+#             print(f"Erreur lors de l'appel au service param: {e}")
+
+#         # Créer un dictionnaire pour l'ordre des familles
+#         famille_ordre_dict = {}
+#         for idx, fam in enumerate(famille_order):
+#             famille_ordre_dict[fam['nom']] = idx
+#             famille_ordre_dict[fam['code']] = idx
+
+#         regions = {}
+
+#         for row in data:
+#             reg_code = str(row.get('region') or '').strip()
+#             # Récupérer le nom depuis l'API ou utiliser le code par défaut
+#             reg_nom = region_mapping.get(reg_code, reg_code) if reg_code and reg_code not in ['', '-', 'None'] else '-'
+            
+#             fam_code = str(row.get('famille') or '').strip()
+#             fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code and fam_code not in ['', '-', 'None'] else '-'
+
+#             if reg_code not in regions:
+#                 regions[reg_code] = {
+#                     'region_code': reg_code,
+#                     'region_nom': reg_nom,
+#                     'familles': {},
+#                     'total': {f: 0 for f in NUMERIC_FIELDS},
+#                 }
+
+#             if fam_code not in regions[reg_code]['familles']:
+#                 regions[reg_code]['familles'][fam_code] = {
+#                     'famille_code': fam_code,
+#                     'famille_nom': fam_nom,
+#                     **{f: 0 for f in NUMERIC_FIELDS}
+#                 }
+
+#             for field in NUMERIC_FIELDS:
+#                 val = float(row.get(field) or 0)
+#                 regions[reg_code]['familles'][fam_code][field] += val
+#                 regions[reg_code]['total'][field] += val
+
+#         result = []
+#         total_global = {f: 0 for f in NUMERIC_FIELDS}
+
+#         for reg_code, reg_data in sorted(regions.items()):
+#             # Trier les familles selon l'ordre défini par l'API
+#             familles_triees = sorted(
+#                 reg_data['familles'].values(),
+#                 key=lambda x: famille_ordre_dict.get(x['famille_nom'], 999)
+#             )
+
+#             result.append({
+#                 'region_code': reg_data['region_code'],
+#                 'region_nom': reg_data['region_nom'],
+#                 'familles': familles_triees,
+#                 'total_region': reg_data['total'],
+#             })
+
+#             for f in NUMERIC_FIELDS:
+#                 total_global[f] += reg_data['total'][f]
+
+#         return Response({
+#             'detail': result,
+#             'total_global': total_global,
+#         })
+# class RecapParFamilleView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         next_year = datetime.now().year + 1
+        
+#         qs = BudgetRecord.objects.filter(annee_debut_pmt=next_year)
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('famille')
+#             .annotate(**build_aggregation())
+#             .order_by('famille')
+#         )
+
+#         total = qs.aggregate(**build_aggregation())
+
+#         service_url = get_service_param_url()
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+
+#         famille_mapping = {}
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+            
+#             if response.status_code == 200:
+#                 response_data = response.json()
+                
+#                 if isinstance(response_data, dict):
+#                     familles_list = response_data.get('data', [])
+#                 elif isinstance(response_data, list):
+#                     familles_list = response_data
+#                 else:
+#                     familles_list = []
+                
+#                 for famille in familles_list:
+#                     if isinstance(famille, dict):
+#                         code = famille.get('code_famille') or famille.get('code') or famille.get('id')
+#                         nom = famille.get('nom_famille') or famille.get('name') or famille.get('libelle') or famille.get('nom')
+#                         if code:
+#                             famille_mapping[str(code)] = nom
+                            
+#         except Exception as e:
+#             print(f"Error fetching families: {e}")
+
+#         result = []
+#         for row in data:
+#             code = str(row.get('famille', '') or '').strip()
+#             row['famille'] = famille_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
+#             result.append(row)
+
+#         return Response({
+#             "familles": result,
+#             "total_division_production": total,
+#             "annee_filtre": next_year,  # utile pour debug côté frontend
+#         })
+# class RecapParActiviteView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAll]
+
+#     def get(self, request):
+#         next_year = datetime.now().year + 1
+
+#         qs = BudgetRecord.objects.filter(annee_debut_pmt=next_year)
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('activite')
+#             .annotate(**build_aggregation())
+#             .order_by('activite')
+#         )
+
+#         total_qs = qs.aggregate(**build_aggregation())
+
+#         return Response({
+#             "activites": apply_mapping(data, 'activite', ACTIVITE_MAPPING),
+#             "total_division": total_qs,
+#             "annee_filtre": next_year,
+#         })
+# class RecapGlobalView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAll]
+
+#     def get(self, request):
+#         next_year = datetime.now().year + 1
+
+#         qs = BudgetRecord.objects.filter(annee_debut_pmt=next_year)
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+#         agg = build_aggregation()
+
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+#         service_url = get_service_param_url()
+
+#         region_mapping = {}
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
+#             if response.status_code == 200:
+#                 for region in response.json().get('data', []):
+#                     code = region.get('code_region')
+#                     nom = region.get('nom_region')
+#                     if code:
+#                         region_mapping[str(code)] = nom
+#         except Exception:
+#             pass
+
+#         famille_mapping = {}
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+#             if response.status_code == 200:
+#                 for famille in response.json().get('data', []):
+#                     code = famille.get('code_famille')
+#                     nom = famille.get('nom_famille')
+#                     if code:
+#                         famille_mapping[str(code)] = nom
+#         except Exception:
+#             pass
+
+#         regions_result = []
+#         for row in list(qs.values('region').annotate(**agg)):
+#             code = str(row.get('region', '') or '').strip()
+#             regions_result.append({
+#                 'region_code': code,
+#                 'region_nom': region_mapping.get(code, code) if code not in ['', '-', 'None'] else '-',
+#                 **{k: v for k, v in row.items() if k != 'region'}
+#             })
+
+#         familles_result = []
+#         for row in list(qs.values('famille').annotate(**agg)):
+#             code = str(row.get('famille', '') or '').strip()
+#             familles_result.append({
+#                 'famille_code': code,
+#                 'famille_nom': famille_mapping.get(code, code) if code not in ['', '-', 'None'] else '-',
+#                 **{k: v for k, v in row.items() if k != 'famille'}
+#             })
+
+#         activites_result = []
+#         for row in list(qs.values('activite').annotate(**agg)):
+#             code = str(row.get('activite', '') or '').strip()
+#             activites_result.append({
+#                 'activite_code': code,
+#                 'activite_nom': ACTIVITE_MAPPING.get(code, code),
+#                 **{k: v for k, v in row.items() if k != 'activite'}
+#             })
+
+#         return Response({
+#             'par_region': regions_result,
+#             'par_famille': familles_result,
+#             'par_activite': activites_result,
+#             'annee_filtre': next_year,
+#         })
+    
+# class RecapFamilleParActiviteView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     @staticmethod
+#     def _get_familles_ordered(token):
+#         service_url = get_service_param_url()
+#         famille_mapping = {}
+#         famille_order = []
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+#             if response.status_code == 200:
+#                 for famille in response.json().get('data', []):
+#                     code = famille.get('code_famille')
+#                     nom = famille.get('nom_famille')
+#                     order = famille.get('ordre', 999)
+#                     if code:
+#                         famille_mapping[str(code)] = nom
+#                         famille_order.append({'code': code, 'nom': nom, 'ordre': order})
+#                 famille_order.sort(key=lambda x: x['ordre'])
+#         except Exception as e:
+#             print(f"Erreur récupération familles: {e}")
+#         return famille_mapping, famille_order
+
+#     def get(self, request):
+#         next_year = datetime.now().year + 1
+
+#         qs = BudgetRecord.objects.filter(annee_debut_pmt=next_year)
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('activite', 'famille')
+#             .annotate(**build_aggregation())
+#             .order_by('activite', 'famille')
+#         )
+
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+
+#         famille_mapping, famille_order_list = self._get_familles_ordered(token)
+
+#         famille_order_dict = {}
+#         for idx, fam in enumerate(famille_order_list):
+#             famille_order_dict[fam['nom']] = idx
+#             famille_order_dict[fam['code']] = idx
+
+#         activites = {}
+#         for row in data:
+#             act_code = str(row.get('activite') or '').strip()
+#             act_nom = ACTIVITE_MAPPING.get(act_code, act_code)
+#             fam_code = str(row.get('famille') or '').strip()
+#             fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code not in ['', '-', 'None'] else '-'
+
+#             if act_code not in activites:
+#                 activites[act_code] = {
+#                     'activite_code': act_code,
+#                     'activite_nom': act_nom,
+#                     'familles': {},
+#                     'total': {f: 0 for f in NUMERIC_FIELDS},
+#                 }
+
+#             if fam_code not in activites[act_code]['familles']:
+#                 activites[act_code]['familles'][fam_code] = {
+#                     'famille_code': fam_code,
+#                     'famille_nom': fam_nom,
+#                     **{f: 0 for f in NUMERIC_FIELDS}
+#                 }
+
+#             for field in NUMERIC_FIELDS:
+#                 val = float(row.get(field) or 0)
+#                 activites[act_code]['familles'][fam_code][field] += val
+#                 activites[act_code]['total'][field] += val
+
+#         result = []
+#         total_global = {f: 0 for f in NUMERIC_FIELDS}
+
+#         for act in activites.values():
+#             familles = sorted(
+#                 act['familles'].values(),
+#                 key=lambda x: famille_order_dict.get(x['famille_nom'], 999)
+#             )
+#             result.append({
+#                 'activite_code': act['activite_code'],
+#                 'activite_nom': act['activite_nom'],
+#                 'familles': familles,
+#                 'total_activite': act['total'],
+#             })
+#             for f in NUMERIC_FIELDS:
+#                 total_global[f] += act['total'][f]
+
+#         return Response({
+#             'detail': result,
+#             'total_global': total_global,
+#             'annee_filtre': next_year,
+#         })
+# class RecapRegionFamilleView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAll]
+
+#     def get(self, request):
+#         next_year = datetime.now().year + 1
+
+#         qs = BudgetRecord.objects.filter(annee_debut_pmt=next_year)
+
+#         uid = request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+
+#         qs = clean_queryset(qs)
+
+#         data = list(
+#             qs.values('region', 'famille')
+#             .annotate(**build_aggregation())
+#             .order_by('region', 'famille')
+#         )
+
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+#         service_url = get_service_param_url()
+#         headers = {'Authorization': f'Bearer {token}'} if token else {}
+
+#         region_mapping = {}
+#         famille_mapping = {}
+#         famille_order = []
+
+#         try:
+#             region_response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
+#             if region_response.status_code == 200:
+#                 for region in region_response.json().get('data', []):
+#                     code = region.get('code_region')
+#                     if code:
+#                         region_mapping[str(code)] = region.get('nom_region')
+
+#             famille_response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+#             if famille_response.status_code == 200:
+#                 for famille in famille_response.json().get('data', []):
+#                     code = famille.get('code_famille')
+#                     nom = famille.get('nom_famille')
+#                     ordre = famille.get('ordre', 999)
+#                     if code:
+#                         famille_mapping[str(code)] = nom
+#                         famille_order.append({'code': code, 'nom': nom, 'ordre': ordre})
+#                 famille_order.sort(key=lambda x: x['ordre'])
+
+#         except Exception as e:
+#             print(f"Erreur service param: {e}")
+
+#         famille_ordre_dict = {}
+#         for idx, fam in enumerate(famille_order):
+#             famille_ordre_dict[fam['nom']] = idx
+#             famille_ordre_dict[fam['code']] = idx
+
+#         regions = {}
+#         for row in data:
+#             reg_code = str(row.get('region') or '').strip()
+#             reg_nom = region_mapping.get(reg_code, reg_code) if reg_code not in ['', '-', 'None'] else '-'
+#             fam_code = str(row.get('famille') or '').strip()
+#             fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code not in ['', '-', 'None'] else '-'
+
+#             if reg_code not in regions:
+#                 regions[reg_code] = {
+#                     'region_code': reg_code,
+#                     'region_nom': reg_nom,
+#                     'familles': {},
+#                     'total': {f: 0 for f in NUMERIC_FIELDS},
+#                 }
+
+#             if fam_code not in regions[reg_code]['familles']:
+#                 regions[reg_code]['familles'][fam_code] = {
+#                     'famille_code': fam_code,
+#                     'famille_nom': fam_nom,
+#                     **{f: 0 for f in NUMERIC_FIELDS}
+#                 }
+
+#             for field in NUMERIC_FIELDS:
+#                 val = float(row.get(field) or 0)
+#                 regions[reg_code]['familles'][fam_code][field] += val
+#                 regions[reg_code]['total'][field] += val
+
+#         result = []
+#         total_global = {f: 0 for f in NUMERIC_FIELDS}
+
+#         for reg_code, reg_data in sorted(regions.items()):
+#             familles_triees = sorted(
+#                 reg_data['familles'].values(),
+#                 key=lambda x: famille_ordre_dict.get(x['famille_nom'], 999)
+#             )
+#             result.append({
+#                 'region_code': reg_data['region_code'],
+#                 'region_nom': reg_data['region_nom'],
+#                 'familles': familles_triees,
+#                 'total_region': reg_data['total'],
+#             })
+#             for f in NUMERIC_FIELDS:
+#                 total_global[f] += reg_data['total'][f]
+
+#         return Response({
+#             'detail': result,
+#             'total_global': total_global,
+#             'annee_filtre': next_year,
+#         })
+from datetime import datetime
+import requests
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
+
+def _get_token(request):
+    auth_header = request.headers.get('Authorization', '')
+    return auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+
+
+def _get_region_mapping(token):
+    service_url = get_service_param_url()
+    region_mapping = {}
+    try:
+        headers = {'Authorization': f'Bearer {token}'} if token else {}
+        response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
+        if response.status_code == 200:
+            for region in response.json().get('data', []):
+                code = region.get('code_region')
+                if code:
+                    region_mapping[str(code)] = region.get('nom_region')
+    except Exception as e:
+        print(f"Error fetching regions: {e}")
+    return region_mapping
+
+
+def _get_famille_mapping(token):
+    service_url = get_service_param_url()
+    famille_mapping = {}
+    famille_order = []
+    try:
+        headers = {'Authorization': f'Bearer {token}'} if token else {}
+        response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
+        if response.status_code == 200:
+            for famille in response.json().get('data', []):
+                code = famille.get('code_famille')
+                nom = famille.get('nom_famille')
+                ordre = famille.get('ordre', 999)
+                if code:
+                    famille_mapping[str(code)] = nom
+                    famille_order.append({'code': code, 'nom': nom, 'ordre': ordre})
+            famille_order.sort(key=lambda x: x['ordre'])
+    except Exception as e:
+        print(f"Error fetching familles: {e}")
+    return famille_mapping, famille_order
+
+
+def _base_qs():
+    next_year = datetime.now().year + 1
+    return BudgetRecord.objects.filter(
+        annee_debut_pmt=next_year,
+        # statut='valide_divisionnaire'
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+class RecapParRegionView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = clean_queryset(_base_qs())
+
+        data = list(
+            qs.values('region')
+            .annotate(**build_aggregation())
+            .order_by('region')
+        )
+        total = qs.aggregate(**build_aggregation())
+
+        token = _get_token(request)
+        region_mapping, _ = _get_region_mapping(token), None
+        region_mapping = _get_region_mapping(token)
+
+        result = []
+        for row in data:
+            code = str(row.get('region', '') or '').strip()
+            row['region'] = region_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
+            result.append(row)
+
+        return Response({
+            "regions": result,
+            "total_division": total,
+        })
+
+
 class RecapParFamilleView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        print("=" * 80)
-        print("[DEBUG] === Début RecapParFamilleView ===")
-        print("=" * 80)
-        
-        qs = BudgetRecord.objects.all()
-
-        uid = request.query_params.get('upload_id')
-        if uid:
-            qs = qs.filter(upload_id=uid)
-
-        qs = clean_queryset(qs)
+        qs = clean_queryset(_base_qs())
 
         data = list(
             qs.values('famille')
             .annotate(**build_aggregation())
             .order_by('famille')
         )
-
         total = qs.aggregate(**build_aggregation())
 
-        service_url = get_service_param_url()
-        print(f"[DEBUG] Service URL: {service_url}")
-        
-        # Récupérer le token de l'utilisateur actuel
-        auth_header = request.headers.get('Authorization', '')
-        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
-        print(f"[DEBUG] Token present: {bool(token)}")
-        
-        # Récupérer TOUTES les familles en UNE SEULE requête avec le token
-        famille_mapping = {}
-        try:
-            print("[DEBUG] Fetching all families from service with token...")
-            headers = {'Authorization': f'Bearer {token}'} if token else {}
-            response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
-            print(f"[DEBUG] Response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                response_data = response.json()
-                print(f"[DEBUG] Response keys: {response_data.keys() if isinstance(response_data, dict) else 'list'}")
-                
-                # Gérer différentes structures de réponse
-                if isinstance(response_data, dict):
-                    if 'data' in response_data:
-                        familles_list = response_data['data']
-                    else:
-                        familles_list = [response_data] if response_data else []
-                elif isinstance(response_data, list):
-                    familles_list = response_data
-                else:
-                    familles_list = []
-                
-                print(f"[DEBUG] Number of families found: {len(familles_list)}")
-                
-                for famille in familles_list:
-                    if isinstance(famille, dict):
-                        code = famille.get('code_famille') or famille.get('code') or famille.get('id')
-                        nom = famille.get('nom_famille') or famille.get('name') or famille.get('libelle') or famille.get('nom')
-                        if code:
-                            famille_mapping[str(code)] = nom
-                            print(f"[DEBUG] Mapped {code} -> {nom}")
-                
-                print(f"[DEBUG] Total mapped families: {len(famille_mapping)}")
-            else:
-                print(f"[DEBUG] Failed to fetch families: {response.status_code}")
-                if response.text:
-                    print(f"[DEBUG] Response: {response.text[:200]}")
-                    
-        except Exception as e:
-            print(f"[DEBUG] Error fetching families: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        # Appliquer le mapping
+        token = _get_token(request)
+        famille_mapping, _ = _get_famille_mapping(token)
+
         result = []
         for row in data:
             code = str(row.get('famille', '') or '').strip()
-            if code and code not in ['', '-', 'None']:
-                row['famille'] = famille_mapping.get(code, code)
-            else:
-                row['famille'] = '-'
-            print(f"[DEBUG] Mapped: {code} -> {row['famille']}")
+            row['famille'] = famille_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
             result.append(row)
-
-        print("=" * 80)
-        print("[DEBUG] === Fin RecapParFamilleView ===")
-        print("=" * 80)
 
         return Response({
             "familles": result,
-            "total_division_production": total
+            "total_division_production": total,
         })
+
+
 class RecapParActiviteView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAll]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = BudgetRecord.objects.all()
-
-        uid = request.query_params.get('upload_id')
-        if uid:
-            qs = qs.filter(upload_id=uid)
-
-        qs = clean_queryset(qs)
+        qs = clean_queryset(_base_qs())
 
         data = list(
             qs.values('activite')
             .annotate(**build_aggregation())
             .order_by('activite')
         )
-
         total_qs = qs.aggregate(**build_aggregation())
 
         return Response({
@@ -488,90 +1357,40 @@ class RecapParActiviteView(APIView):
 
 class RecapGlobalView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAll]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = BudgetRecord.objects.all()
-
-        uid = request.query_params.get('upload_id')
-        if uid:
-            qs = qs.filter(upload_id=uid)
-
-        qs = clean_queryset(qs)
+        qs = clean_queryset(_base_qs())
         agg = build_aggregation()
-        
-        # Récupérer le token
-        auth_header = request.headers.get('Authorization', '')
-        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
-        service_url = get_service_param_url()
-        
-        # Récupérer toutes les régions
-        region_mapping = {}
-        try:
-            headers = {'Authorization': f'Bearer {token}'} if token else {}
-            response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
-            
-            if response.status_code == 200:
-                response_data = response.json()
-                regions_list = response_data.get('data', [])
-                for region in regions_list:
-                    code = region.get('code_region')
-                    nom = region.get('nom_region')
-                    if code:
-                        region_mapping[str(code)] = nom
-        except Exception:
-            pass
-        
-        # Récupérer toutes les familles
-        famille_mapping = {}
-        try:
-            headers = {'Authorization': f'Bearer {token}'} if token else {}
-            response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
-            
-            if response.status_code == 200:
-                response_data = response.json()
-                familles_list = response_data.get('data', [])
-                for famille in familles_list:
-                    code = famille.get('code_famille')
-                    nom = famille.get('nom_famille')
-                    if code:
-                        famille_mapping[str(code)] = nom
-        except Exception:
-            pass
-        
-        # Traiter les régions
-        regions_data = list(qs.values('region').annotate(**agg))
+
+        token = _get_token(request)
+        region_mapping = _get_region_mapping(token)
+        famille_mapping, _ = _get_famille_mapping(token)
+
         regions_result = []
-        for row in regions_data:
+        for row in list(qs.values('region').annotate(**agg)):
             code = str(row.get('region', '') or '').strip()
-            region_nom = region_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
             regions_result.append({
                 'region_code': code,
-                'region_nom': region_nom,
+                'region_nom': region_mapping.get(code, code) if code not in ['', '-', 'None'] else '-',
                 **{k: v for k, v in row.items() if k != 'region'}
             })
-        
-        # Traiter les familles
-        familles_data = list(qs.values('famille').annotate(**agg))
+
         familles_result = []
-        for row in familles_data:
+        for row in list(qs.values('famille').annotate(**agg)):
             code = str(row.get('famille', '') or '').strip()
-            famille_nom = famille_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
             familles_result.append({
                 'famille_code': code,
-                'famille_nom': famille_nom,
+                'famille_nom': famille_mapping.get(code, code) if code not in ['', '-', 'None'] else '-',
                 **{k: v for k, v in row.items() if k != 'famille'}
             })
-        
-        # Traiter les activités
-        activites_data = list(qs.values('activite').annotate(**agg))
+
         activites_result = []
-        for row in activites_data:
+        for row in list(qs.values('activite').annotate(**agg)):
             code = str(row.get('activite', '') or '').strip()
-            activite_nom = ACTIVITE_MAPPING.get(code, code)
             activites_result.append({
                 'activite_code': code,
-                'activite_nom': activite_nom,
+                'activite_nom': ACTIVITE_MAPPING.get(code, code),
                 **{k: v for k, v in row.items() if k != 'activite'}
             })
 
@@ -580,62 +1399,14 @@ class RecapGlobalView(APIView):
             'par_famille': familles_result,
             'par_activite': activites_result,
         })
-    
-
 
 
 class RecapFamilleParActiviteView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
 
-    @staticmethod
-    def _get_familles_ordered(token):
-        """Récupère les familles dans l'ordre défini par le backend"""
-        service_url = get_service_param_url()
-        famille_mapping = {}
-        famille_order = []
-        
-        try:
-            headers = {'Authorization': f'Bearer {token}'} if token else {}
-            response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
-            
-            if response.status_code == 200:
-                response_data = response.json()
-                familles_list = response_data.get('data', [])
-                
-                # Créer le mapping code -> nom
-                # et la liste ordonnée des noms
-                for famille in familles_list:
-                    code = famille.get('code_famille')
-                    nom = famille.get('nom_famille')
-                    order = famille.get('ordre', 999)  # Récupérer l'ordre depuis l'API
-                    
-                    if code:
-                        famille_mapping[str(code)] = nom
-                    
-                    # Ajouter à la liste ordonnée
-                    famille_order.append({
-                        'code': code,
-                        'nom': nom,
-                        'ordre': order
-                    })
-                
-                # Trier par l'ordre défini par le backend
-                famille_order.sort(key=lambda x: x['ordre'])
-                
-        except Exception as e:
-            print(f"Erreur récupération familles: {e}")
-        
-        return famille_mapping, famille_order
-
     def get(self, request):
-        qs = BudgetRecord.objects.all()
-
-        uid = request.query_params.get('upload_id')
-        if uid:
-            qs = qs.filter(upload_id=uid)
-
-        qs = clean_queryset(qs)
+        qs = clean_queryset(_base_qs())
 
         data = list(
             qs.values('activite', 'famille')
@@ -643,26 +1414,20 @@ class RecapFamilleParActiviteView(APIView):
             .order_by('activite', 'famille')
         )
 
-        # Récupérer le token
-        auth_header = request.headers.get('Authorization', '')
-        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
-        
-        # Récupérer les familles avec leur ordre
-        famille_mapping, famille_order_list = self._get_familles_ordered(token)
-        
-        # Créer un dictionnaire pour l'ordre
+        token = _get_token(request)
+        famille_mapping, famille_order_list = _get_famille_mapping(token)
+
         famille_order_dict = {}
         for idx, fam in enumerate(famille_order_list):
             famille_order_dict[fam['nom']] = idx
             famille_order_dict[fam['code']] = idx
 
         activites = {}
-
         for row in data:
             act_code = str(row.get('activite') or '').strip()
             act_nom = ACTIVITE_MAPPING.get(act_code, act_code)
             fam_code = str(row.get('famille') or '').strip()
-            fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code and fam_code not in ['', '-', 'None'] else '-'
+            fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code not in ['', '-', 'None'] else '-'
 
             if act_code not in activites:
                 activites[act_code] = {
@@ -671,14 +1436,12 @@ class RecapFamilleParActiviteView(APIView):
                     'familles': {},
                     'total': {f: 0 for f in NUMERIC_FIELDS},
                 }
-
             if fam_code not in activites[act_code]['familles']:
                 activites[act_code]['familles'][fam_code] = {
                     'famille_code': fam_code,
                     'famille_nom': fam_nom,
                     **{f: 0 for f in NUMERIC_FIELDS}
                 }
-
             for field in NUMERIC_FIELDS:
                 val = float(row.get(field) or 0)
                 activites[act_code]['familles'][fam_code][field] += val
@@ -688,19 +1451,16 @@ class RecapFamilleParActiviteView(APIView):
         total_global = {f: 0 for f in NUMERIC_FIELDS}
 
         for act in activites.values():
-            # ⭐ Trier selon l'ordre du backend
             familles = sorted(
                 act['familles'].values(),
                 key=lambda x: famille_order_dict.get(x['famille_nom'], 999)
             )
-
             result.append({
                 'activite_code': act['activite_code'],
                 'activite_nom': act['activite_nom'],
                 'familles': familles,
                 'total_activite': act['total'],
             })
-
             for f in NUMERIC_FIELDS:
                 total_global[f] += act['total'][f]
 
@@ -709,22 +1469,13 @@ class RecapFamilleParActiviteView(APIView):
             'total_global': total_global,
         })
 
+
 class RecapRegionFamilleView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAll]
-    """
-    GET /api/recap/region-famille/?upload_id=1
-    Retourne chaque région avec ses familles + total par région
-    """
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = BudgetRecord.objects.all()
-
-        uid = request.query_params.get('upload_id')
-        if uid:
-            qs = qs.filter(upload_id=uid)
-
-        qs = clean_queryset(qs)
+        qs = clean_queryset(_base_qs())
 
         data = list(
             qs.values('region', 'famille')
@@ -732,66 +1483,21 @@ class RecapRegionFamilleView(APIView):
             .order_by('region', 'famille')
         )
 
-        # Récupérer le token
-        auth_header = request.headers.get('Authorization', '')
-        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
-        service_url = get_service_param_url()
-        
-        # Récupérer toutes les régions et familles depuis l'API
-        headers = {'Authorization': f'Bearer {token}'} if token else {}
-        
-        region_mapping = {}
-        famille_mapping = {}
-        famille_order = []  # Pour stocker l'ordre des familles
-        
-        try:
-            # Récupérer les régions
-            region_response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
-            if region_response.status_code == 200:
-                regions_data = region_response.json().get('data', [])
-                for region in regions_data:
-                    code = region.get('code_region')
-                    nom = region.get('nom_region')
-                    if code:
-                        region_mapping[str(code)] = nom
-            
-            # Récupérer les familles
-            famille_response = requests.get(f"{service_url}/params/familles", headers=headers, timeout=5)
-            if famille_response.status_code == 200:
-                familles_data = famille_response.json().get('data', [])
-                for famille in familles_data:
-                    code = famille.get('code_famille')
-                    nom = famille.get('nom_famille')
-                    ordre = famille.get('ordre', 999)  # Récupérer l'ordre
-                    if code:
-                        famille_mapping[str(code)] = nom
-                        famille_order.append({
-                            'code': code,
-                            'nom': nom,
-                            'ordre': ordre
-                        })
-                
-                # Trier les familles par ordre défini par l'API
-                famille_order.sort(key=lambda x: x['ordre'])
-                
-        except Exception as e:
-            print(f"Erreur lors de l'appel au service param: {e}")
+        token = _get_token(request)
+        region_mapping = _get_region_mapping(token)
+        famille_mapping, famille_order = _get_famille_mapping(token)
 
-        # Créer un dictionnaire pour l'ordre des familles
         famille_ordre_dict = {}
         for idx, fam in enumerate(famille_order):
             famille_ordre_dict[fam['nom']] = idx
             famille_ordre_dict[fam['code']] = idx
 
         regions = {}
-
         for row in data:
             reg_code = str(row.get('region') or '').strip()
-            # Récupérer le nom depuis l'API ou utiliser le code par défaut
-            reg_nom = region_mapping.get(reg_code, reg_code) if reg_code and reg_code not in ['', '-', 'None'] else '-'
-            
+            reg_nom = region_mapping.get(reg_code, reg_code) if reg_code not in ['', '-', 'None'] else '-'
             fam_code = str(row.get('famille') or '').strip()
-            fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code and fam_code not in ['', '-', 'None'] else '-'
+            fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code not in ['', '-', 'None'] else '-'
 
             if reg_code not in regions:
                 regions[reg_code] = {
@@ -800,14 +1506,12 @@ class RecapRegionFamilleView(APIView):
                     'familles': {},
                     'total': {f: 0 for f in NUMERIC_FIELDS},
                 }
-
             if fam_code not in regions[reg_code]['familles']:
                 regions[reg_code]['familles'][fam_code] = {
                     'famille_code': fam_code,
                     'famille_nom': fam_nom,
                     **{f: 0 for f in NUMERIC_FIELDS}
                 }
-
             for field in NUMERIC_FIELDS:
                 val = float(row.get(field) or 0)
                 regions[reg_code]['familles'][fam_code][field] += val
@@ -817,19 +1521,16 @@ class RecapRegionFamilleView(APIView):
         total_global = {f: 0 for f in NUMERIC_FIELDS}
 
         for reg_code, reg_data in sorted(regions.items()):
-            # Trier les familles selon l'ordre défini par l'API
             familles_triees = sorted(
                 reg_data['familles'].values(),
                 key=lambda x: famille_ordre_dict.get(x['famille_nom'], 999)
             )
-
             result.append({
                 'region_code': reg_data['region_code'],
                 'region_nom': reg_data['region_nom'],
                 'familles': familles_triees,
                 'total_region': reg_data['total'],
             })
-
             for f in NUMERIC_FIELDS:
                 total_global[f] += reg_data['total'][f]
 
@@ -2110,6 +2811,7 @@ class NouveauProjetView(APIView):
                 is_active=True,
                 version_comment="Création initiale",
                 statut='soumis',
+                #############################################################
                 
                 # Champs de réalisation (NULL pour nouveau projet)
                 realisation_cumul_n_mins1_total=None,
@@ -3886,6 +4588,102 @@ class ValiderDivisionnnaireView(APIView):
             'success': True,
             'message': message,
             'statut':  record.statut,
+        })
+
+#validation par total:
+class ValiderTousProjetsDivisionnaireView(APIView):
+    """
+    GET  /recap/budget/valider/divisionnaire/tous/
+         → Retourne tous les projets 'valide_directeur' de l'année prochaine + leur total
+
+    POST /recap/budget/valider/divisionnaire/tous/
+         → action: 'valider' | 'rejeter'
+         → Change le statut de TOUS les projets 'valide_directeur' en masse
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes     = [IsDivisionnaire]
+
+    def get(self, request):
+        next_year = datetime.now().year + 1
+
+        projets = BudgetRecord.objects.filter(
+            statut='valide_directeur',
+            annee_debut_pmt=next_year,
+        )
+
+        if not projets.exists():
+            return Response({
+                'success': True,
+                'count': 0,
+                'projets': [],
+                'total': {},
+                'message': f'Aucun projet à valider pour {next_year}',
+            })
+
+        # Total de toutes les colonnes
+        total = projets.aggregate(**build_aggregation())
+
+        serializer = BudgetRecordSerializer(
+            projets, many=True, context={'request': request}
+        )
+
+        return Response({
+            'success':    True,
+            'count':      projets.count(),
+            'annee':      next_year,
+            'projets':    serializer.data,
+            'total':      total,
+        })
+
+    def post(self, request):
+        next_year   = datetime.now().year + 1
+        action      = request.data.get('action')
+        commentaire = request.data.get('commentaire', '')
+
+        if action not in ('valider', 'rejeter'):
+            return Response(
+                {'error': "action doit être 'valider' ou 'rejeter'"},
+                status=400
+            )
+
+        projets = BudgetRecord.objects.filter(
+            statut='valide_directeur',
+            annee_debut_pmt=next_year,
+        )
+
+        if not projets.exists():
+            return Response({
+                'error': f'Aucun projet avec statut valide_directeur pour {next_year}',
+            }, status=404)
+
+        count = projets.count()
+        now   = timezone.now()
+        nom   = request.user.nom_complet
+
+        if action == 'valider':
+            projets.update(
+                statut                        = 'valide_divisionnaire',
+                valide_par_divisionnaire      = nom,
+                date_validation_divisionnaire = now,
+                commentaire_divisionnaire     = commentaire,
+            )
+            message = f'{count} projet(s) validés par le divisionnaire ✅'
+
+        else:  # rejeter
+            projets.update(
+                statut     = 'rejete',
+                rejete_par  = nom,
+                date_rejet  = now,
+                motif_rejet = commentaire,
+            )
+            message = f'{count} projet(s) rejetés par le divisionnaire ❌'
+
+        return Response({
+            'success': True,
+            'message': message,
+            'action':  action,
+            'count':   count,
+            'annee':   next_year,
         })
 # ─────────────────────────────────────────
 # STATUT COMPLET DU WORKFLOW
@@ -8165,7 +8963,7 @@ class ExportProjetsValidesDivisionnaireView(APIView):
         if annee_param:
             annee_cible = int(annee_param)
         else:
-            annee_cible = datetime.now().year - 2
+            annee_cible = datetime.now().year + 1
         
         print(f"[DEBUG] Export - Année cible: {annee_cible}")
         

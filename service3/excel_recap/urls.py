@@ -45,6 +45,7 @@ urlpatterns = [
     path('budget/valider/chef/<int:record_id>/',ValiderChefView.as_view()),
     path('budget/valider/directeur/<int:record_id>/',ValiderDirecteurView.as_view()),
     path('budget/valider/divisionnaire/<int:record_id>/',ValiderDivisionnnaireView.as_view()),
+    path('budget/valider/divisionnaire/total/',ValiderTousProjetsDivisionnaireView.as_view(),name='valider-tous-divisionnaire'),
 
     # Listes par rôle
     #http://localhost:8083/recap/budget/projets/responsable/?statut=brouillon
