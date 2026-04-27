@@ -7102,7 +7102,7 @@ class ListeProjetsDivisionnaireValidesView(APIView):
     Inclut actifs + inactifs
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDivisionnaire]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
@@ -7197,7 +7197,7 @@ class ListeProjetsDivisionnaireRejetesView(APIView):
     Inclut actifs + inactifs
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDivisionnaire]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
