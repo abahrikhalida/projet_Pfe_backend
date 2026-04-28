@@ -14,6 +14,11 @@ const directionSchema = new mongoose.Schema({
         required: [true, 'Nom direction is required'],
         trim: true
     },
+//    created_by: {
+//     type: String,
+//     default: 'system' // Valeur par défaut
+   
+// },
     // created_by: {
     //     type: String,
     //     required: true
