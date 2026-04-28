@@ -6426,6 +6426,60 @@ class ListeProjetsChefTousView(APIView):
 #  DIRECTEUR - LISTES SPÉCIFIQUES
 # ================================================================== #
 
+class ListeProjetsDirecteurValidesChefView(APIView):
+    """
+    GET /recap/budget/directeur/valides-chef/
+    Projets validés par le chef (à valider par le directeur)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteur]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut='valide_chef'
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+
+
+# class ListeProjetsDirecteurReserveChefView(APIView):
+#     """
+#     GET /recap/budget/directeur/reserve-chef/
+#     Projets réservés par le chef (retournés au directeur)
+#     Inclut actifs + inactifs
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDirecteur]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             statut='reserve_chef'
+#         ).order_by('-id')
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         return Response({
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
+#         })
 
 class ListeProjetsDirecteurView(APIView):
     """

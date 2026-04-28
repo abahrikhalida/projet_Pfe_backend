@@ -11,6 +11,11 @@ const regionRoutes = require('./routes/regionRoutes');
 const familleRoutes = require('./routes/familleRoutes');
 const perimetreRoutes = require('./routes/perimetreRoutes');
 const structureRoutes = require('./routes/structureRoutes');
+const directionRoutes = require('./routes/directionRoutes');
+const departementRoutes = require('./routes/departementRoutes');
+const  familleDirectionRoutes = require('./routes/familleDirectionRoutes');
+
+
 
 dotenv.config({ path: './config.env' });
 
@@ -34,6 +39,9 @@ app.use('/api/regions', regionRoutes);
 app.use('/api/familles', familleRoutes);
 app.use('/api/perimetres', perimetreRoutes);
 app.use('/api/structures', structureRoutes);
+app.use('/api/directions', directionRoutes);
+app.use('/api/departements', departementRoutes);
+app.use('/api/familles-direction', familleDirectionRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
