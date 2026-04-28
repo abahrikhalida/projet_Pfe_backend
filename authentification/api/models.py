@@ -218,7 +218,9 @@ class User(AbstractBaseUser, PermissionsMixin):
         ('chef',                  'Chef'),
         ('directeur',             'Directeur'),
         ('directeur_region',      'Directeur de Région'),
+        ('directeur_direction',   'Directeur de Direction'),
         ('responsable_structure', 'Responsable de Structure'),
+        ('responsable_departement','Responsable de Département'),
         ('divisionnaire',         'Divisionnaire'),
         ('agent',                 'Agent'),
     ]
@@ -243,6 +245,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     # --- Références externes MongoDB ---
     region_id    = models.CharField(max_length=24, blank=True, null=True)
     structure_id = models.CharField(max_length=24, blank=True, null=True)
+    direction_id   = models.CharField(max_length=24, blank=True, null=True)
+    departement_id = models.CharField(max_length=24, blank=True, null=True)
 
     # --- Flags Django ---
     is_active    = models.BooleanField(default=True)
