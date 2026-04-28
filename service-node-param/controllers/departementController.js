@@ -244,3 +244,39 @@ exports.hardDeleteDepartement = async (req, res) => {
         });
     }
 };
+exports.getDepartementsByDirectionId = async (req, res) => {
+    try {
+        const { directionId } = req.params;
+
+        // D'abord, trouver la direction par son ID pour obtenir son code
+        const direction = await Direction.findById(directionId);
+        
+        if (!direction) {
+            return res.status(404).json({
+                success: false,
+                message: 'Direction not found'
+            });
+        }
+
+        // Ensuite, trouver les départements qui ont ce code_direction
+        const departements = await Departement.find({
+            direction: direction.code_direction, // Utiliser le code de la direction trouvée
+            is_active: true
+        }).sort({ created_at: -1 });
+
+        res.json({
+            success: true,
+            count: departements.length,
+            data: departements,
+            direction: direction // Optionnel: retourner aussi les infos de la direction
+        });
+
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching departements by direction ID',
+            error: error.message
+        });
+    }
+};

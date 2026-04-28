@@ -8,6 +8,7 @@ router.use(authMiddleware);
 
 // Routes principales
 router.get('/', departementController.getAllDepartements);
+router.get('/by-direction-id/:directionId', departementController.getDepartementsByDirectionId);
 router.get('/by-direction-code/:directionCode', departementController.getDepartementsByDirectionCode);
 router.get('/code/:code', departementController.getDepartementByCode);
 router.get('/id/:id', departementController.getDepartementById);

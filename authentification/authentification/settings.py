@@ -151,28 +151,28 @@ WSGI_APPLICATION = 'authentification.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 # database de khalida
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': 'service1',
-#         'USER': 'root',  # Ou un autre utilisateur
-#         'PASSWORD': 'khalida2003',
-#         'HOST': 'localhost',
-#         'PORT': '3306',  # Port par défaut de MySQL
-#     }
-# }
-
-#database de lamia
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'lamouche-sonatrach',
+        'NAME': 'service1',
         'USER': 'root',  # Ou un autre utilisateur
-        'PASSWORD': 'root',
+        'PASSWORD': 'khalida2003',
         'HOST': 'localhost',
         'PORT': '3306',  # Port par défaut de MySQL
     }
 }
+
+#database de lamia
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': 'lamouche-sonatrach',
+#         'USER': 'root',  # Ou un autre utilisateur
+#         'PASSWORD': 'root',
+#         'HOST': 'localhost',
+#         'PORT': '3306',  # Port par défaut de MySQL
+#     }
+# }
 #//////////////////////////////////
 # import os
 # DATABASES = {
