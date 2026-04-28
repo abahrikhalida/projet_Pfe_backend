@@ -2503,18 +2503,459 @@ logger = logging.getLogger(__name__)
 #                 'record_id': record.id
 #             }
 #         }, status=201)
+
+
+
+
+
+
+
+
+
+
+
+
+
+# #########################################################################################################""
+# class NouveauProjetView(APIView):
+#     """
+#     POST /api/budget/nouveau-projet/
+    
+#     Crée la première version d'un projet (sans historique)
+#     Tous les champs de réalisation sont NULL
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsResponsableStructure]
+
+#     @staticmethod
+#     def _to_float_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return float(val)
+#         except (ValueError, TypeError):
+#             return None
+
+#     @staticmethod
+#     def _safe_sum(values):
+#         filtered = [v for v in values if v is not None]
+#         return round(sum(filtered), 2) if filtered else None
+
+#     # ⭐ NOUVELLE MÉTHODE : Validation total >= dex
+#     def _validate_total_ge_dex(self, total, dex, field_name):
+#         """Valide que total >= dex (si les deux sont non-None)"""
+#         if total is not None and dex is not None and total < dex:
+#             raise ValidationError(
+#                 f"{field_name}: Le total ({total}) ne peut pas être inférieur au DEX ({dex})"
+#             )
+#         return True
+
+#     # ⭐ NOUVELLE MÉTHODE : Valider tous les champs
+#     def _validate_all_totals(self, data, v, prev_n_plus1_total, prev_n_plus1_dex, 
+#                               rar_total, rar_dex, cout_total, cout_dex):
+#         """Valide toutes les paires total/dont_dex"""
+#         errors = []
+        
+#         # 1. Validation des mois
+#         mois_list = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#                      'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']
+        
+#         for mois in mois_list:
+#             total = v.get(f'{mois}_total')
+#             dex = v.get(f'{mois}_dont_dex')
+#             try:
+#                 self._validate_total_ge_dex(total, dex, mois)
+#             except ValidationError as e:
+#                 errors.append(str(e))
+        
+#         # 2. Validation des prévisions annuelles (N+2 à N+5)
+#         for annee in ['prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5']:
+#             total = v.get(f'{annee}_total')
+#             dex = v.get(f'{annee}_dont_dex')
+#             try:
+#                 self._validate_total_ge_dex(total, dex, annee)
+#             except ValidationError as e:
+#                 errors.append(str(e))
+        
+#         # 3. Validation des totaux calculés
+#         try:
+#             self._validate_total_ge_dex(prev_n_plus1_total, prev_n_plus1_dex, "Prévision N+1")
+#             self._validate_total_ge_dex(rar_total, rar_dex, "Reste à réaliser (RAR)")
+#             self._validate_total_ge_dex(cout_total, cout_dex, "Coût initial")
+#         except ValidationError as e:
+#             errors.append(str(e))
+        
+#         if errors:
+#             raise ValidationError({"total_dex_mismatches": errors})
+        
+#         return True
+
+#     def post(self, request):
+#         logger.info("=" * 80)
+#         logger.info("🔵 NOUVEAU PROJET - Début de la requête")
+#         logger.info(f"📅 Timestamp: {datetime.now()}")
+#         logger.info(f"🔑 Headers: {dict(request.headers)}")
+#         logger.info(f"👤 User: {request.user}")
+#         logger.info(f"🆔 User ID: {request.user.id if request.user else 'None'}")
+        
+#         data = request.data
+#         logger.info(f"📦 Données reçues: {data}")
+        
+#         # 1. Informations depuis le token
+#         region_id = getattr(request.user, 'region_id', None)
+#         structure_id = getattr(request.user, 'structure_id', None)
+#         created_by = request.user.id if request.user else None
+
+#         logger.info(f"📍 region_id: {region_id}")
+#         logger.info(f"🏢 structure_id: {structure_id}")
+#         logger.info(f"👨‍💻 created_by: {created_by}")
+
+#         if not region_id or not structure_id:
+#             logger.error(f"❌ region_id ou structure_id manquant - region_id={region_id}, structure_id={structure_id}")
+#             return Response({
+#                 'error': 'region_id ou structure_id manquant',
+#                 'debug': {
+#                     'region_id': region_id,
+#                     'structure_id': structure_id,
+#                     'user_attrs': dir(request.user) if request.user else 'No user'
+#                 }
+#             }, status=400)
+
+#         # 2. Champs obligatoires
+#         activite = data.get('activite')
+#         perimetre_code = data.get('perimetre')
+#         famille_code = data.get('famille')
+#         code_division = data.get('code_division')
+#         libelle = data.get('libelle')
+
+#         logger.info(f"📋 Champs obligatoires:")
+#         logger.info(f"  - activite: {activite}")
+#         logger.info(f"  - perimetre: {perimetre_code}")
+#         logger.info(f"  - famille: {famille_code}")
+#         logger.info(f"  - code_division: {code_division}")
+#         logger.info(f"  - libelle: {libelle}")
+
+#         missing = [f for f, v in {
+#             'activite': activite, 
+#             'perimetre': perimetre_code,
+#             'famille': famille_code, 
+#             'code_division': code_division, 
+#             'libelle': libelle
+#         }.items() if not v]
+
+#         if missing:
+#             logger.error(f"❌ Champs manquants: {missing}")
+#             return Response({
+#                 'error': f"Champs manquants: {', '.join(missing)}",
+#                 'debug': {'missing_fields': missing, 'received_data': list(data.keys())}
+#             }, status=400)
+
+#         # 3. Vérifier que le code_division n'existe pas déjà
+#         logger.info(f"🔍 Vérification existence code_division: {code_division}")
+#         if BudgetRecord.objects.filter(code_division=code_division).exists():
+#             logger.error(f"❌ code_division existe déjà: {code_division}")
+#             return Response({
+#                 'error': f"Le code_division '{code_division}' existe déjà. Utilisez l'API de modification.",
+#                 'debug': {'code_division': code_division}
+#             }, status=400)
+#         logger.info(f"✅ code_division disponible")
+
+#         # 4. Intervalle PMT
+#         intervalle_pmt = data.get('intervalle_pmt')
+#         if intervalle_pmt and isinstance(intervalle_pmt, list) and len(intervalle_pmt) == 2:
+#             annee_debut_pmt = int(intervalle_pmt[0])
+#             annee_fin_pmt = int(intervalle_pmt[1])
+#         else:
+#             annee_debut_pmt = data.get('annee_debut_pmt')
+#             annee_fin_pmt = data.get('annee_fin_pmt')
+        
+#         # ⭐ Validation des années
+#         if annee_debut_pmt and annee_fin_pmt and annee_debut_pmt > annee_fin_pmt:
+#             logger.error(f"❌ Année début {annee_debut_pmt} > année fin {annee_fin_pmt}")
+#             return Response({
+#                 'error': "L'année début doit être inférieure à l'année fin",
+#                 'debug': {'annee_debut_pmt': annee_debut_pmt, 'annee_fin_pmt': annee_fin_pmt}
+#             }, status=400)
+        
+#         logger.info(f"📅 PMT Intervalle: debut={annee_debut_pmt}, fin={annee_fin_pmt}")
+
+#         # 5. Récupérer le code région via service param
+#         service_url = get_service_param_url()
+#         token = request.headers.get('Authorization', '')
+        
+#         logger.info(f"🌐 Service Param URL: {service_url}")
+#         logger.info(f"🔑 Token (first 50 chars): {token[:50]}..." if token else "🔑 Token: None")
+#         logger.info(f"📍 Region ID pour appel: {region_id}")
+
+#         code_region = None
+#         region_nom = None
+
+#         try:
+#             api_url = f"{service_url}/params/regions/id/{region_id}"
+#             logger.info(f"📡 Appel API: {api_url}")
+            
+#             region_resp = requests.get(
+#                 api_url,
+#                 headers={'Authorization': token},
+#                 timeout=5
+#             )
+            
+#             logger.info(f"📊 Status code: {region_resp.status_code}")
+#             logger.info(f"📄 Response text: {region_resp.text[:200]}" if region_resp.text else "📄 Response: empty")
+            
+#             if region_resp.status_code == 200:
+#                 region_data = region_resp.json().get('data', {})
+#                 code_region = region_data.get('code_region')
+#                 region_nom = region_data.get('nom')
+#                 logger.info(f"✅ Région trouvée - code: {code_region}, nom: {region_nom}")
+#             else:
+#                 logger.error(f"❌ Erreur région - Status: {region_resp.status_code}")
+#                 return Response({
+#                     'error': f'Erreur lors de la récupération de la région',
+#                     'debug': {
+#                         'status_code': region_resp.status_code,
+#                         'response': region_resp.text,
+#                         'region_id': region_id,
+#                         'url': api_url
+#                     }
+#                 }, status=400)
+                
+#         except requests.exceptions.Timeout:
+#             logger.error(f"⏰ Timeout sur l'appel au service param (5 secondes)")
+#             return Response({
+#                 'error': 'Timeout du service param',
+#                 'debug': {'url': api_url, 'region_id': region_id}
+#             }, status=503)
+#         except Exception as e:
+#             logger.error(f"💥 Exception lors de l'appel au service param: {str(e)}")
+#             logger.error(traceback.format_exc())
+#             return Response({
+#                 'error': f'Erreur service région: {str(e)}',
+#                 'debug': {'exception': str(e), 'region_id': region_id}
+#             }, status=503)
+
+#         if not code_region:
+#             logger.error(f"❌ Code région non trouvé pour region_id={region_id}")
+#             return Response({
+#                 'error': 'Code région non trouvé',
+#                 'debug': {'region_id': region_id, 'region_data': region_data if 'region_data' in locals() else None}
+#             }, status=404)
+
+#         # 6. Lecture des champs financiers
+#         logger.info("💰 Lecture des champs financiers...")
+#         PREVISIONS_KEYS = ['prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5']
+#         MOIS_KEYS = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#                      'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']
+
+#         v = {}
+#         for key in PREVISIONS_KEYS:
+#             v[f'{key}_total'] = self._to_float_or_none(data.get(f'{key}_total'))
+#             v[f'{key}_dont_dex'] = self._to_float_or_none(data.get(f'{key}_dont_dex'))
+#             logger.debug(f"  {key}_total: {v[f'{key}_total']}, {key}_dont_dex: {v[f'{key}_dont_dex']}")
+            
+#         for mois in MOIS_KEYS:
+#             v[f'{mois}_total'] = self._to_float_or_none(data.get(f'{mois}_total'))
+#             v[f'{mois}_dont_dex'] = self._to_float_or_none(data.get(f'{mois}_dont_dex'))
+        
+#         logger.info(f"✅ {len([x for x in v if v[x] is not None])} champs financiers chargés")
+
+#         # 7. Calculs pour nouveau projet
+#         logger.info("🧮 Calculs en cours...")
+#         prev_n_plus1_total = self._safe_sum([v[f'{m}_total'] for m in MOIS_KEYS])
+#         prev_n_plus1_dex = self._safe_sum([v[f'{m}_dont_dex'] for m in MOIS_KEYS])
+#         rar_total = self._safe_sum([v[f'{k}_total'] for k in PREVISIONS_KEYS])
+#         rar_dex = self._safe_sum([v[f'{k}_dont_dex'] for k in PREVISIONS_KEYS])
+#         cout_total = self._safe_sum([prev_n_plus1_total, rar_total])
+#         cout_dex = self._safe_sum([prev_n_plus1_dex, rar_dex])
+        
+#         logger.info(f"📊 Résultats calculs:")
+#         logger.info(f"  - prev_n_plus1_total: {prev_n_plus1_total}")
+#         logger.info(f"  - prev_n_plus1_dex: {prev_n_plus1_dex}")
+#         logger.info(f"  - rar_total: {rar_total}")
+#         logger.info(f"  - rar_dex: {rar_dex}")
+#         logger.info(f"  - cout_total: {cout_total}")
+#         logger.info(f"  - cout_dex: {cout_dex}")
+
+#         # ⭐⭐⭐ VALIDATION CRITIQUE : total >= dont_dex ⭐⭐⭐
+#         logger.info("🔍 Validation des incohérences total/DEX...")
+#         try:
+#             self._validate_all_totals(data, v, prev_n_plus1_total, prev_n_plus1_dex,
+#                                        rar_total, rar_dex, cout_total, cout_dex)
+#             logger.info("✅ Validation total/DEX réussie")
+#         except ValidationError as e:
+#             logger.error(f"❌ Échec validation total/DEX: {e.message_dict}")
+#             return Response({
+#                 'error': 'Incohérence dans les montants financiers',
+#                 'details': {
+#                     'message': 'Le total doit être supérieur ou égal au DEX pour tous les champs',
+#                     'violations': e.message_dict.get('total_dex_mismatches', [])
+#                 }
+#             }, status=400)
+
+#         # 8. Création en base
+#         logger.info("💾 Création de l'upload...")
+#         upload = ExcelUpload.objects.create(
+#             file_name=f"nouveau_projet_{code_division}",
+#             status='processed'
+#         )
+#         logger.info(f"✅ Upload créé: id={upload.id}")
+
+#         logger.info("💾 Création du BudgetRecord...")
+#         try:
+#             record = BudgetRecord.objects.create(
+#                 upload=upload,
+#                 activite=activite,
+#                 region=code_region,
+#                 perm=perimetre_code,
+#                 famille=famille_code,
+#                 code_division=code_division,
+#                 libelle=libelle,
+#                 annee_debut_pmt=annee_debut_pmt,
+#                 annee_fin_pmt=annee_fin_pmt,
+#                 region_id=region_id,
+#                 structure_id=structure_id,
+#                 created_by=created_by,
+#                 type_projet='nouveau',
+#                 description_technique=data.get('description_technique'),
+#                 opportunite_projet=data.get('opportunite_projet'),
+                
+#                 # Versionnement
+#                 parent_id=None,
+#                 version=1,
+#                 is_active=True,
+#                 version_comment="Création initiale",
+#                 # statut='soumis',
+#                 statut_workflow='soumis',
+#                 #############################################################
+                
+#                 # Champs de réalisation (NULL pour nouveau projet)
+#                 realisation_cumul_n_mins1_total=None,
+#                 realisation_cumul_n_mins1_dont_dex=None,
+#                 real_s1_n_total=None,
+#                 real_s1_n_dont_dex=None,
+#                 prev_s2_n_total=None,
+#                 prev_s2_n_dont_dex=None,
+#                 prev_cloture_n_total=None,
+#                 prev_cloture_n_dont_dex=None,
+                
+#                 # Champs calculés
+#                 prev_n_plus1_total=prev_n_plus1_total,
+#                 prev_n_plus1_dont_dex=prev_n_plus1_dex,
+#                 reste_a_realiser_total=rar_total,
+#                 reste_a_realiser_dont_dex=rar_dex,
+#                 cout_initial_total=cout_total,
+#                 cout_initial_dont_dex=cout_dex,
+                
+#                 # Prévisions
+#                 **{k: v[k] for k in [f'{key}_total' for key in PREVISIONS_KEYS] + 
+#                    [f'{key}_dont_dex' for key in PREVISIONS_KEYS] +
+#                    [f'{mois}_total' for mois in MOIS_KEYS] +
+#                    [f'{mois}_dont_dex' for mois in MOIS_KEYS]}
+#             )
+#             logger.info(f"✅ BudgetRecord créé: id={record.id}, code_division={record.code_division}")
+#         except Exception as e:
+#             logger.error(f"💥 Erreur création BudgetRecord: {str(e)}")
+#             logger.error(traceback.format_exc())
+#             return Response({
+#                 'error': f'Erreur création en base: {str(e)}',
+#                 'debug': {'exception': str(e)}
+#             }, status=500)
+
+#         # 9. Sérialisation avec contexte
+#         logger.info("🔄 Sérialisation des données...")
+#         try:
+#             serializer = BudgetRecordSerializer(
+#                 record, 
+#                 context={'request': request}
+#             )
+#             serialized_data = serializer.data
+#             logger.info(f"✅ Sérialisation réussie - champs: {list(serialized_data.keys())}")
+#         except Exception as e:
+#             logger.error(f"💥 Erreur sérialisation: {str(e)}")
+#             logger.error(traceback.format_exc())
+#             return Response({
+#                 'error': f'Erreur sérialisation: {str(e)}',
+#                 'debug': {'exception': str(e)}
+#             }, status=500)
+        
+#         # 10. Réponse finale
+#         logger.info("🎉 Succès - Projet créé!")
+#         logger.info("=" * 80)
+        
+#         return Response({
+#             'success': True,
+#             'message': 'Projet créé avec succès (version 1)',
+#             'data': serialized_data,
+#             'debug_info': {
+#                 'region_code': code_region,
+#                 'region_nom': region_nom,
+#                 'record_id': record.id
+#             }
+#         }, status=201)     
+    
+
+
+
+
+
+
+
+# ##############################################################################
+# views.py
+
+import traceback
+import requests
+from datetime import datetime
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied, ValidationError
+
+from .models import BudgetRecord, ExcelUpload
+from .serializers import BudgetRecordSerializer
+from .remote_auth import RemoteJWTAuthentication
+
+import logging
+logger = logging.getLogger(__name__)
+
+
 class NouveauProjetView(APIView):
     """
     POST /api/budget/nouveau-projet/
-    
-    Crée la première version d'un projet (sans historique)
-    Tous les champs de réalisation sont NULL
+
+    Crée la première version d'un projet (version 1, sans historique).
+
+    Supporte deux rôles :
+      - responsable_structure   : region_id + structure_id
+                                  → region_direction = code_region
+                                  → perm = perimetre, famille, activite
+
+      - responsable_departement : direction_id + departement_id
+                                  → region_direction = code_direction
+                                  → famille, activite (pas de perm)
+
+    Tous les champs de réalisation sont NULL à la création.
     """
+
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsResponsableStructure]
+    permission_classes     = [IsAuthenticated]
+
+    ROLES_AUTORISES = ['responsable_structure', 'responsable_departement']
+
+    PREVISIONS_KEYS = ['prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5']
+    MOIS_KEYS = [
+        'janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+        'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'
+    ]
+
+    # ═════════════════════════════════════════════════════════════════
+    # HELPERS
+    # ═════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _to_float_or_none(val):
+        """Convertit une valeur en float ou retourne None."""
         if val in (None, '', 'null', 'None'):
             return None
         try:
@@ -2524,360 +2965,530 @@ class NouveauProjetView(APIView):
 
     @staticmethod
     def _safe_sum(values):
+        """Somme en ignorant les None. Retourne None si tout est None."""
         filtered = [v for v in values if v is not None]
         return round(sum(filtered), 2) if filtered else None
 
-    # ⭐ NOUVELLE MÉTHODE : Validation total >= dex
     def _validate_total_ge_dex(self, total, dex, field_name):
-        """Valide que total >= dex (si les deux sont non-None)"""
+        """Lève ValidationError si total < dex (quand les deux sont non-None)."""
         if total is not None and dex is not None and total < dex:
             raise ValidationError(
-                f"{field_name}: Le total ({total}) ne peut pas être inférieur au DEX ({dex})"
+                f"{field_name}: Le total ({total}) ne peut pas être "
+                f"inférieur au DEX ({dex})."
             )
-        return True
 
-    # ⭐ NOUVELLE MÉTHODE : Valider tous les champs
-    def _validate_all_totals(self, data, v, prev_n_plus1_total, prev_n_plus1_dex, 
-                              rar_total, rar_dex, cout_total, cout_dex):
-        """Valide toutes les paires total/dont_dex"""
+    def _validate_all_totals(self, v,
+                              prev_n_plus1_total, prev_n_plus1_dex,
+                              rar_total, rar_dex,
+                              cout_total, cout_dex):
+        """
+        Valide toutes les paires (total / dont_dex) et collecte
+        toutes les violations avant de lever une seule exception.
+        """
         errors = []
-        
-        # 1. Validation des mois
-        mois_list = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
-                     'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']
-        
-        for mois in mois_list:
-            total = v.get(f'{mois}_total')
-            dex = v.get(f'{mois}_dont_dex')
+
+        # Mois + prévisions annuelles
+        for key in self.MOIS_KEYS + self.PREVISIONS_KEYS:
             try:
-                self._validate_total_ge_dex(total, dex, mois)
+                self._validate_total_ge_dex(
+                    v.get(f'{key}_total'),
+                    v.get(f'{key}_dont_dex'),
+                    key
+                )
             except ValidationError as e:
                 errors.append(str(e))
-        
-        # 2. Validation des prévisions annuelles (N+2 à N+5)
-        for annee in ['prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5']:
-            total = v.get(f'{annee}_total')
-            dex = v.get(f'{annee}_dont_dex')
+
+        # Totaux calculés
+        for total, dex, label in [
+            (prev_n_plus1_total, prev_n_plus1_dex, "Prévision N+1"),
+            (rar_total,          rar_dex,           "Reste à réaliser (RAR)"),
+            (cout_total,         cout_dex,           "Coût initial"),
+        ]:
             try:
-                self._validate_total_ge_dex(total, dex, annee)
+                self._validate_total_ge_dex(total, dex, label)
             except ValidationError as e:
                 errors.append(str(e))
-        
-        # 3. Validation des totaux calculés
-        try:
-            self._validate_total_ge_dex(prev_n_plus1_total, prev_n_plus1_dex, "Prévision N+1")
-            self._validate_total_ge_dex(rar_total, rar_dex, "Reste à réaliser (RAR)")
-            self._validate_total_ge_dex(cout_total, cout_dex, "Coût initial")
-        except ValidationError as e:
-            errors.append(str(e))
-        
+
         if errors:
             raise ValidationError({"total_dex_mismatches": errors})
-        
-        return True
 
-    def post(self, request):
-        logger.info("=" * 80)
-        logger.info("🔵 NOUVEAU PROJET - Début de la requête")
-        logger.info(f"📅 Timestamp: {datetime.now()}")
-        logger.info(f"🔑 Headers: {dict(request.headers)}")
-        logger.info(f"👤 User: {request.user}")
-        logger.info(f"🆔 User ID: {request.user.id if request.user else 'None'}")
-        
-        data = request.data
-        logger.info(f"📦 Données reçues: {data}")
-        
-        # 1. Informations depuis le token
-        region_id = getattr(request.user, 'region_id', None)
-        structure_id = getattr(request.user, 'structure_id', None)
-        created_by = request.user.id if request.user else None
+    # ═════════════════════════════════════════════════════════════════
+    # CONTEXTE MÉTIER SELON LE RÔLE
+    # ═════════════════════════════════════════════════════════════════
 
-        logger.info(f"📍 region_id: {region_id}")
-        logger.info(f"🏢 structure_id: {structure_id}")
-        logger.info(f"👨‍💻 created_by: {created_by}")
+    def _build_context(self, request, data):
+        """
+        Lit le rôle depuis le token JWT et retourne un dict ctx{} unifié.
 
-        if not region_id or not structure_id:
-            logger.error(f"❌ region_id ou structure_id manquant - region_id={region_id}, structure_id={structure_id}")
-            return Response({
-                'error': 'region_id ou structure_id manquant',
-                'debug': {
-                    'region_id': region_id,
-                    'structure_id': structure_id,
-                    'user_attrs': dir(request.user) if request.user else 'No user'
-                }
-            }, status=400)
+        Clés retournées :
+          role, region_id, structure_id, direction_id, departement_id,
+          region_direction_source ('region' | 'direction'),
+          lookup_id, perimetre, famille, activite
+        """
+        user  = request.user
+        role  = getattr(user, 'role', None)
 
-        # 2. Champs obligatoires
+        if role not in self.ROLES_AUTORISES:
+            raise PermissionDenied(
+                f"Rôle '{role}' non autorisé. "
+                f"Rôles acceptés : {self.ROLES_AUTORISES}"
+            )
+
+        # ── Champs communs aux deux rôles ─────────────────────────────
         activite = data.get('activite')
-        perimetre_code = data.get('perimetre')
-        famille_code = data.get('famille')
-        code_division = data.get('code_division')
-        libelle = data.get('libelle')
+        famille  = data.get('famille')
 
-        logger.info(f"📋 Champs obligatoires:")
-        logger.info(f"  - activite: {activite}")
-        logger.info(f"  - perimetre: {perimetre_code}")
-        logger.info(f"  - famille: {famille_code}")
-        logger.info(f"  - code_division: {code_division}")
-        logger.info(f"  - libelle: {libelle}")
+        if not activite:
+            raise ValidationError("Le champ 'activite' est obligatoire.")
+        if not famille:
+            raise ValidationError("Le champ 'famille' est obligatoire.")
 
-        missing = [f for f, v in {
-            'activite': activite, 
-            'perimetre': perimetre_code,
-            'famille': famille_code, 
-            'code_division': code_division, 
-            'libelle': libelle
-        }.items() if not v]
+        # ── Responsable Structure ──────────────────────────────────────
+        if role == 'responsable_structure':
+            region_id    = getattr(user, 'region_id',    None)
+            structure_id = getattr(user, 'structure_id', None)
 
-        if missing:
-            logger.error(f"❌ Champs manquants: {missing}")
-            return Response({
-                'error': f"Champs manquants: {', '.join(missing)}",
-                'debug': {'missing_fields': missing, 'received_data': list(data.keys())}
-            }, status=400)
+            if not region_id:
+                raise ValidationError(
+                    "region_id manquant dans le token JWT."
+                )
+            if not structure_id:
+                raise ValidationError(
+                    "structure_id manquant dans le token JWT."
+                )
 
-        # 3. Vérifier que le code_division n'existe pas déjà
-        logger.info(f"🔍 Vérification existence code_division: {code_division}")
-        if BudgetRecord.objects.filter(code_division=code_division).exists():
-            logger.error(f"❌ code_division existe déjà: {code_division}")
-            return Response({
-                'error': f"Le code_division '{code_division}' existe déjà. Utilisez l'API de modification.",
-                'debug': {'code_division': code_division}
-            }, status=400)
-        logger.info(f"✅ code_division disponible")
+            perimetre = data.get('perimetre')
+            if not perimetre:
+                raise ValidationError(
+                    "Le champ 'perimetre' est obligatoire "
+                    "pour responsable_structure."
+                )
 
-        # 4. Intervalle PMT
-        intervalle_pmt = data.get('intervalle_pmt')
-        if intervalle_pmt and isinstance(intervalle_pmt, list) and len(intervalle_pmt) == 2:
-            annee_debut_pmt = int(intervalle_pmt[0])
-            annee_fin_pmt = int(intervalle_pmt[1])
+            logger.info(
+                f"✅ Contexte STRUCTURE — "
+                f"region_id={region_id} | structure_id={structure_id}"
+            )
+
+            return {
+                'role':                     role,
+                # IDs portés par l'utilisateur
+                'region_id':                region_id,
+                'structure_id':             structure_id,
+                'direction_id':             None,
+                'departement_id':           None,
+                # Source pour résolution region_direction
+                'region_direction_source':  'region',
+                'lookup_id':                region_id,
+                # Champs métier
+                'perimetre':                perimetre,  # → perm dans BudgetRecord
+                'famille':                  famille,
+                'activite':                 activite,
+            }
+
+        # ── Responsable Département ────────────────────────────────────
+        if role == 'responsable_departement':
+            direction_id   = getattr(user, 'direction_id',   None)
+            departement_id = getattr(user, 'departement_id', None)
+            region_id      = getattr(user, 'region_id',      None)  # optionnel
+
+            if not direction_id:
+                raise ValidationError(
+                    "direction_id manquant dans le token JWT."
+                )
+            if not departement_id:
+                raise ValidationError(
+                    "departement_id manquant dans le token JWT."
+                )
+
+            logger.info(
+                f"✅ Contexte DEPARTEMENT — "
+                f"direction_id={direction_id} | departement_id={departement_id}"
+            )
+
+            return {
+                'role':                     role,
+                # IDs portés par l'utilisateur
+                'region_id':                region_id,      # peut être None
+                'structure_id':             None,
+                'direction_id':             direction_id,
+                'departement_id':           departement_id,
+                # Source pour résolution region_direction
+                'region_direction_source':  'direction',
+                'lookup_id':                direction_id,
+                # Champs métier
+                'perimetre':                None,           # pas de perm
+                'famille':                  famille,
+                'activite':                 activite,
+            }
+
+    # ═════════════════════════════════════════════════════════════════
+    # RÉSOLUTION region_direction VIA SERVICE EXTERNE
+    # ═════════════════════════════════════════════════════════════════
+
+    def _resolve_region_direction(self, ctx, token, service_url):
+        """
+        Appelle le microservice param pour obtenir le code
+        qui remplira region_direction dans BudgetRecord.
+
+        responsable_structure   → GET /params/regions/id/{region_id}
+                                  → retourne code_region
+        responsable_departement → GET /params/directions/id/{direction_id}
+                                  → retourne code_direction
+
+        Retourne : (code_value, label)
+        Lève    : ValidationError en cas d'erreur réseau ou réponse vide
+        """
+        source    = ctx['region_direction_source']
+        lookup_id = ctx['lookup_id']
+
+        if source == 'region':
+            endpoint = f"{service_url}/params/regions/id/{lookup_id}"
+            code_key = 'code_region'
         else:
-            annee_debut_pmt = data.get('annee_debut_pmt')
-            annee_fin_pmt = data.get('annee_fin_pmt')
-        
-        # ⭐ Validation des années
-        if annee_debut_pmt and annee_fin_pmt and annee_debut_pmt > annee_fin_pmt:
-            logger.error(f"❌ Année début {annee_debut_pmt} > année fin {annee_fin_pmt}")
-            return Response({
-                'error': "L'année début doit être inférieure à l'année fin",
-                'debug': {'annee_debut_pmt': annee_debut_pmt, 'annee_fin_pmt': annee_fin_pmt}
-            }, status=400)
-        
-        logger.info(f"📅 PMT Intervalle: debut={annee_debut_pmt}, fin={annee_fin_pmt}")
+            endpoint = f"{service_url}/params/directions/id/{lookup_id}"
+            code_key = 'code_direction'
 
-        # 5. Récupérer le code région via service param
-        service_url = get_service_param_url()
-        token = request.headers.get('Authorization', '')
-        
-        logger.info(f"🌐 Service Param URL: {service_url}")
-        logger.info(f"🔑 Token (first 50 chars): {token[:50]}..." if token else "🔑 Token: None")
-        logger.info(f"📍 Region ID pour appel: {region_id}")
-
-        code_region = None
-        region_nom = None
+        logger.info(f"📡 Appel service ({source}) : {endpoint}")
 
         try:
-            api_url = f"{service_url}/params/regions/id/{region_id}"
-            logger.info(f"📡 Appel API: {api_url}")
-            
-            region_resp = requests.get(
-                api_url,
+            resp = requests.get(
+                endpoint,
                 headers={'Authorization': token},
                 timeout=5
             )
-            
-            logger.info(f"📊 Status code: {region_resp.status_code}")
-            logger.info(f"📄 Response text: {region_resp.text[:200]}" if region_resp.text else "📄 Response: empty")
-            
-            if region_resp.status_code == 200:
-                region_data = region_resp.json().get('data', {})
-                code_region = region_data.get('code_region')
-                region_nom = region_data.get('nom')
-                logger.info(f"✅ Région trouvée - code: {code_region}, nom: {region_nom}")
-            else:
-                logger.error(f"❌ Erreur région - Status: {region_resp.status_code}")
-                return Response({
-                    'error': f'Erreur lors de la récupération de la région',
-                    'debug': {
-                        'status_code': region_resp.status_code,
-                        'response': region_resp.text,
-                        'region_id': region_id,
-                        'url': api_url
-                    }
-                }, status=400)
-                
+            logger.info(f"📊 Status HTTP : {resp.status_code}")
+
+            if resp.status_code != 200:
+                raise ValidationError(
+                    f"Erreur service '{source}' : "
+                    f"HTTP {resp.status_code} — {resp.text[:200]}"
+                )
+
+            resp_data        = resp.json().get('data', {})
+            region_direction = resp_data.get(code_key)
+            label            = resp_data.get('nom')
+
+            if not region_direction:
+                raise ValidationError(
+                    f"Champ '{code_key}' absent ou vide dans la réponse "
+                    f"du service '{source}'."
+                )
+
+            logger.info(
+                f"✅ region_direction résolu : "
+                f"{region_direction} (label={label})"
+            )
+            return region_direction, label
+
         except requests.exceptions.Timeout:
-            logger.error(f"⏰ Timeout sur l'appel au service param (5 secondes)")
-            return Response({
-                'error': 'Timeout du service param',
-                'debug': {'url': api_url, 'region_id': region_id}
-            }, status=503)
+            raise ValidationError(
+                f"Timeout (5s) lors de l'appel au service '{source}'."
+            )
+        except ValidationError:
+            raise
         except Exception as e:
-            logger.error(f"💥 Exception lors de l'appel au service param: {str(e)}")
             logger.error(traceback.format_exc())
-            return Response({
-                'error': f'Erreur service région: {str(e)}',
-                'debug': {'exception': str(e), 'region_id': region_id}
-            }, status=503)
+            raise ValidationError(
+                f"Exception inattendue service '{source}' : {e}"
+            )
 
-        if not code_region:
-            logger.error(f"❌ Code région non trouvé pour region_id={region_id}")
-            return Response({
-                'error': 'Code région non trouvé',
-                'debug': {'region_id': region_id, 'region_data': region_data if 'region_data' in locals() else None}
-            }, status=404)
+    # ═════════════════════════════════════════════════════════════════
+    # POST PRINCIPAL
+    # ═════════════════════════════════════════════════════════════════
 
-        # 6. Lecture des champs financiers
-        logger.info("💰 Lecture des champs financiers...")
-        PREVISIONS_KEYS = ['prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5']
-        MOIS_KEYS = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
-                     'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']
+    def post(self, request):
+        logger.info("=" * 80)
+        logger.info("🔵 NOUVEAU PROJET — Début de la requête")
+        logger.info(f"📅 Timestamp : {datetime.now()}")
+        logger.info(f"👤 User      : {request.user}")
+        logger.info(f"🔑 Rôle      : {getattr(request.user, 'role', 'inconnu')}")
+        logger.info(f"📦 Data      : {request.data}")
 
-        v = {}
-        for key in PREVISIONS_KEYS:
-            v[f'{key}_total'] = self._to_float_or_none(data.get(f'{key}_total'))
-            v[f'{key}_dont_dex'] = self._to_float_or_none(data.get(f'{key}_dont_dex'))
-            logger.debug(f"  {key}_total: {v[f'{key}_total']}, {key}_dont_dex: {v[f'{key}_dont_dex']}")
-            
-        for mois in MOIS_KEYS:
-            v[f'{mois}_total'] = self._to_float_or_none(data.get(f'{mois}_total'))
-            v[f'{mois}_dont_dex'] = self._to_float_or_none(data.get(f'{mois}_dont_dex'))
-        
-        logger.info(f"✅ {len([x for x in v if v[x] is not None])} champs financiers chargés")
+        data = request.data
 
-        # 7. Calculs pour nouveau projet
-        logger.info("🧮 Calculs en cours...")
-        prev_n_plus1_total = self._safe_sum([v[f'{m}_total'] for m in MOIS_KEYS])
-        prev_n_plus1_dex = self._safe_sum([v[f'{m}_dont_dex'] for m in MOIS_KEYS])
-        rar_total = self._safe_sum([v[f'{k}_total'] for k in PREVISIONS_KEYS])
-        rar_dex = self._safe_sum([v[f'{k}_dont_dex'] for k in PREVISIONS_KEYS])
-        cout_total = self._safe_sum([prev_n_plus1_total, rar_total])
-        cout_dex = self._safe_sum([prev_n_plus1_dex, rar_dex])
-        
-        logger.info(f"📊 Résultats calculs:")
-        logger.info(f"  - prev_n_plus1_total: {prev_n_plus1_total}")
-        logger.info(f"  - prev_n_plus1_dex: {prev_n_plus1_dex}")
-        logger.info(f"  - rar_total: {rar_total}")
-        logger.info(f"  - rar_dex: {rar_dex}")
-        logger.info(f"  - cout_total: {cout_total}")
-        logger.info(f"  - cout_dex: {cout_dex}")
-
-        # ⭐⭐⭐ VALIDATION CRITIQUE : total >= dont_dex ⭐⭐⭐
-        logger.info("🔍 Validation des incohérences total/DEX...")
+        # ── 1. Contexte selon le rôle ─────────────────────────────────
+        logger.info("── Étape 1 : Contexte rôle")
         try:
-            self._validate_all_totals(data, v, prev_n_plus1_total, prev_n_plus1_dex,
-                                       rar_total, rar_dex, cout_total, cout_dex)
+            ctx = self._build_context(request, data)
+        except PermissionDenied as e:
+            logger.error(f"❌ Permission refusée : {e}")
+            return Response({'error': str(e)}, status=403)
+        except ValidationError as e:
+            logger.error(f"❌ Contexte invalide : {e.detail}")
+            return Response({'error': e.detail}, status=400)
+
+        logger.info(f"📋 Contexte : {ctx}")
+
+        # ── 2. Champs communs obligatoires ────────────────────────────
+        logger.info("── Étape 2 : Champs communs")
+        code_division = data.get('code_division')
+        libelle       = data.get('libelle')
+
+        missing = [
+            f for f, val in {
+                'code_division': code_division,
+                'libelle':       libelle,
+            }.items() if not val
+        ]
+        if missing:
+            logger.error(f"❌ Champs manquants : {missing}")
+            return Response(
+                {'error': f"Champs manquants : {', '.join(missing)}"},
+                status=400
+            )
+
+        # ── 3. Unicité code_division ──────────────────────────────────
+        logger.info(f"── Étape 3 : Unicité code_division={code_division}")
+        if BudgetRecord.objects.filter(code_division=code_division).exists():
+            logger.error(f"❌ code_division déjà existant : {code_division}")
+            return Response(
+                {
+                    'error': (
+                        f"Le code_division '{code_division}' existe déjà. "
+                        f"Utilisez l'API de modification."
+                    )
+                },
+                status=400
+            )
+        logger.info("✅ code_division disponible")
+
+        # ── 4. Intervalle PMT ─────────────────────────────────────────
+        logger.info("── Étape 4 : PMT")
+        intervalle_pmt = data.get('intervalle_pmt')
+        if isinstance(intervalle_pmt, list) and len(intervalle_pmt) == 2:
+            annee_debut_pmt = int(intervalle_pmt[0])
+            annee_fin_pmt   = int(intervalle_pmt[1])
+        else:
+            annee_debut_pmt = data.get('annee_debut_pmt')
+            annee_fin_pmt   = data.get('annee_fin_pmt')
+
+        if annee_debut_pmt and annee_fin_pmt:
+            if int(annee_debut_pmt) > int(annee_fin_pmt):
+                logger.error(
+                    f"❌ PMT invalide : "
+                    f"{annee_debut_pmt} > {annee_fin_pmt}"
+                )
+                return Response(
+                    {
+                        'error': (
+                            "L'année début PMT ne peut pas être "
+                            "supérieure à l'année fin PMT."
+                        )
+                    },
+                    status=400
+                )
+        logger.info(
+            f"✅ PMT : debut={annee_debut_pmt}, fin={annee_fin_pmt}"
+        )
+
+        # ── 5. Résolution region_direction ────────────────────────────
+        logger.info(
+            f"── Étape 5 : Résolution region_direction "
+            f"(source={ctx['region_direction_source']})"
+        )
+        service_url = get_service_param_url()
+        token       = request.headers.get('Authorization', '')
+
+        try:
+            region_direction, label = self._resolve_region_direction(
+                ctx, token, service_url
+            )
+        except ValidationError as e:
+            logger.error(f"❌ Résolution region_direction échouée : {e.detail}")
+            return Response({'error': e.detail}, status=503)
+
+        # ── 6. Champs financiers ──────────────────────────────────────
+        logger.info("── Étape 6 : Champs financiers")
+        v = {}
+        for key in self.PREVISIONS_KEYS + self.MOIS_KEYS:
+            v[f'{key}_total']    = self._to_float_or_none(
+                data.get(f'{key}_total')
+            )
+            v[f'{key}_dont_dex'] = self._to_float_or_none(
+                data.get(f'{key}_dont_dex')
+            )
+
+        logger.info(
+            f"✅ {sum(1 for x in v.values() if x is not None)} "
+            f"champs financiers chargés"
+        )
+
+        # ── 7. Calculs automatiques ───────────────────────────────────
+        logger.info("── Étape 7 : Calculs")
+        prev_n_plus1_total = self._safe_sum(
+            [v[f'{m}_total']    for m in self.MOIS_KEYS]
+        )
+        prev_n_plus1_dex   = self._safe_sum(
+            [v[f'{m}_dont_dex'] for m in self.MOIS_KEYS]
+        )
+        rar_total          = self._safe_sum(
+            [v[f'{k}_total']    for k in self.PREVISIONS_KEYS]
+        )
+        rar_dex            = self._safe_sum(
+            [v[f'{k}_dont_dex'] for k in self.PREVISIONS_KEYS]
+        )
+        cout_total         = self._safe_sum([prev_n_plus1_total, rar_total])
+        cout_dex           = self._safe_sum([prev_n_plus1_dex,   rar_dex])
+
+        logger.info(
+            f"🧮 prev_n+1 : {prev_n_plus1_total}/{prev_n_plus1_dex} | "
+            f"RAR : {rar_total}/{rar_dex} | "
+            f"Coût : {cout_total}/{cout_dex}"
+        )
+
+        # ── 8. Validation total >= DEX ────────────────────────────────
+        logger.info("── Étape 8 : Validation total ≥ DEX")
+        try:
+            self._validate_all_totals(
+                v,
+                prev_n_plus1_total, prev_n_plus1_dex,
+                rar_total,          rar_dex,
+                cout_total,         cout_dex,
+            )
             logger.info("✅ Validation total/DEX réussie")
         except ValidationError as e:
-            logger.error(f"❌ Échec validation total/DEX: {e.message_dict}")
-            return Response({
-                'error': 'Incohérence dans les montants financiers',
-                'details': {
-                    'message': 'Le total doit être supérieur ou égal au DEX pour tous les champs',
-                    'violations': e.message_dict.get('total_dex_mismatches', [])
-                }
-            }, status=400)
+            logger.error(f"❌ Violations total/DEX : {e.detail}")
+            return Response(
+                {
+                    'error':   'Incohérence dans les montants financiers.',
+                    'details': e.detail
+                },
+                status=400
+            )
 
-        # 8. Création en base
-        logger.info("💾 Création de l'upload...")
+        # ── 9. Création en base ───────────────────────────────────────
+        logger.info("── Étape 9 : Création en base")
+
+        logger.info("💾 Création ExcelUpload...")
         upload = ExcelUpload.objects.create(
             file_name=f"nouveau_projet_{code_division}",
             status='processed'
         )
-        logger.info(f"✅ Upload créé: id={upload.id}")
+        logger.info(f"✅ ExcelUpload id={upload.id}")
 
-        logger.info("💾 Création du BudgetRecord...")
+        logger.info("💾 Création BudgetRecord...")
         try:
             record = BudgetRecord.objects.create(
                 upload=upload,
-                activite=activite,
-                region=code_region,
-                perm=perimetre_code,
-                famille=famille_code,
-                code_division=code_division,
-                libelle=libelle,
-                annee_debut_pmt=annee_debut_pmt,
-                annee_fin_pmt=annee_fin_pmt,
-                region_id=region_id,
-                structure_id=structure_id,
-                created_by=created_by,
-                type_projet='nouveau',
-                description_technique=data.get('description_technique'),
-                opportunite_projet=data.get('opportunite_projet'),
-                
-                # Versionnement
-                parent_id=None,
-                version=1,
-                is_active=True,
-                version_comment="Création initiale",
-                # statut='soumis',
-                statut_workflow='soumis',
-                #############################################################
-                
-                # Champs de réalisation (NULL pour nouveau projet)
-                realisation_cumul_n_mins1_total=None,
-                realisation_cumul_n_mins1_dont_dex=None,
-                real_s1_n_total=None,
-                real_s1_n_dont_dex=None,
-                prev_s2_n_total=None,
-                prev_s2_n_dont_dex=None,
-                prev_cloture_n_total=None,
-                prev_cloture_n_dont_dex=None,
-                
-                # Champs calculés
-                prev_n_plus1_total=prev_n_plus1_total,
-                prev_n_plus1_dont_dex=prev_n_plus1_dex,
-                reste_a_realiser_total=rar_total,
-                reste_a_realiser_dont_dex=rar_dex,
-                cout_initial_total=cout_total,
-                cout_initial_dont_dex=cout_dex,
-                
-                # Prévisions
-                **{k: v[k] for k in [f'{key}_total' for key in PREVISIONS_KEYS] + 
-                   [f'{key}_dont_dex' for key in PREVISIONS_KEYS] +
-                   [f'{mois}_total' for mois in MOIS_KEYS] +
-                   [f'{mois}_dont_dex' for mois in MOIS_KEYS]}
-            )
-            logger.info(f"✅ BudgetRecord créé: id={record.id}, code_division={record.code_division}")
-        except Exception as e:
-            logger.error(f"💥 Erreur création BudgetRecord: {str(e)}")
-            logger.error(traceback.format_exc())
-            return Response({
-                'error': f'Erreur création en base: {str(e)}',
-                'debug': {'exception': str(e)}
-            }, status=500)
 
-        # 9. Sérialisation avec contexte
-        logger.info("🔄 Sérialisation des données...")
+                # ── Identité du projet ──────────────────────────────
+                code_division             = code_division,
+                libelle                   = libelle,
+                description_technique     = data.get('description_technique'),
+                opportunite_projet        = data.get('opportunite_projet'),
+                type_projet               = 'nouveau',
+
+                # ── Champs métier (dépendent du rôle) ───────────────
+                # region_direction = code_region (structure)
+                #                  = code_direction (département)
+                region_direction          = region_direction,
+                famille                   = ctx['famille'],
+                activite                  = ctx['activite'],
+                perm                      = ctx['perimetre'],  # None si département
+
+                # ── IDs utilisateur ──────────────────────────────────
+                region_id                 = ctx['region_id'],
+                structure_id              = ctx['structure_id'],
+                direction_id              = ctx['direction_id'],
+                departement_id            = ctx['departement_id'],
+                created_by                = request.user.id,
+
+                # ── PMT ──────────────────────────────────────────────
+                annee_debut_pmt           = annee_debut_pmt,
+                annee_fin_pmt             = annee_fin_pmt,
+
+                # ── Versionnement ────────────────────────────────────
+                parent_id                 = None,
+                version                   = 1,
+                is_active                 = True,
+                version_comment           = "Création initiale",
+                statut_workflow           = 'soumis',
+                statut_final              = None,
+
+                # ── Réalisation (NULL — nouveau projet) ──────────────
+                realisation_cumul_n_mins1_total    = None,
+                realisation_cumul_n_mins1_dont_dex = None,
+                real_s1_n_total                    = None,
+                real_s1_n_dont_dex                 = None,
+                prev_s2_n_total                    = None,
+                prev_s2_n_dont_dex                 = None,
+                prev_cloture_n_total               = None,
+                prev_cloture_n_dont_dex            = None,
+
+                # ── Champs calculés ──────────────────────────────────
+                prev_n_plus1_total        = prev_n_plus1_total,
+                prev_n_plus1_dont_dex     = prev_n_plus1_dex,
+                reste_a_realiser_total    = rar_total,
+                reste_a_realiser_dont_dex = rar_dex,
+                cout_initial_total        = cout_total,
+                cout_initial_dont_dex     = cout_dex,
+
+                # ── Prévisions mensuelles et annuelles ───────────────
+                **{
+                    k: v[k]
+                    for k in (
+                        [f'{key}_total'    for key in self.PREVISIONS_KEYS] +
+                        [f'{key}_dont_dex' for key in self.PREVISIONS_KEYS] +
+                        [f'{mois}_total'   for mois in self.MOIS_KEYS]      +
+                        [f'{mois}_dont_dex' for mois in self.MOIS_KEYS]
+                    )
+                }
+            )
+            logger.info(
+                f"✅ BudgetRecord créé : "
+                f"id={record.id} | code_division={record.code_division} | "
+                f"region_direction={region_direction} | rôle={ctx['role']}"
+            )
+
+        except Exception as e:
+            logger.error(f"💥 Erreur création BudgetRecord : {e}")
+            logger.error(traceback.format_exc())
+            return Response(
+                {'error': f'Erreur création en base : {e}'},
+                status=500
+            )
+
+        # ── 10. Sérialisation et réponse ──────────────────────────────
+        logger.info("── Étape 10 : Sérialisation")
         try:
             serializer = BudgetRecordSerializer(
-                record, 
+                record,
                 context={'request': request}
             )
-            serialized_data = serializer.data
-            logger.info(f"✅ Sérialisation réussie - champs: {list(serialized_data.keys())}")
+            serialized = serializer.data
+            logger.info(f"✅ Sérialisation OK — {len(serialized)} champs")
         except Exception as e:
-            logger.error(f"💥 Erreur sérialisation: {str(e)}")
+            logger.error(f"💥 Erreur sérialisation : {e}")
             logger.error(traceback.format_exc())
-            return Response({
-                'error': f'Erreur sérialisation: {str(e)}',
-                'debug': {'exception': str(e)}
-            }, status=500)
-        
-        # 10. Réponse finale
-        logger.info("🎉 Succès - Projet créé!")
+            return Response(
+                {'error': f'Erreur sérialisation : {e}'},
+                status=500
+            )
+
+        logger.info(
+            f"🎉 Projet créé avec succès — "
+            f"rôle={ctx['role']} | id={record.id} | "
+            f"region_direction={region_direction}"
+        )
         logger.info("=" * 80)
-        
-        return Response({
-            'success': True,
-            'message': 'Projet créé avec succès (version 1)',
-            'data': serialized_data,
-            'debug_info': {
-                'region_code': code_region,
-                'region_nom': region_nom,
-                'record_id': record.id
-            }
-        }, status=201)     
+
+        return Response(
+            {
+                'success': True,
+                'message': (
+                    f"Projet créé avec succès "
+                    f"(version 1, rôle : {ctx['role']})"
+                ),
+                'data': serialized,
+                'meta': {
+                    'role':             ctx['role'],
+                    'region_direction': region_direction,
+                    'label':            label,
+                    'record_id':        record.id,
+                }
+            },
+            status=201
+        )
 from decimal import Decimal
 
 

@@ -250,7 +250,8 @@ class ExcelUpload(models.Model):
 class BudgetRecord(models.Model):
     upload = models.ForeignKey(ExcelUpload, on_delete=models.CASCADE, related_name='records')
     activite = models.CharField(max_length=10, blank=True, null=True)
-    region = models.CharField(max_length=10, blank=True, null=True)
+    # region = models.CharField(max_length=10, blank=True, null=True)
+    region_direction = models.CharField(max_length=50,blank=True,null=True,help_text="code_region si structure | code_direction si département")
     perm = models.CharField(max_length=255, blank=True, null=True)
     famille = models.CharField(max_length=50, blank=True, null=True)
     code_division = models.CharField(max_length=50, blank=True, null=True)
@@ -264,6 +265,9 @@ class BudgetRecord(models.Model):
     region_id = models.CharField(max_length=50, null=True, blank=True)
     structure_id = models.CharField(max_length=50, null=True, blank=True)
     created_by = models.IntegerField(null=True, blank=True)
+    # Ajouter si absents :
+    direction_id   = models.CharField(max_length=50, null=True, blank=True)
+    departement_id = models.CharField(max_length=50, null=True, blank=True)
 
     # ✅ VERSIONNEMENT
     parent_id = models.IntegerField(null=True, blank=True)

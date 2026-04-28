@@ -26,7 +26,7 @@ class ExcelUploadAdmin(admin.ModelAdmin):
 @admin.register(BudgetRecord)
 class BudgetRecordAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'region', 'famille', 'activite', 'libelle',
+        'id', 'region_direction', 'famille', 'activite', 'libelle',
         'cout_initial_total',
         'realisation_cumul_n_mins1_total',
         'real_s1_n_total',
@@ -43,5 +43,5 @@ class BudgetRecordAdmin(admin.ModelAdmin):
         'juillet_total', 'aout_total', 'septembre_total',
         'octobre_total', 'novembre_total', 'decembre_total',
     ]
-    list_filter = ['region', 'famille', 'activite']
-    search_fields = ['libelle', 'region']
+    list_filter = ['region_direction', 'famille', 'activite']
+    search_fields = ['libelle', 'region_direction']

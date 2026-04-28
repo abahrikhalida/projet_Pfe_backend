@@ -129,55 +129,7 @@ class BudgetRecordSerializer(serializers.ModelSerializer):
             print(f"[DEBUG REGION] Exception: {e}")
             return obj.region
         
-    # def get_activite_nom(self, obj):
-    #         """Récupère le nom de l'activité depuis le service param"""
-    #         try:
-    #             request = self.context.get('request')
-    #             token = request.headers.get('Authorization', '') if request else ''
-                
-    #             service_url = get_service_param_url()
-                
-    #             # Adaptez l'endpoint selon votre API
-    #             response = requests.get(
-    #                 f"{service_url}/params/activites/code/{obj.activite}",
-    #                 headers={'Authorization': token},
-    #                 timeout=3
-    #             )
-                
-    #             if response.status_code == 200:
-    #                 activite_data = response.json().get('data', {})
-    #                 return activite_data.get('nom')
-    #             else:
-    #                 return obj.activie
-                    
-    #         except Exception as e:
-    #             print(f"Erreur récupération nom activité: {e}")
-    #             return obj.activite
 
-    # def get_famille_nom(self, obj):
-    #         """Récupère le nom de la famille depuis le service param"""
-    #         try:
-    #             request = self.context.get('request')
-    #             token = request.headers.get('Authorization', '') if request else ''
-                
-    #             service_url = get_service_param_url()
-                
-    #             # Adaptez l'endpoint selon votre API
-    #             response = requests.get(
-    #                 f"{service_url}/params/familles/by-code/{obj.famille}",
-    #                 headers={'Authorization': token},
-    #                 timeout=3
-    #             )
-                
-    #             if response.status_code == 200:
-    #                 famille_data = response.json().get('data', {})
-    #                 return famille_data.get('nom_famille')
-    #             else:
-    #                 return obj.famille
-                    
-    #         except Exception as e:
-    #             print(f"Erreur récupération nom famille: {e}")
-    #             return obj.famille
     def get_famille_nom(self, obj):
         """Récupère le nom de la famille depuis le service param"""
         try:
@@ -268,3 +220,53 @@ class ExcelUploadSerializer(serializers.ModelSerializer):
 
 class ExcelFileSerializer(serializers.Serializer):
      file = serializers.FileField()
+
+    # def get_activite_nom(self, obj):
+    #         """Récupère le nom de l'activité depuis le service param"""
+    #         try:
+    #             request = self.context.get('request')
+    #             token = request.headers.get('Authorization', '') if request else ''
+                
+    #             service_url = get_service_param_url()
+                
+    #             # Adaptez l'endpoint selon votre API
+    #             response = requests.get(
+    #                 f"{service_url}/params/activites/code/{obj.activite}",
+    #                 headers={'Authorization': token},
+    #                 timeout=3
+    #             )
+                
+    #             if response.status_code == 200:
+    #                 activite_data = response.json().get('data', {})
+    #                 return activite_data.get('nom')
+    #             else:
+    #                 return obj.activie
+                    
+    #         except Exception as e:
+    #             print(f"Erreur récupération nom activité: {e}")
+    #             return obj.activite
+
+    # def get_famille_nom(self, obj):
+    #         """Récupère le nom de la famille depuis le service param"""
+    #         try:
+    #             request = self.context.get('request')
+    #             token = request.headers.get('Authorization', '') if request else ''
+                
+    #             service_url = get_service_param_url()
+                
+    #             # Adaptez l'endpoint selon votre API
+    #             response = requests.get(
+    #                 f"{service_url}/params/familles/by-code/{obj.famille}",
+    #                 headers={'Authorization': token},
+    #                 timeout=3
+    #             )
+                
+    #             if response.status_code == 200:
+    #                 famille_data = response.json().get('data', {})
+    #                 return famille_data.get('nom_famille')
+    #             else:
+    #                 return obj.famille
+                    
+    #         except Exception as e:
+    #             print(f"Erreur récupération nom famille: {e}")
+    #             return obj.famille

@@ -38,6 +38,8 @@ urlpatterns = [
     path('users/responsables-structure/affectes/', views.api_list_responsables_structure_affectes, name='list-responsables-affectes'),
     path('users/directeurs-region/', views.api_list_directeurs_region, name='list-directeurs-region'),
     path('users/directeurs-region/affectes/', views.api_list_directeurs_region_affectes, name='list-directeurs-region-affectes'),
+    path('users/directeurs-direction/affectes/',views.api_list_directeurs_direction_affectes,name='list-directeurs-direction-affectes'),
+    path('users/responsables-departement/affectes/',views.api_list_responsables_departement_affectes,name='list-responsables-departement-affectes'),
     # affectation role
     path('assign-role/',views.api_assign_role,name='api_assign_role'),
 
