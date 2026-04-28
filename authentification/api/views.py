@@ -56,6 +56,7 @@ def api_login(request):
     # ✅ Ajouter region_id et structure_id dans le token
     refresh['region_id']    = str(user.region_id)    if user.region_id    else None
     refresh['structure_id'] = str(user.structure_id) if user.structure_id else None
+    refresh['direction_id']   = str(user.direction_id)   if user.direction_id else None   # ✅ NEW
     refresh['role']         = user.role
     refresh['user_id']      = str(user.id)
 
@@ -70,6 +71,9 @@ def api_login(request):
         "photo_profil": user.photo_profil.url if user.photo_profil else None,   # ✅
         "region_id":    str(user.region_id)    if user.region_id    else None,   # ✅
         "structure_id": str(user.structure_id) if user.structure_id else None,   # ✅
+        "direction_id":   str(user.direction_id)   if user.direction_id else None,   # ✅ NEW
+        "departement_id": str(user.departement_id) if user.departement_id else None   # ✅ NEW
+
     })
 
 
@@ -1135,124 +1139,104 @@ def api_affecter_region(request, user_id):
         "message": f"Directeur affecté à la région {region.get('nom_region')}",
         "user": UserSerializer(user).data
     })
-# @api_view(['PATCH'])
-# def api_affecter_structure(request, user_id):
 
-#     # 🔒 seul directeur peut affecter
-#     if request.user.role != 'directeur_region':
-#         return Response({"error": "Seul un directeur_region peut affecter une structure."}, status=403)
-
-#     # 🔒 directeur doit avoir une région
-#     if not request.user.region_id:
-#         return Response({"error": "Vous devez être affecté à une région d'abord."}, status=400)
-
-#     try:
-#         user = User.objects.get(id=user_id)
-#     except User.DoesNotExist:
-#         return Response({"error": "Utilisateur introuvable."}, status=404)
-
-#     if user.role != 'responsable_structure':
-#         return Response({"error": "Cible doit être responsable_structure."}, status=400)
-
-#     # 🔒 empêcher double affectation
-#     if user.structure_id:
-#         return Response({"error": "Ce responsable a déjà une structure."}, status=400)
-
-#     structure_id = request.data.get('structure_id')
-#     if not structure_id:
-#         return Response({"error": "structure_id obligatoire."}, status=400)
-
-#     region_id = request.user.region_id  # 🔥 IMPORTANT (hérité du directeur)
-
-#     # 🔐 récupérer token
-#     headers = get_auth_headers(request)
-#     if not headers:
-#         return Response({"error": "Token manquant."}, status=401)
-
-#     try:
-#         base_url = discover_service(SERVICE_NAME)
-
-#         # 🔎 Vérifier structure
-#         url_structure = f"{base_url}/params/structures/{structure_id}"
-#         resp_s = requests.get(url_structure, headers=headers, timeout=3)
-
-#         print("STRUCTURE URL =", url_structure)
-#         print("STATUS =", resp_s.status_code)
-#         print("BODY =", resp_s.text)
-
-#         if resp_s.status_code == 404:
-#             return Response({"error": "Structure introuvable."}, status=404)
-
-#         if resp_s.status_code != 200:
-#             return Response({
-#                 "error": "Erreur service structure",
-#                 "details": resp_s.text
-#             }, status=502)
-
-#         structure = resp_s.json().get('data', {})
-
-#         # 🔥 Vérifier région correspondante
-#         structure_region_id = structure.get('region', {}).get('_id')
-
-#         if str(structure_region_id) != str(region_id):
-#             return Response({
-#                 "error": "Structure hors de votre région.",
-#                 "directeur_region": region_id,
-#                 "structure_region": structure_region_id
-#             }, status=400)
-            
-
-#         if not structure.get('is_active', True):
-#             return Response({"error": "Structure inactive."}, status=400)
-
-#     except requests.exceptions.RequestException:
-#         return Response({"error": "Service structure indisponible."}, status=503)
-
-#     # ✅ Affectation
-#     user.region_id = region_id
-#     user.structure_id = structure_id
-#     user.save()
-
-#     return Response({
-#         "status": "success",
-#         "message": "Responsable affecté avec succès.",
-#         "user": UserSerializer(user).data
-#     })
 @api_view(['PATCH'])
-def api_affecter_structure(request, user_id):
-    """
-    Admin peut affecter un responsable_structure à une région et une structure.
-    Body JSON: {"region_id": "...", "structure_id": "..."}
-    """
-    
-    # 🔒 Vérifier rôle - seul admin peut faire cette affectation
+def api_affecter_direction(request, user_id):
+
+    # 🔒 Vérifier rôle (admin uniquement)
     if request.user.role != 'admin':
-        return Response({"error": "Seul un admin peut affecter une structure."}, status=403)
+        return Response({"error": "Seul un admin peut affecter une direction."}, status=403)
 
     try:
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
         return Response({"error": "Utilisateur introuvable."}, status=404)
 
-    # Vérifier que l'utilisateur cible est bien un responsable_structure
+    # 🎯 cible doit être directeur_direction
+    if user.role != 'directeur_direction':
+        return Response({"error": "Cible doit être directeur_direction."}, status=400)
+
+    # 🔒 empêcher double affectation
+    if user.direction_id:
+        return Response({"error": "Ce directeur a déjà une direction."}, status=400)
+
+    direction_id = request.data.get('direction_id')
+    if not direction_id:
+        return Response({"error": "direction_id obligatoire."}, status=400)
+
+    # 🔐 récupérer token
+    headers = get_auth_headers(request)
+    if not headers:
+        return Response({"error": "Token manquant."}, status=401)
+
+    try:
+        base_url = discover_service(SERVICE_NAME)
+        url = f"{base_url}/params/directions/{direction_id}"  # ✅ CORRECT
+
+        resp = requests.get(url, headers=headers, timeout=3)
+
+        print("URL =", url)
+        print("STATUS =", resp.status_code)
+        print("BODY =", resp.text)
+
+        if resp.status_code == 404:
+            return Response({"error": "Direction introuvable."}, status=404)
+
+        if resp.status_code != 200:
+            return Response({
+                "error": "Erreur service direction",
+                "details": resp.text
+            }, status=502)
+
+        direction = resp.json().get('data', {})
+
+        if not direction.get('is_active', True):
+            return Response({"error": "Direction inactive."}, status=400)
+
+    except requests.exceptions.RequestException:
+        return Response({"error": "Service direction indisponible."}, status=503)
+
+    # ✅ Affectation
+    user.direction_id   = direction_id
+    user.structure_id   = None
+    user.departement_id = None
+    user.save()
+
+    return Response({
+        "status": "success",
+        "message": f"Directeur affecté à la direction {direction.get('nom_direction')}",
+        "user": UserSerializer(user).data
+    })
+@api_view(['PATCH'])
+def api_affecter_structure(request, user_id):
+
+    # 🔒 seul directeur peut affecter
+    if request.user.role != 'directeur_region':
+        return Response({"error": "Seul un directeur_region peut affecter une structure."}, status=403)
+
+    # 🔒 directeur doit avoir une région
+    if not request.user.region_id:
+        return Response({"error": "Vous devez être affecté à une région d'abord."}, status=400)
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({"error": "Utilisateur introuvable."}, status=404)
+
     if user.role != 'responsable_structure':
         return Response({"error": "Cible doit être responsable_structure."}, status=400)
 
-    # 🔒 Empêcher double affectation
+    # 🔒 empêcher double affectation
     if user.structure_id:
         return Response({"error": "Ce responsable a déjà une structure."}, status=400)
 
-    # Récupérer les IDs depuis le body
-    region_id = request.data.get('region_id')
     structure_id = request.data.get('structure_id')
-    
-    if not region_id:
-        return Response({"error": "region_id obligatoire."}, status=400)
-    
     if not structure_id:
         return Response({"error": "structure_id obligatoire."}, status=400)
 
-    # 🔐 Récupérer token
+    region_id = request.user.region_id  # 🔥 IMPORTANT (hérité du directeur)
+
+    # 🔐 récupérer token
     headers = get_auth_headers(request)
     if not headers:
         return Response({"error": "Token manquant."}, status=401)
@@ -1260,28 +1244,7 @@ def api_affecter_structure(request, user_id):
     try:
         base_url = discover_service(SERVICE_NAME)
 
-        # 🔎 Vérifier que la région existe et est active
-        url_region = f"{base_url}/params/regions/id/{region_id}"
-        resp_r = requests.get(url_region, headers=headers, timeout=3)
-        
-        print("REGION URL =", url_region)
-        print("STATUS =", resp_r.status_code)
-        
-        if resp_r.status_code == 404:
-            return Response({"error": "Région introuvable."}, status=404)
-        
-        if resp_r.status_code != 200:
-            return Response({
-                "error": "Erreur service région",
-                "details": resp_r.text
-            }, status=502)
-        
-        region = resp_r.json().get('data', {})
-        
-        if not region.get('is_active', True):
-            return Response({"error": "Région inactive."}, status=400)
-
-        # 🔎 Vérifier que la structure existe et est active
+        # 🔎 Vérifier structure
         url_structure = f"{base_url}/params/structures/{structure_id}"
         resp_s = requests.get(url_structure, headers=headers, timeout=3)
 
@@ -1299,23 +1262,23 @@ def api_affecter_structure(request, user_id):
             }, status=502)
 
         structure = resp_s.json().get('data', {})
-        
-        # 🔥 Vérifier que la structure appartient bien à la région spécifiée
+
+        # 🔥 Vérifier région correspondante
         structure_region_id = structure.get('region', {}).get('_id')
-        
+
         if str(structure_region_id) != str(region_id):
             return Response({
-                "error": "La structure n'appartient pas à la région spécifiée.",
-                "region_specifiee": region_id,
-                "region_de_la_structure": structure_region_id
+                "error": "Structure hors de votre région.",
+                "directeur_region": region_id,
+                "structure_region": structure_region_id
             }, status=400)
-        
+            
+
         if not structure.get('is_active', True):
             return Response({"error": "Structure inactive."}, status=400)
 
-    except requests.exceptions.RequestException as e:
-        print(f"Erreur de connexion: {e}")
-        return Response({"error": "Service paramètres indisponible."}, status=503)
+    except requests.exceptions.RequestException:
+        return Response({"error": "Service structure indisponible."}, status=503)
 
     # ✅ Affectation
     user.region_id = region_id
@@ -1324,11 +1287,347 @@ def api_affecter_structure(request, user_id):
 
     return Response({
         "status": "success",
-        "message": f"Responsable affecté à la structure {structure.get('nom_structure', '')} dans la région {region.get('nom_region', '')}",
+        "message": "Responsable affecté avec succès.",
+        "user": UserSerializer(user).data
+    })
+# @api_view(['PATCH'])
+# def api_affecter_structure(request, user_id):
+#     """
+#     Admin peut affecter un responsable_structure à une région et une structure.
+#     Body JSON: {"region_id": "...", "structure_id": "..."}
+#     """
+    
+#     # 🔒 Vérifier rôle - seul admin peut faire cette affectation
+#     if request.user.role != 'admin':
+#         return Response({"error": "Seul un admin peut affecter une structure."}, status=403)
+
+#     try:
+#         user = User.objects.get(id=user_id)
+#     except User.DoesNotExist:
+#         return Response({"error": "Utilisateur introuvable."}, status=404)
+
+#     # Vérifier que l'utilisateur cible est bien un responsable_structure
+#     if user.role != 'responsable_structure':
+#         return Response({"error": "Cible doit être responsable_structure."}, status=400)
+
+#     # 🔒 Empêcher double affectation
+#     if user.structure_id:
+#         return Response({"error": "Ce responsable a déjà une structure."}, status=400)
+
+#     # Récupérer les IDs depuis le body
+#     region_id = request.data.get('region_id')
+#     structure_id = request.data.get('structure_id')
+    
+#     if not region_id:
+#         return Response({"error": "region_id obligatoire."}, status=400)
+    
+#     if not structure_id:
+#         return Response({"error": "structure_id obligatoire."}, status=400)
+
+#     # 🔐 Récupérer token
+#     headers = get_auth_headers(request)
+#     if not headers:
+#         return Response({"error": "Token manquant."}, status=401)
+
+#     try:
+#         base_url = discover_service(SERVICE_NAME)
+
+#         # 🔎 Vérifier que la région existe et est active
+#         url_region = f"{base_url}/params/regions/id/{region_id}"
+#         resp_r = requests.get(url_region, headers=headers, timeout=3)
+        
+#         print("REGION URL =", url_region)
+#         print("STATUS =", resp_r.status_code)
+        
+#         if resp_r.status_code == 404:
+#             return Response({"error": "Région introuvable."}, status=404)
+        
+#         if resp_r.status_code != 200:
+#             return Response({
+#                 "error": "Erreur service région",
+#                 "details": resp_r.text
+#             }, status=502)
+        
+#         region = resp_r.json().get('data', {})
+        
+#         if not region.get('is_active', True):
+#             return Response({"error": "Région inactive."}, status=400)
+
+#         # 🔎 Vérifier que la structure existe et est active
+#         url_structure = f"{base_url}/params/structures/{structure_id}"
+#         resp_s = requests.get(url_structure, headers=headers, timeout=3)
+
+#         print("STRUCTURE URL =", url_structure)
+#         print("STATUS =", resp_s.status_code)
+#         print("BODY =", resp_s.text)
+
+#         if resp_s.status_code == 404:
+#             return Response({"error": "Structure introuvable."}, status=404)
+
+#         if resp_s.status_code != 200:
+#             return Response({
+#                 "error": "Erreur service structure",
+#                 "details": resp_s.text
+#             }, status=502)
+
+#         structure = resp_s.json().get('data', {})
+        
+#         # 🔥 Vérifier que la structure appartient bien à la région spécifiée
+#         structure_region_id = structure.get('region', {}).get('_id')
+        
+#         if str(structure_region_id) != str(region_id):
+#             return Response({
+#                 "error": "La structure n'appartient pas à la région spécifiée.",
+#                 "region_specifiee": region_id,
+#                 "region_de_la_structure": structure_region_id
+#             }, status=400)
+        
+#         if not structure.get('is_active', True):
+#             return Response({"error": "Structure inactive."}, status=400)
+
+#     except requests.exceptions.RequestException as e:
+#         print(f"Erreur de connexion: {e}")
+#         return Response({"error": "Service paramètres indisponible."}, status=503)
+
+#     # ✅ Affectation
+#     user.region_id = region_id
+#     user.structure_id = structure_id
+#     user.save()
+
+#     return Response({
+#         "status": "success",
+#         "message": f"Responsable affecté à la structure {structure.get('nom_structure', '')} dans la région {region.get('nom_region', '')}",
+#         "user": UserSerializer(user).data,
+#         "details": {
+#             "region": region.get('nom_region'),
+#             "structure": structure.get('nom_structure')
+#         }
+#     })
+# @api_view(['PATCH'])
+# def api_affecter_departement(request, user_id):
+#     """
+#     Admin peut affecter un responsable_departement à une direction + département.
+#     Body JSON: {"direction_id": "...", "departement_id": "..."}
+#     """
+
+#     # 🔒 Vérifier rôle admin
+#     if request.user.role != 'admin':
+#         return Response({"error": "Seul un admin peut affecter un département."}, status=403)
+
+#     try:
+#         user = User.objects.get(id=user_id)
+#     except User.DoesNotExist:
+#         return Response({"error": "Utilisateur introuvable."}, status=404)
+
+#     # 🎯 Vérifier rôle cible
+#     if user.role != 'responsable_departement':
+#         return Response({"error": "Cible doit être responsable_departement."}, status=400)
+
+#     # 🔒 empêcher double affectation
+#     if user.departement_id:
+#         return Response({"error": "Ce responsable a déjà un département."}, status=400)
+
+#     # 📥 data
+#     direction_id   = request.data.get('direction_id')
+#     departement_id = request.data.get('departement_id')
+
+#     if not direction_id:
+#         return Response({"error": "direction_id obligatoire."}, status=400)
+
+#     if not departement_id:
+#         return Response({"error": "departement_id obligatoire."}, status=400)
+
+#     # 🔐 token
+#     headers = get_auth_headers(request)
+#     if not headers:
+#         return Response({"error": "Token manquant."}, status=401)
+
+#     try:
+#         base_url = discover_service(SERVICE_NAME)
+
+#         # 🔎 Vérifier direction
+#         url_direction = f"{base_url}/params/directions/{direction_id}"
+#         resp_d = requests.get(url_direction, headers=headers, timeout=3)
+
+#         print("DIRECTION URL =", url_direction)
+#         print("STATUS =", resp_d.status_code)
+
+#         if resp_d.status_code == 404:
+#             return Response({"error": "Direction introuvable."}, status=404)
+
+#         if resp_d.status_code != 200:
+#             return Response({
+#                 "error": "Erreur service direction",
+#                 "details": resp_d.text
+#             }, status=502)
+
+#         direction = resp_d.json().get('data', {})
+
+#         if not direction.get('is_active', True):
+#             return Response({"error": "Direction inactive."}, status=400)
+
+#         # 🔎 Vérifier département
+#         url_dep = f"{base_url}/params/departements/id/{departement_id}"
+#         resp_dep = requests.get(url_dep, headers=headers, timeout=3)
+
+#         print("DEPARTEMENT URL =", url_dep)
+#         print("STATUS =", resp_dep.status_code)
+#         print("BODY =", resp_dep.text)
+
+#         if resp_dep.status_code == 404:
+#             return Response({"error": "Département introuvable."}, status=404)
+
+#         if resp_dep.status_code != 200:
+#             return Response({
+#                 "error": "Erreur service département",
+#                 "details": resp_dep.text
+#             }, status=502)
+
+#         departement = resp_dep.json().get('data', {})
+
+#         # 🔥 vérifier appartenance direction
+#         dep_direction_id = departement.get('direction', {}).get('_id')
+
+#         if str(dep_direction_id) != str(direction_id):
+#             return Response({
+#                 "error": "Le département n'appartient pas à cette direction.",
+#                 "direction_specifiee": direction_id,
+#                 "direction_du_departement": dep_direction_id
+#             }, status=400)
+
+#         if not departement.get('is_active', True):
+#             return Response({"error": "Département inactif."}, status=400)
+
+#     except requests.exceptions.RequestException as e:
+#         print("Erreur:", e)
+#         return Response({"error": "Service paramètres indisponible."}, status=503)
+
+#     # ✅ Affectation
+#     user.direction_id   = direction_id
+#     user.departement_id = departement_id
+#     user.save()
+
+#     return Response({
+#         "status": "success",
+#         "message": f"Responsable affecté au département {departement.get('nom_departement', '')}",
+#         "user": UserSerializer(user).data,
+#         "details": {
+#             "direction": direction.get('nom_direction'),
+#             "departement": departement.get('nom_departement')
+#         }
+#     })
+@api_view(['PATCH'])
+def api_affecter_departement(request, user_id):
+    """
+    Directeur de direction affecte un responsable_departement
+    à un département de SA direction (depuis token).
+    Body JSON: {"departement_id": "..."}
+    """
+
+    # 🔒 seul directeur_direction peut affecter
+    if request.user.role != 'directeur_direction':
+        return Response({
+            "error": "Seul un directeur de direction peut affecter un département."
+        }, status=403)
+
+    # 🔎 utilisateur cible
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({"error": "Utilisateur introuvable."}, status=404)
+
+    # 🎯 rôle cible
+    if user.role != 'responsable_departement':
+        return Response({"error": "Cible doit être responsable_departement."}, status=400)
+
+    # 🔒 éviter double affectation
+    if user.departement_id:
+        return Response({"error": "Déjà affecté à un département."}, status=400)
+
+    # 📥 input
+    departement_id = request.data.get('departement_id', '').strip()
+
+    if not departement_id:
+        return Response({"error": "departement_id obligatoire."}, status=400)
+
+    # 🔥 direction depuis TOKEN
+    direction_id = request.user.direction_id
+
+    if not direction_id:
+        return Response({"error": "Aucune direction liée à votre compte."}, status=400)
+
+    headers = get_auth_headers(request)
+    if not headers:
+        return Response({"error": "Token manquant."}, status=401)
+
+    try:
+        base_url = discover_service(SERVICE_NAME)
+
+        # =========================
+        # 🔎 CHECK DIRECTION
+        # =========================
+        url_direction = f"{base_url}/params/directions/{direction_id}"
+        resp_d = requests.get(url_direction, headers=headers, timeout=3)
+
+        if resp_d.status_code != 200:
+            return Response({"error": "Direction invalide."}, status=502)
+
+        direction = resp_d.json().get('data', {})
+
+        if not direction.get('is_active', True):
+            return Response({"error": "Direction inactive."}, status=400)
+
+        # =========================
+        # 🔎 CHECK DEPARTEMENT (CORRIGÉ ICI)
+        # =========================
+        url_dep = f"{base_url}/params/departements/id/{departement_id}"
+
+        resp_dep = requests.get(url_dep, headers=headers, timeout=3)
+
+        if resp_dep.status_code == 404:
+            return Response({"error": "Département introuvable."}, status=404)
+
+        if resp_dep.status_code != 200:
+            return Response({
+                "error": "Erreur service département",
+                "details": resp_dep.text
+            }, status=502)
+
+        departement = resp_dep.json().get('data', {})
+
+        # =========================
+        # 🔥 COMPARAISON PROPRE (code_direction)
+        # =========================
+        dep_direction_code = departement.get('direction')  # "DAT"
+        direction_code = direction.get('code_direction')   # "DAT"
+
+        if str(dep_direction_code) != str(direction_code):
+            return Response({
+                "error": "Ce département n'appartient pas à cette direction.",
+                "direction_specifiee": direction_code,
+                "direction_du_departement": dep_direction_code
+            }, status=400)
+
+        if not departement.get('is_active', True):
+            return Response({"error": "Département inactif."}, status=400)
+
+    except requests.exceptions.RequestException:
+        return Response({"error": "Service paramètres indisponible."}, status=503)
+
+    # =========================
+    # ✅ AFFECTION FINALE
+    # =========================
+    user.direction_id = direction_id
+    user.departement_id = departement_id
+    user.save()
+
+    return Response({
+        "status": "success",
+        "message": f"Affecté au département {departement.get('nom_departement', '')}",
         "user": UserSerializer(user).data,
-        "details": {
-            "region": region.get('nom_region'),
-            "structure": structure.get('nom_structure')
+        "context": {
+            "direction": direction.get('nom_direction'),
+            "departement": departement.get('nom_departement')
         }
     })
 @api_view(['GET'])

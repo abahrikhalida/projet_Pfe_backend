@@ -29,7 +29,11 @@ urlpatterns = [
     path('users/<int:user_id>/update/', views.api_update_user, name='api_update_user'),
     path('users/<int:user_id>/delete/', views.api_delete_user, name='api_delete_user'),  
     path('users/<int:user_id>/affecter-region/',    views.api_affecter_region,    name='affecter-region'),
+    path('users/<int:user_id>/affecter-direction/',    views.api_affecter_direction,    name='affecter-direction'),
+    
     path('users/<int:user_id>/affecter-structure/', views.api_affecter_structure, name='affecter-structure'),
+    path('users/<int:user_id>/affecter-departement/', views.api_affecter_departement, name='affecter-departement'),
+
     path('users/responsables-structure/', views.api_list_responsables_structure, name='list-responsables-structure'),
     path('users/responsables-structure/affectes/', views.api_list_responsables_structure_affectes, name='list-responsables-affectes'),
     path('users/directeurs-region/', views.api_list_directeurs_region, name='list-directeurs-region'),

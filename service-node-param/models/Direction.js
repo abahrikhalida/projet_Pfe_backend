@@ -19,6 +19,10 @@ const directionSchema = new mongoose.Schema({
 //     default: 'system' // Valeur par défaut
    
 // },
+    // created_by: {
+    //     type: String,
+    //     required: true
+    // },
     created_at: {
         type: Date,
         default: Date.now

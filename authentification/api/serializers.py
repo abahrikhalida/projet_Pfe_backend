@@ -22,6 +22,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "email", "nom", "prenom", "password",
             "role", "region_id", "structure_id",
+            "direction_id", "departement_id",
             "is_staff", "is_superuser", "photo_profil"
         ]
         extra_kwargs = {
@@ -29,6 +30,9 @@ class UserSerializer(serializers.ModelSerializer):
             "role":         {"required": True},
             "region_id":    {"required": False, "allow_null": True},
             "structure_id": {"required": False, "allow_null": True},
+            "direction_id":    {"required": False, "allow_null": True},
+            "departement_id":  {"required": False, "allow_null": True},
+
         }
 
     # ==================================================
@@ -38,27 +42,60 @@ class UserSerializer(serializers.ModelSerializer):
         role         = data.get('role', getattr(self.instance, 'role', None))
         region_id    = data.get('region_id')
         structure_id = data.get('structure_id')
+        direction_id   = data.get('direction_id')
+        departement_id = data.get('departement_id')
+        
 
         if role == 'directeur_region':
             if region_id:
                 # Fourni → on vérifie
                 self._verify_region(region_id)
             data['structure_id'] = None
+            data['direction_id']   = None
+            data['departement_id'] = None
             # region_id pas fourni → OK, on laisse null
+        
+        elif role == 'directeur_direction':
+            if not direction_id:
+                raise serializers.ValidationError({
+                    "direction_id": "Obligatoire pour directeur_direction"
+                })
+
+            # (optionnel)
+            # self._verify_direction(direction_id)
+
+            data['structure_id']   = None
+            data['departement_id'] = None
+        
+        elif role == 'responsable_departement':
+            if not departement_id:
+                raise serializers.ValidationError({
+                    "departement_id": "Obligatoire pour responsable_departement"
+                })
+
+            if not direction_id:
+                raise serializers.ValidationError({
+                    "direction_id": "Un département doit appartenir à une direction"
+                })
 
         elif role == 'responsable_structure':
             if structure_id and not region_id:
                 raise serializers.ValidationError({
                     "region_id": "Obligatoire si structure_id est fourni."
                 })
+
             if region_id:
                 self._verify_region(region_id)
+
             if structure_id and region_id:
                 self._verify_structure(structure_id, region_id)
 
         else:
             data['region_id']    = None
             data['structure_id'] = None
+            data['direction_id']   = None
+            data['departement_id'] = None
+
 
         return data
 
