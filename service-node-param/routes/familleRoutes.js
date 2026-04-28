@@ -5,17 +5,18 @@ const familleController = require('../controllers/familleController');
 
 // All routes require authentication
 router.use(authMiddleware);
-router.get('/region/:regionId/perimetre/:perimetreCode', familleController.getFamillesByRegionIdAndPerimetre);
-// GET /api/familles/by-region-perimetre/:codeRegion/:codePerimetre
-router.get('/by-region-perimetre/:codeRegion/:codePerimetre', familleController.getFamillesByFilter);
+
 // Routes accessibles à tous les utilisateurs authentifiés
 router.get('/', familleController.getAllFamilles);
-router.get('/:id', familleController.getFamilleById);
 router.get('/by-code/:code', familleController.getFamilleByCode);
+router.get('/:id', familleController.getFamilleById);
 
-// Routes réservées aux chefs (authentifiés)
+// Routes réservées aux chefs et admins
 router.post('/', checkRole(['chef', 'admin']), familleController.createFamille);
 router.put('/:id', checkRole(['chef', 'admin']), familleController.updateFamille);
 router.delete('/:id', checkRole(['chef', 'admin']), familleController.deleteFamille);
+
+// Route pour suppression définitive (admin only)
+router.delete('/:id/permanent', checkRole(['admin']), familleController.hardDeleteFamille);
 
 module.exports = router;
