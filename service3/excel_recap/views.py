@@ -2810,7 +2810,8 @@ class NouveauProjetView(APIView):
                 version=1,
                 is_active=True,
                 version_comment="Création initiale",
-                statut='soumis',
+                # statut='soumis',
+                statut_workflow='soumis',
                 #############################################################
                 
                 # Champs de réalisation (NULL pour nouveau projet)
@@ -3973,203 +3974,6 @@ def get_record_or_404(record_id):
 # WORKFLOW DE VALIDATION
 # ─────────────────────────────────────────
 
-# class SoumettreProjetView(APIView):
-#     """
-#     POST /recap/budget/soumettre/<id>/
-#     Responsable structure soumet le projet pour validation
-#     Condition : statut = brouillon
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsResponsableStructure]
-
-#     def post(self, request, record_id):
-#         record = get_record_or_404(record_id)
-#         if not record:
-#             return Response({'error': 'Projet introuvable'}, status=404)
-
-#         if record.statut != 'brouillon':
-#             return Response({
-#                 'error': f"Impossible de soumettre — statut actuel : '{record.statut}'"
-#             }, status=400)
-
-#         record.statut = 'soumis'
-#         record.save()
-
-#         return Response({
-#             'success': True,
-#             'message': 'Projet soumis pour validation',
-#             'statut': record.statut
-#         })
-
-
-# class ValiderDirecteurRegionView(APIView):
-#     """
-#     POST /recap/budget/valider/directeur-region/<id>/
-#     Condition : statut = soumis
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsDirecteurRegion]
-
-#     def post(self, request, record_id):
-#         record = get_record_or_404(record_id)
-#         if not record:
-#             return Response({'error': 'Projet introuvable'}, status=404)
-
-#         action      = request.data.get('action')
-#         commentaire = request.data.get('commentaire', '')
-
-#         if action not in ['valider', 'rejeter']:
-#             return Response({'error': "action doit être 'valider' ou 'rejeter'"}, status=400)
-
-#         if record.statut != 'soumis':
-#             return Response({
-#                 'error': f"Le projet doit être 'soumis' — statut actuel : '{record.statut}'"
-#             }, status=400)
-
-#         if action == 'valider':
-#             record.statut                            = 'valide_directeur_region'
-#             record.valide_par_directeur_region       = request.user.nom_complet
-#             record.date_validation_directeur_region  = timezone.now()
-#             record.commentaire_directeur_region      = commentaire
-#             message = 'Projet validé par le directeur région'
-#         else:
-#             record.statut       = 'rejete'
-#             record.rejete_par   = request.user.nom_complet
-#             record.date_rejet   = timezone.now()
-#             record.motif_rejet  = commentaire
-#             message = 'Projet rejeté par le directeur région'
-
-#         record.save()
-
-#         return Response({'success': True, 'message': message, 'statut': record.statut})
-
-
-# class ValiderChefView(APIView):
-#     """
-#     POST /recap/budget/valider/chef/<id>/
-#     Condition : statut = valide_directeur_region
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsChef]
-
-#     def post(self, request, record_id):
-#         record = get_record_or_404(record_id)
-#         if not record:
-#             return Response({'error': 'Projet introuvable'}, status=404)
-
-#         action      = request.data.get('action')
-#         commentaire = request.data.get('commentaire', '')
-
-#         if action not in ['valider', 'rejeter']:
-#             return Response({'error': "action doit être 'valider' ou 'rejeter'"}, status=400)
-
-#         if record.statut != 'valide_directeur_region':
-#             return Response({
-#                 'error': f"Le projet doit être 'valide_directeur_region' — statut actuel : '{record.statut}'"
-#             }, status=400)
-
-#         if action == 'valider':
-#             record.statut               = 'valide_chef'
-#             record.valide_par_chef      = request.user.nom_complet
-#             record.date_validation_chef = timezone.now()
-#             record.commentaire_chef     = commentaire
-#             message = 'Projet validé par le chef'
-#         else:
-#             record.statut      = 'rejete'
-#             record.rejete_par  = request.user.nom_complet
-#             record.date_rejet  = timezone.now()
-#             record.motif_rejet = commentaire
-#             message = 'Projet rejeté par le chef'
-
-#         record.save()
-
-#         return Response({'success': True, 'message': message, 'statut': record.statut})
-
-
-# class ValiderDirecteurView(APIView):
-#     """
-#     POST /recap/budget/valider/directeur/<id>/
-#     Condition : statut = valide_chef
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsDirecteur]
-
-#     def post(self, request, record_id):
-#         record = get_record_or_404(record_id)
-#         if not record:
-#             return Response({'error': 'Projet introuvable'}, status=404)
-
-#         action      = request.data.get('action')
-#         commentaire = request.data.get('commentaire', '')
-
-#         if action not in ['valider', 'rejeter']:
-#             return Response({'error': "action doit être 'valider' ou 'rejeter'"}, status=400)
-
-#         if record.statut != 'valide_chef':
-#             return Response({
-#                 'error': f"Le projet doit être 'valide_chef' — statut actuel : '{record.statut}'"
-#             }, status=400)
-
-#         if action == 'valider':
-#             record.statut                    = 'valide_directeur'
-#             record.valide_par_directeur      = request.user.nom_complet
-#             record.date_validation_directeur = timezone.now()
-#             record.commentaire_directeur     = commentaire
-#             message = 'Projet validé par le directeur'
-#         else:
-#             record.statut      = 'rejete'
-#             record.rejete_par  = request.user.nom_complet
-#             record.date_rejet  = timezone.now()
-#             record.motif_rejet = commentaire
-#             message = 'Projet rejeté par le directeur'
-
-#         record.save()
-
-#         return Response({'success': True, 'message': message, 'statut': record.statut})
-
-
-# class ValiderDivisionnnaireView(APIView):
-#     """
-#     POST /recap/budget/valider/divisionnaire/<id>/
-#     Condition : statut = valide_directeur
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsDivisionnaire]
-
-#     def post(self, request, record_id):
-#         record = get_record_or_404(record_id)
-#         if not record:
-#             return Response({'error': 'Projet introuvable'}, status=404)
-
-#         action      = request.data.get('action')
-#         commentaire = request.data.get('commentaire', '')
-
-#         if action not in ['valider', 'rejeter']:
-#             return Response({'error': "action doit être 'valider' ou 'rejeter'"}, status=400)
-
-#         if record.statut != 'valide_directeur':
-#             return Response({
-#                 'error': f"Le projet doit être 'valide_directeur' — statut actuel : '{record.statut}'"
-#             }, status=400)
-
-#         if action == 'valider':
-#             record.statut                        = 'valide_divisionnaire'
-#             record.valide_par_divisionnaire      = request.user.nom_complet
-#             record.date_validation_divisionnaire = timezone.now()
-#             record.commentaire_divisionnaire     = commentaire
-#             message = 'Projet validé par le divisionnaire — validation complète ✅'
-#         else:
-#             record.statut      = 'rejete'
-#             record.rejete_par  = request.user.nom_complet
-#             record.date_rejet  = timezone.now()
-#             record.motif_rejet = commentaire
-#             message = 'Projet rejeté par le divisionnaire'
-
-#         record.save()
-
-#         return Response({'success': True, 'message': message, 'statut': record.statut})
-
-
 
 from django.utils import timezone
 from rest_framework.views import APIView
@@ -4183,40 +3987,41 @@ def get_record_or_404(record_id):
         return None
 
 
-# ================================================================== #
-#  1. SOUMETTRE  (ResponsableStructure)
-# ================================================================== #
-class SoumettreProjetView(APIView):
-    """
-    POST /recap/budget/soumettre/<id>/
-    Condition : statut = brouillon
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsResponsableStructure]
+# # ================================================================== #
+# #  1. SOUMETTRE  (ResponsableStructure)
+# # ================================================================== #
+# class SoumettreProjetView(APIView):
+#     """
+#     POST /recap/budget/soumettre/<id>/
+#     Condition : statut = brouillon
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsResponsableStructure]
 
-    def post(self, request, record_id):
-        record = get_record_or_404(record_id)
-        if not record:
-            return Response({'error': 'Projet introuvable'}, status=404)
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
 
-        if record.statut != 'brouillon':
-            return Response({
-                'error': f"Impossible de soumettre — statut actuel : '{record.statut}'"
-            }, status=400)
+#         if record.statut != 'brouillon':
+#             return Response({
+#                 'error': f"Impossible de soumettre — statut actuel : '{record.statut}'"
+#             }, status=400)
 
-        record.statut = 'soumis'
-        record.save(update_fields=['statut'])
+#         record.statut = 'soumis'
+#         record.save(update_fields=['statut'])
 
-        return Response({
-            'success': True,
-            'message': 'Projet soumis pour validation',
-            'statut':  record.statut,
-        })
+#         return Response({
+#             'success': True,
+#             'message': 'Projet soumis pour validation',
+#             'statut':  record.statut,
+#         })
 
 
-# ================================================================== #
-#  2. DIRECTEUR RÉGION  (valider / rejeter)
-# ================================================================== #
+# # ================================================================== #
+# #  2. DIRECTEUR RÉGION  (valider / rejeter)
+# # ================================================================== #
+
 # class ValiderDirecteurRegionView(APIView):
 #     """
 #     POST /recap/budget/valider/directeur-region/<id>/
@@ -4249,6 +4054,12 @@ class SoumettreProjetView(APIView):
 #                 status=400
 #             )
 
+#         # Vérification que le commentaire est présent pour un rejet
+#         if action == 'rejeter' and not commentaire:
+#             return Response({
+#                 'error': "Le commentaire est obligatoire pour un rejet"
+#             }, status=400)
+
 #         if record.statut not in self.STATUTS_AUTORISÉS:
 #             return Response({
 #                 'error': (
@@ -4261,13 +4072,15 @@ class SoumettreProjetView(APIView):
 #             record.statut                           = 'valide_directeur_region'
 #             record.valide_par_directeur_region      = request.user.nom_complet
 #             record.date_validation_directeur_region = timezone.now()
-#             record.commentaire_directeur_region     = commentaire
+#             record.commentaire_directeur_region     = commentaire or None
 #             message = 'Projet validé par le directeur région'
-#         else:
-#             record.statut      = 'rejete'
-#             record.rejete_par  = request.user.nom_complet
-#             record.date_rejet  = timezone.now()
-#             record.motif_rejet = commentaire
+#         else:  # action == 'rejeter'
+#             record.statut                           = 'rejete'
+#             record.rejete_par                       = request.user.nom_complet
+#             record.date_rejet                       = timezone.now()
+#             record.motif_rejet                      = commentaire
+#             # ✅ AJOUT: Remplir aussi le commentaire_directeur_region
+#             record.commentaire_directeur_region     = commentaire
 #             message = 'Projet rejeté par le directeur région'
 
 #         record.save()
@@ -4275,90 +4088,596 @@ class SoumettreProjetView(APIView):
 #             'success': True,
 #             'message': message,
 #             'statut':  record.statut,
+#             'commentaire': commentaire  # Optionnel: retourner le commentaire
 #         })
-class ValiderDirecteurRegionView(APIView):
+
+# # ================================================================== #
+# #  3. AGENT  (valider / réserver)
+# #     Voit : valide_directeur_region
+# #     Ne peut PAS rejeter
+# # ================================================================== #
+# class ValiderAgentView(APIView):
+#     """
+#     POST /recap/budget/valider/agent/<id>/
+#     Condition : statut = valide_directeur_region
+#     Actions   : valider | reserver (avec commentaire obligatoire)
+#     Réserver  → retourne au DR (statut = reserve_agent)
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsAgent]
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         action      = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'reserver'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'reserver'"},
+#                 status=400
+#             )
+
+#         if record.statut != 'valide_directeur_region':
+#             return Response({
+#                 'error': (
+#                     f"Le projet doit être 'valide_directeur_region' "
+#                     f"— statut actuel : '{record.statut}'"
+#                 )
+#             }, status=400)
+
+#         if action == 'reserver' and not commentaire:
+#             return Response(
+#                 {'error': "Un commentaire est obligatoire pour réserver."},
+#                 status=400
+#             )
+
+#         if action == 'valider':
+#             record.statut = 'valide_agent'
+#             message       = 'Projet validé par l\'agent'
+#         else:
+#             # Réserver → retourne au DR avec commentaire
+#             record.statut                           = 'reserve_agent'
+#             record.commentaire_agent    = (
+#                 f"{commentaire}"
+#             )
+#             message = 'Projet réservé — retourné au directeur région'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut':  record.statut,
+#         })
+
+
+# # ================================================================== #
+# #  4. CHEF  (valider / réserver)
+# #     Voit : valide_agent + reserve_agent
+# #     Ne peut PAS rejeter
+# # ================================================================== #
+# class ValiderChefView(APIView):
+#     """
+#     POST /recap/budget/valider/chef/<id>/
+#     Condition : statut = valide_agent OU reserve_agent
+#     Actions   : valider | reserver (avec commentaire obligatoire)
+#     Réserver  → retourne au DR (statut = reserve_chef)
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsChef]
+
+#     STATUTS_AUTORISÉS = {'valide_agent', 'reserve_agent'}
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         action      = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'reserver'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'reserver'"},
+#                 status=400
+#             )
+
+#         if record.statut not in self.STATUTS_AUTORISÉS:
+#             return Response({
+#                 'error': (
+#                     f"Statut '{record.statut}' non autorisé. "
+#                     f"Acceptés : {', '.join(self.STATUTS_AUTORISÉS)}"
+#                 )
+#             }, status=400)
+
+#         if action == 'reserver' and not commentaire:
+#             return Response(
+#                 {'error': "Un commentaire est obligatoire pour réserver."},
+#                 status=400
+#             )
+
+#         if action == 'valider':
+#             record.statut               = 'valide_chef'
+#             record.valide_par_chef      = request.user.nom_complet
+#             record.date_validation_chef = timezone.now()
+#             record.commentaire_chef     = commentaire
+#             message = 'Projet validé par le chef'
+#         else:
+#             record.statut           = 'reserve_chef'
+#             record.commentaire_chef = f"{commentaire}"
+#             message = 'Projet réservé — retourné au directeur région'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut':  record.statut,
+#         })
+
+
+
+# # ================================================================== #
+# #  5. DIRECTEUR  (valider / réserver)
+# #     Condition : valide_chef
+# #     Ne peut PAS rejeter
+# # ================================================================== #
+# class ValiderDirecteurView(APIView):
+#     """
+#     POST /recap/budget/valider/directeur/<id>/
+#     Condition : statut = valide_chef
+#     Actions   : valider | reserver (avec commentaire obligatoire)
+#     Réserver  → retourne au DR (statut = reserve_directeur)
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDirecteur]
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         action      = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'reserver'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'reserver'"},
+#                 status=400
+#             )
+
+#         if record.statut != 'valide_chef':
+#             return Response({
+#                 'error': (
+#                     f"Le projet doit être 'valide_chef' "
+#                     f"— statut actuel : '{record.statut}'"
+#                 )
+#             }, status=400)
+
+#         if action == 'reserver' and not commentaire:
+#             return Response(
+#                 {'error': "Un commentaire est obligatoire pour réserver."},
+#                 status=400
+#             )
+
+#         if action == 'valider':
+#             record.statut                    = 'valide_directeur'
+#             record.valide_par_directeur      = request.user.nom_complet
+#             record.date_validation_directeur = timezone.now()
+#             record.commentaire_directeur     = commentaire
+#             message = 'Projet validé par le directeur'
+#         else:
+#             record.statut                = 'reserve_directeur'
+#             record.commentaire_directeur = f"[Réservé par directeur] {commentaire}"
+#             message = 'Projet réservé — retourné au directeur région'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut':  record.statut,
+#         })
+
+
+# # ================================================================== #
+# #  6. DIVISIONNAIRE  (valider / rejeter)
+# #     Condition : valide_directeur
+# #     Seul à pouvoir rejeter après le DR
+# # ================================================================== #
+# class ValiderDivisionnnaireView(APIView):
+#     """
+#     POST /recap/budget/valider/divisionnaire/<id>/
+#     Condition : statut = valide_directeur
+#     Actions   : valider | rejeter
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDivisionnaire]
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         action      = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'rejeter'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'rejeter'"},
+#                 status=400
+#             )
+
+#         if record.statut != 'valide_directeur':
+#             return Response({
+#                 'error': (
+#                     f"Le projet doit être 'valide_directeur' "
+#                     f"— statut actuel : '{record.statut}'"
+#                 )
+#             }, status=400)
+
+#         if action == 'valider':
+#             record.statut                        = 'valide_divisionnaire'
+#             record.valide_par_divisionnaire      = request.user.nom_complet
+#             record.date_validation_divisionnaire = timezone.now()
+#             record.commentaire_divisionnaire     = commentaire
+#             message = 'Projet validé par le divisionnaire — validation complète ✅'
+#         else:
+#             record.statut      = 'rejete'
+#             record.rejete_par  = request.user.nom_complet
+#             record.date_rejet  = timezone.now()
+#             record.motif_rejet = commentaire
+#             message = 'Projet rejeté par le divisionnaire'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut':  record.statut,
+#         })
+
+# #validation par total:
+# class ValiderTousProjetsDivisionnaireView(APIView):
+#     """
+#     GET  /recap/budget/valider/divisionnaire/tous/
+#          → Retourne tous les projets 'valide_directeur' de l'année prochaine + leur total
+
+#     POST /recap/budget/valider/divisionnaire/tous/
+#          → action: 'valider' | 'rejeter'
+#          → Change le statut de TOUS les projets 'valide_directeur' en masse
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDivisionnaire]
+
+#     def get(self, request):
+#         next_year = datetime.now().year + 1
+
+#         projets = BudgetRecord.objects.filter(
+#             statut='valide_directeur',
+#             annee_debut_pmt=next_year,
+#         )
+
+#         if not projets.exists():
+#             return Response({
+#                 'success': True,
+#                 'count': 0,
+#                 'projets': [],
+#                 'total': {},
+#                 'message': f'Aucun projet à valider pour {next_year}',
+#             })
+
+#         # Total de toutes les colonnes
+#         total = projets.aggregate(**build_aggregation())
+
+#         serializer = BudgetRecordSerializer(
+#             projets, many=True, context={'request': request}
+#         )
+
+#         return Response({
+#             'success':    True,
+#             'count':      projets.count(),
+#             'annee':      next_year,
+#             'projets':    serializer.data,
+#             'total':      total,
+#         })
+
+#     def post(self, request):
+#         next_year   = datetime.now().year + 1
+#         action      = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'rejeter'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'rejeter'"},
+#                 status=400
+#             )
+
+#         projets = BudgetRecord.objects.filter(
+#             statut='valide_directeur',
+#             annee_debut_pmt=next_year,
+#         )
+
+#         if not projets.exists():
+#             return Response({
+#                 'error': f'Aucun projet avec statut valide_directeur pour {next_year}',
+#             }, status=404)
+
+#         count = projets.count()
+#         now   = timezone.now()
+#         nom   = request.user.nom_complet
+
+#         if action == 'valider':
+#             projets.update(
+#                 statut                        = 'valide_divisionnaire',
+#                 valide_par_divisionnaire      = nom,
+#                 date_validation_divisionnaire = now,
+#                 commentaire_divisionnaire     = commentaire,
+#             )
+#             message = f'{count} projet(s) validés par le divisionnaire ✅'
+
+#         else:  # rejeter
+#             projets.update(
+#                 statut     = 'rejete',
+#                 rejete_par  = nom,
+#                 date_rejet  = now,
+#                 motif_rejet = commentaire,
+#             )
+#             message = f'{count} projet(s) rejetés par le divisionnaire ❌'
+
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'action':  action,
+#             'count':   count,
+#             'annee':   next_year,
+#         })
+# views.py - WORKFLOW DE VALIDATION AVEC NOUVEAUX STATUTS
+
+from django.utils import timezone
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from datetime import datetime
+import requests
+
+
+def get_record_or_404(record_id):
+    try:
+        return BudgetRecord.objects.get(id=record_id)
+    except BudgetRecord.DoesNotExist:
+        return None
+
+
+# ================================================================== #
+#  1. SOUMETTRE (ResponsableStructure)
+# ================================================================== #
+class SoumettreProjetView(APIView):
     """
-    POST /recap/budget/valider/directeur-region/<id>/
-    Condition : statut = soumis
-                OU reserve_agent / reserve_chef / reserve_directeur
-                   (retour de réserve vers DR)
-    Actions   : valider | rejeter
+    POST /recap/budget/soumettre/<id>/
+    Condition : statut = brouillon (ni statut_workflow ni statut_final)
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsDirecteurRegion]
-
-    STATUTS_AUTORISÉS = {
-        'soumis',
-        'reserve_agent',
-        'reserve_chef',
-        'reserve_directeur',
-    }
+    permission_classes     = [IsResponsableStructure]
 
     def post(self, request, record_id):
         record = get_record_or_404(record_id)
         if not record:
             return Response({'error': 'Projet introuvable'}, status=404)
 
-        action      = request.data.get('action')
+        # Vérifier que le projet est en brouillon
+        if record.statut_workflow is not None or record.statut_final is not None:
+            return Response({
+                'error': f"Impossible de soumettre — statut actuel : '{record.statut}'"
+            }, status=400)
+
+        record.statut_workflow = 'soumis'
+        record.save()
+
+        return Response({
+            'success': True,
+            'message': 'Projet soumis pour validation',
+            'statut_workflow': record.statut_workflow,
+            'statut_final': record.statut_final,
+        })
+
+
+# ================================================================== #
+#  2. DIRECTEUR RÉGION (valider / rejeter)
+# ================================================================== #
+# class ValiderDirecteurRegionView(APIView):
+#     """
+#     POST /recap/budget/valider/directeur-region/<id>/
+#     Condition : statut_workflow = soumis
+#                 OU statut_workflow = reserve_chef (retour de réserve)
+#                 OU statut_workflow = reserve_directeur (retour de réserve)
+#     Actions   : valider | rejeter
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsDirecteurRegion]
+
+#     STATUTS_AUTORISÉS = {
+#         'soumis',
+#         'reserve_chef',
+#         'reserve_directeur',
+#     }
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         action      = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'rejeter'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'rejeter'"},
+#                 status=400
+#             )
+
+#         if action == 'rejeter' and not commentaire:
+#             return Response({
+#                 'error': "Le commentaire est obligatoire pour un rejet"
+#             }, status=400)
+
+#         if record.statut_workflow not in self.STATUTS_AUTORISÉS:
+#             return Response({
+#                 'error': (
+#                     f"Statut '{record.statut_workflow}' non autorisé pour cette action. "
+#                     f"Statuts acceptés : {', '.join(self.STATUTS_AUTORISÉS)}"
+#                 )
+#             }, status=400)
+
+#         if action == 'valider':
+#             record.statut_final = 'valide_directeur_region'
+#             record.statut_workflow = None
+#             record.valide_par_directeur_region = request.user.nom_complet
+#             record.date_validation_directeur_region = timezone.now()
+#             record.commentaire_directeur_region = commentaire or None
+#             message = 'Projet validé par le directeur région'
+#         else:  # action == 'rejeter'
+#             record.statut_final = 'rejete_directeur_region'
+#             record.statut_workflow = None
+#             record.rejete_par_directeur_region = request.user.nom_complet
+#             record.date_rejet_directeur_region = timezone.now()
+#             record.motif_rejet_directeur_region = commentaire
+#             # Champs génériques pour compatibilité
+#             record.rejete_par = request.user.nom_complet
+#             record.date_rejet = timezone.now()
+#             record.motif_rejet = commentaire
+#             record.commentaire_directeur_region = commentaire
+#             message = 'Projet rejeté par le directeur région'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut_final': record.statut_final,
+#             'commentaire': commentaire
+#         })
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.utils import timezone
+
+class ValiderDirecteurRegionView(APIView):
+    """
+    POST /recap/budget/valider/directeur-region/<id>/
+
+    Autorisé si :
+        - statut_workflow = soumis
+        - OU statut_workflow = reserve_directeur
+        - OU statut_final = annule_divisionnaire
+        - OU statut_final = rejete_divisionnaire
+
+    Actions : valider | rejeter
+    """
+
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    # statuts workflow autorisés
+    ALLOWED_WORKFLOW = {
+        'soumis',
+        'reserve_directeur',
+    }
+
+    # statuts finaux autorisés
+    ALLOWED_FINAL = {
+        'annule_divisionnaire',
+        'rejete_divisionnaire',
+    }
+
+    def post(self, request, record_id):
+        record = get_record_or_404(record_id)
+
+        if not record:
+            return Response({'error': 'Projet introuvable'}, status=404)
+
+        action = request.data.get('action')
         commentaire = request.data.get('commentaire', '')
 
+        # validation action
         if action not in ('valider', 'rejeter'):
             return Response(
                 {'error': "action doit être 'valider' ou 'rejeter'"},
                 status=400
             )
 
-        # Vérification que le commentaire est présent pour un rejet
+        # commentaire obligatoire pour rejet
         if action == 'rejeter' and not commentaire:
-            return Response({
-                'error': "Le commentaire est obligatoire pour un rejet"
-            }, status=400)
+            return Response(
+                {'error': "Le commentaire est obligatoire pour un rejet"},
+                status=400
+            )
 
-        if record.statut not in self.STATUTS_AUTORISÉS:
+        # ==========================
+        # VALIDATION STATUTS
+        # ==========================
+
+        statut_workflow_ok = record.statut_workflow in self.ALLOWED_WORKFLOW
+        statut_final_ok = record.statut_final in self.ALLOWED_FINAL
+
+        if not (statut_workflow_ok or statut_final_ok):
             return Response({
                 'error': (
-                    f"Statut '{record.statut}' non autorisé pour cette action. "
-                    f"Statuts acceptés : {', '.join(self.STATUTS_AUTORISÉS)}"
+                    "Statut non autorisé pour le directeur région. "
+                    f"Workflow: {record.statut_workflow}, Final: {record.statut_final}"
                 )
             }, status=400)
 
+        # ==========================
+        # ACTION = VALIDER
+        # ==========================
         if action == 'valider':
-            record.statut                           = 'valide_directeur_region'
-            record.valide_par_directeur_region      = request.user.nom_complet
+            record.statut_final = 'valide_directeur_region'
+            record.statut_workflow = None
+
+            record.valide_par_directeur_region = request.user.nom_complet
             record.date_validation_directeur_region = timezone.now()
-            record.commentaire_directeur_region     = commentaire or None
+            record.commentaire_directeur_region = commentaire or None
+
             message = 'Projet validé par le directeur région'
-        else:  # action == 'rejeter'
-            record.statut                           = 'rejete'
-            record.rejete_par                       = request.user.nom_complet
-            record.date_rejet                       = timezone.now()
-            record.motif_rejet                      = commentaire
-            # ✅ AJOUT: Remplir aussi le commentaire_directeur_region
-            record.commentaire_directeur_region     = commentaire
+
+        # ==========================
+        # ACTION = REJETER
+        # ==========================
+        else:
+            record.statut_final = 'rejete_directeur_region'
+            record.statut_workflow = None
+
+            record.rejete_par_directeur_region = request.user.nom_complet
+            record.date_rejet_directeur_region = timezone.now()
+            record.motif_rejet_directeur_region = commentaire
+
+            # compatibilité champs génériques
+            record.rejete_par = request.user.nom_complet
+            record.date_rejet = timezone.now()
+            record.motif_rejet = commentaire
+            record.commentaire_directeur_region = commentaire
+
             message = 'Projet rejeté par le directeur région'
 
         record.save()
+
         return Response({
             'success': True,
             'message': message,
-            'statut':  record.statut,
-            'commentaire': commentaire  # Optionnel: retourner le commentaire
+            'statut_final': record.statut_final,
+            'statut_workflow': record.statut_workflow,
+            'commentaire': commentaire
         })
 
 # ================================================================== #
-#  3. AGENT  (valider / réserver)
+#  3. CHEF (pre_approuve / reserve)
 #     Voit : valide_directeur_region
-#     Ne peut PAS rejeter
 # ================================================================== #
-class ValiderAgentView(APIView):
+class ValiderChefView(APIView):
     """
-    POST /recap/budget/valider/agent/<id>/
-    Condition : statut = valide_directeur_region
-    Actions   : valider | reserver (avec commentaire obligatoire)
-    Réserver  → retourne au DR (statut = reserve_agent)
+    POST /recap/budget/valider/chef/<id>/
+    Condition : statut_final = valide_directeur_region
+    Actions   : pre_approuver | reserver (avec commentaire obligatoire pour reserve)
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsAgent]
+    permission_classes     = [IsChef]
 
     def post(self, request, record_id):
         record = get_record_or_404(record_id)
@@ -4368,17 +4687,17 @@ class ValiderAgentView(APIView):
         action      = request.data.get('action')
         commentaire = request.data.get('commentaire', '')
 
-        if action not in ('valider', 'reserver'):
+        if action not in ('pre_approuver', 'reserver'):
             return Response(
-                {'error': "action doit être 'valider' ou 'reserver'"},
+                {'error': "action doit être 'pre_approuver' ou 'reserver'"},
                 status=400
             )
 
-        if record.statut != 'valide_directeur_region':
+        if record.statut_final != 'valide_directeur_region':
             return Response({
                 'error': (
-                    f"Le projet doit être 'valide_directeur_region' "
-                    f"— statut actuel : '{record.statut}'"
+                    f"Le projet doit avoir statut_final='valide_directeur_region' "
+                    f"— statut actuel : '{record.statut_final}'"
                 )
             }, status=400)
 
@@ -4388,41 +4707,43 @@ class ValiderAgentView(APIView):
                 status=400
             )
 
-        if action == 'valider':
-            record.statut = 'valide_agent'
-            message       = 'Projet validé par l\'agent'
-        else:
-            # Réserver → retourne au DR avec commentaire
-            record.statut                           = 'reserve_agent'
-            record.commentaire_agent    = (
-                f"{commentaire}"
-            )
-            message = 'Projet réservé — retourné au directeur région'
+        if action == 'pre_approuver':
+            record.statut_workflow = 'pre_approuve_chef'
+            record.statut_final = None
+            record.preapprouve_par_chef = request.user.nom_complet
+            record.date_preapprouve_chef = timezone.now()
+            record.commentaire_preapprouve_chef = commentaire
+            message = 'Projet pré-approuvé par le chef'
+        else:  # action == 'reserver'
+            record.statut_workflow = 'reserve_chef'
+            record.statut_final = None
+            record.reserve_par_chef = request.user.nom_complet
+            record.date_reserve_chef = timezone.now()
+            record.commentaire_reserve_chef = commentaire
+            message = 'Projet réservé par le chef — retourné au directeur région'
 
         record.save()
         return Response({
             'success': True,
             'message': message,
-            'statut':  record.statut,
+            'statut_workflow': record.statut_workflow,
         })
 
 
 # ================================================================== #
-#  4. CHEF  (valider / réserver)
-#     Voit : valide_agent + reserve_agent
-#     Ne peut PAS rejeter
+#  4. DIRECTEUR NATIONAL (approuve / reserve)
+#     Voit : pre_approuve_chef, reserve_chef
 # ================================================================== #
-class ValiderChefView(APIView):
+class ValiderDirecteurView(APIView):
     """
-    POST /recap/budget/valider/chef/<id>/
-    Condition : statut = valide_agent OU reserve_agent
-    Actions   : valider | reserver (avec commentaire obligatoire)
-    Réserver  → retourne au DR (statut = reserve_chef)
+    POST /recap/budget/valider/directeur/<id>/
+    Condition : statut_workflow = pre_approuve_chef OU reserve_chef
+    Actions   : approuver | reserver (avec commentaire obligatoire pour reserve)
     """
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsChef]
+    permission_classes     = [IsDirecteur]
 
-    STATUTS_AUTORISÉS = {'valide_agent', 'reserve_agent'}
+    STATUTS_AUTORISÉS = {'pre_approuve_chef', 'reserve_chef'}
 
     def post(self, request, record_id):
         record = get_record_or_404(record_id)
@@ -4432,16 +4753,16 @@ class ValiderChefView(APIView):
         action      = request.data.get('action')
         commentaire = request.data.get('commentaire', '')
 
-        if action not in ('valider', 'reserver'):
+        if action not in ('approuver', 'reserver'):
             return Response(
-                {'error': "action doit être 'valider' ou 'reserver'"},
+                {'error': "action doit être 'approuver' ou 'reserver'"},
                 status=400
             )
 
-        if record.statut not in self.STATUTS_AUTORISÉS:
+        if record.statut_workflow not in self.STATUTS_AUTORISÉS:
             return Response({
                 'error': (
-                    f"Statut '{record.statut}' non autorisé. "
+                    f"Statut '{record.statut_workflow}' non autorisé. "
                     f"Acceptés : {', '.join(self.STATUTS_AUTORISÉS)}"
                 )
             }, status=400)
@@ -4452,98 +4773,38 @@ class ValiderChefView(APIView):
                 status=400
             )
 
-        if action == 'valider':
-            record.statut               = 'valide_chef'
-            record.valide_par_chef      = request.user.nom_complet
-            record.date_validation_chef = timezone.now()
-            record.commentaire_chef     = commentaire
-            message = 'Projet validé par le chef'
-        else:
-            record.statut           = 'reserve_chef'
-            record.commentaire_chef = f"{commentaire}"
-            message = 'Projet réservé — retourné au directeur région'
+        if action == 'approuver':
+            record.statut_workflow = 'approuve_directeur'
+            record.statut_final = None
+            record.approuve_par_directeur = request.user.nom_complet
+            record.date_approuve_directeur = timezone.now()
+            record.commentaire_approuve_directeur = commentaire
+            message = 'Projet approuvé par le directeur'
+        else:  # action == 'reserve'
+            record.statut_workflow = 'reserve_directeur'
+            record.statut_final = None
+            record.reserve_par_directeur = request.user.nom_complet
+            record.date_reserve_directeur = timezone.now()
+            record.commentaire_reserve_directeur = commentaire
+            message = 'Projet réservé par le directeur — retourné au directeur région'
 
         record.save()
         return Response({
             'success': True,
             'message': message,
-            'statut':  record.statut,
-        })
-
-
-
-# ================================================================== #
-#  5. DIRECTEUR  (valider / réserver)
-#     Condition : valide_chef
-#     Ne peut PAS rejeter
-# ================================================================== #
-class ValiderDirecteurView(APIView):
-    """
-    POST /recap/budget/valider/directeur/<id>/
-    Condition : statut = valide_chef
-    Actions   : valider | reserver (avec commentaire obligatoire)
-    Réserver  → retourne au DR (statut = reserve_directeur)
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes     = [IsDirecteur]
-
-    def post(self, request, record_id):
-        record = get_record_or_404(record_id)
-        if not record:
-            return Response({'error': 'Projet introuvable'}, status=404)
-
-        action      = request.data.get('action')
-        commentaire = request.data.get('commentaire', '')
-
-        if action not in ('valider', 'reserver'):
-            return Response(
-                {'error': "action doit être 'valider' ou 'reserver'"},
-                status=400
-            )
-
-        if record.statut != 'valide_chef':
-            return Response({
-                'error': (
-                    f"Le projet doit être 'valide_chef' "
-                    f"— statut actuel : '{record.statut}'"
-                )
-            }, status=400)
-
-        if action == 'reserver' and not commentaire:
-            return Response(
-                {'error': "Un commentaire est obligatoire pour réserver."},
-                status=400
-            )
-
-        if action == 'valider':
-            record.statut                    = 'valide_directeur'
-            record.valide_par_directeur      = request.user.nom_complet
-            record.date_validation_directeur = timezone.now()
-            record.commentaire_directeur     = commentaire
-            message = 'Projet validé par le directeur'
-        else:
-            record.statut                = 'reserve_directeur'
-            record.commentaire_directeur = f"[Réservé par directeur] {commentaire}"
-            message = 'Projet réservé — retourné au directeur région'
-
-        record.save()
-        return Response({
-            'success': True,
-            'message': message,
-            'statut':  record.statut,
+            'statut_workflow': record.statut_workflow,
         })
 
 
 # ================================================================== #
-#  6. DIVISIONNAIRE  (valider / rejeter)
-#     Condition : valide_directeur
-#     Seul à pouvoir rejeter après le DR
+#  5. DIVISIONNAIRE (valide / rejete / annule)
+#     Condition : approuve_directeur
 # ================================================================== #
-class ValiderDivisionnnaireView(APIView):
+class ValiderDivisionnaireView(APIView):
     """
     POST /recap/budget/valider/divisionnaire/<id>/
-    Condition : statut = valide_directeur
-    Actions   : valider | rejeter
+    Condition : statut_workflow = approuve_directeur
+    Actions   : valider | rejeter | annuler
     """
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes     = [IsDivisionnaire]
@@ -4556,49 +4817,72 @@ class ValiderDivisionnnaireView(APIView):
         action      = request.data.get('action')
         commentaire = request.data.get('commentaire', '')
 
-        if action not in ('valider', 'rejeter'):
+        if action not in ('valider', 'rejeter', 'annuler'):
             return Response(
-                {'error': "action doit être 'valider' ou 'rejeter'"},
+                {'error': "action doit être 'valider', 'rejeter' ou 'annuler'"},
                 status=400
             )
 
-        if record.statut != 'valide_directeur':
+        if record.statut_workflow != 'approuve_directeur':
             return Response({
                 'error': (
-                    f"Le projet doit être 'valide_directeur' "
-                    f"— statut actuel : '{record.statut}'"
+                    f"Le projet doit avoir statut_workflow='approuve_directeur' "
+                    f"— statut actuel : '{record.statut_workflow}'"
                 )
             }, status=400)
 
+        if action in ('rejeter', 'annuler') and not commentaire:
+            return Response({
+                'error': f"Un commentaire est obligatoire pour {action}."
+            }, status=400)
+
         if action == 'valider':
-            record.statut                        = 'valide_divisionnaire'
-            record.valide_par_divisionnaire      = request.user.nom_complet
+            record.statut_final = 'valide_divisionnaire'
+            record.statut_workflow = None
+            record.valide_par_divisionnaire = request.user.nom_complet
             record.date_validation_divisionnaire = timezone.now()
-            record.commentaire_divisionnaire     = commentaire
+            record.commentaire_divisionnaire = commentaire
             message = 'Projet validé par le divisionnaire — validation complète ✅'
-        else:
-            record.statut      = 'rejete'
-            record.rejete_par  = request.user.nom_complet
-            record.date_rejet  = timezone.now()
+        
+        elif action == 'rejeter':
+            record.statut_final = 'rejete_divisionnaire'
+            record.statut_workflow = None
+            record.rejete_par_divisionnaire = request.user.nom_complet
+            record.date_rejet_divisionnaire = timezone.now()
+            record.motif_rejet_divisionnaire = commentaire
+            # Champs génériques pour compatibilité
+            record.rejete_par = request.user.nom_complet
+            record.date_rejet = timezone.now()
             record.motif_rejet = commentaire
-            message = 'Projet rejeté par le divisionnaire'
+            message = 'Projet rejeté par le divisionnaire ❌'
+        
+        else:  # action == 'annuler'
+            record.statut_final = 'annule_divisionnaire'
+            record.statut_workflow = None
+            record.annule_par_divisionnaire = request.user.nom_complet
+            record.date_annulation_divisionnaire = timezone.now()
+            record.motif_annulation_divisionnaire = commentaire
+            message = 'Projet annulé par le divisionnaire 🚫'
 
         record.save()
         return Response({
             'success': True,
             'message': message,
-            'statut':  record.statut,
+            'statut_final': record.statut_final,
         })
 
-#validation par total:
+
+# ================================================================== #
+#  6. VALIDATION EN MASSE PAR DIVISIONNAIRE
+# ================================================================== #
 class ValiderTousProjetsDivisionnaireView(APIView):
     """
     GET  /recap/budget/valider/divisionnaire/tous/
-         → Retourne tous les projets 'valide_directeur' de l'année prochaine + leur total
+         → Retourne tous les projets 'approuve_directeur' de l'année prochaine
 
     POST /recap/budget/valider/divisionnaire/tous/
-         → action: 'valider' | 'rejeter'
-         → Change le statut de TOUS les projets 'valide_directeur' en masse
+         → action: 'valide' | 'rejete' | 'annule'
+         → Change le statut de TOUS les projets 'approuve_directeur' en masse
     """
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes     = [IsDivisionnaire]
@@ -4607,7 +4891,7 @@ class ValiderTousProjetsDivisionnaireView(APIView):
         next_year = datetime.now().year + 1
 
         projets = BudgetRecord.objects.filter(
-            statut='valide_directeur',
+            statut_workflow='approuve_directeur',
             annee_debut_pmt=next_year,
         )
 
@@ -4620,196 +4904,83 @@ class ValiderTousProjetsDivisionnaireView(APIView):
                 'message': f'Aucun projet à valider pour {next_year}',
             })
 
-        # Total de toutes les colonnes
         total = projets.aggregate(**build_aggregation())
-
-        serializer = BudgetRecordSerializer(
-            projets, many=True, context={'request': request}
-        )
+        serializer = BudgetRecordSerializer(projets, many=True, context={'request': request})
 
         return Response({
-            'success':    True,
-            'count':      projets.count(),
-            'annee':      next_year,
-            'projets':    serializer.data,
-            'total':      total,
+            'success': True,
+            'count': projets.count(),
+            'annee': next_year,
+            'projets': serializer.data,
+            'total': total,
         })
 
     def post(self, request):
-        next_year   = datetime.now().year + 1
-        action      = request.data.get('action')
+        next_year = datetime.now().year + 1
+        action = request.data.get('action')
         commentaire = request.data.get('commentaire', '')
 
-        if action not in ('valider', 'rejeter'):
+        if action not in ('valide', 'rejete', 'annule'):
             return Response(
-                {'error': "action doit être 'valider' ou 'rejeter'"},
+                {'error': "action doit être 'valide', 'rejete' ou 'annule'"},
                 status=400
             )
 
         projets = BudgetRecord.objects.filter(
-            statut='valide_directeur',
+            statut_workflow='approuve_directeur',
             annee_debut_pmt=next_year,
         )
 
         if not projets.exists():
             return Response({
-                'error': f'Aucun projet avec statut valide_directeur pour {next_year}',
+                'error': f'Aucun projet avec statut_workflow=approuve_directeur pour {next_year}',
             }, status=404)
 
         count = projets.count()
-        now   = timezone.now()
-        nom   = request.user.nom_complet
+        now = timezone.now()
+        nom = request.user.nom_complet
 
-        if action == 'valider':
+        if action == 'valide':
             projets.update(
-                statut                        = 'valide_divisionnaire',
-                valide_par_divisionnaire      = nom,
-                date_validation_divisionnaire = now,
-                commentaire_divisionnaire     = commentaire,
+                statut_final='valide_divisionnaire',
+                statut_workflow=None,
+                valide_par_divisionnaire=nom,
+                date_validation_divisionnaire=now,
+                commentaire_divisionnaire=commentaire,
             )
             message = f'{count} projet(s) validés par le divisionnaire ✅'
 
-        else:  # rejeter
+        elif action == 'rejete':
             projets.update(
-                statut     = 'rejete',
-                rejete_par  = nom,
-                date_rejet  = now,
-                motif_rejet = commentaire,
+                statut_final='rejete_divisionnaire',
+                statut_workflow=None,
+                rejete_par_divisionnaire=nom,
+                date_rejet_divisionnaire=now,
+                motif_rejet_divisionnaire=commentaire,
+                rejete_par=nom,
+                date_rejet=now,
+                motif_rejet=commentaire,
             )
             message = f'{count} projet(s) rejetés par le divisionnaire ❌'
+
+        else:  # annule
+            projets.update(
+                statut_final='annule_divisionnaire',
+                statut_workflow=None,
+                annule_par_divisionnaire=nom,
+                date_annulation_divisionnaire=now,
+                motif_annulation_divisionnaire=commentaire,
+            )
+            message = f'{count} projet(s) annulés par le divisionnaire 🚫'
 
         return Response({
             'success': True,
             'message': message,
-            'action':  action,
-            'count':   count,
-            'annee':   next_year,
+            'action': action,
+            'count': count,
+            'annee': next_year,
         })
-# ─────────────────────────────────────────
-# STATUT COMPLET DU WORKFLOW
-# ─────────────────────────────────────────
 
-class StatutValidationView(APIView):
-    """
-    GET /recap/budget/statut/<record_id>/
-    Retourne le statut complet du workflow de validation
-    Accessible par tous les rôles
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    # permission_classes = [IsAgent]
-
-    def get(self, request, record_id):
-        record = get_record_or_404(record_id)
-        if not record:
-            return Response({'error': 'Projet introuvable'}, status=404)
-
-        WORKFLOW = [
-            'brouillon',
-            'soumis',
-            'valide_directeur_region',
-            'valide_chef',
-            'valide_directeur',
-            'valide_divisionnaire',
-        ]
-
-        statut_actuel = record.statut
-        est_rejete    = statut_actuel == 'rejete'
-
-        if est_rejete:
-            progression = 0
-        else:
-            try:
-                etape_actuelle = WORKFLOW.index(statut_actuel)
-                progression    = round((etape_actuelle / (len(WORKFLOW) - 1)) * 100)
-            except ValueError:
-                progression = 0
-
-        etapes = [
-            {
-                'etape': 0, 'label': 'Création', 'role': 'responsable_structure',
-                'statut_cible': 'brouillon', 'fait': True,
-                'date': None, 'par': None, 'commentaire': None,
-            },
-            {
-                'etape': 1, 'label': 'Soumission', 'role': 'responsable_structure',
-                'statut_cible': 'soumis',
-                'fait': statut_actuel in (
-                    'soumis', 'valide_directeur_region', 'valide_chef',
-                    'valide_directeur', 'valide_divisionnaire'
-                ),
-                'date': None, 'par': None, 'commentaire': None,
-            },
-            {
-                'etape': 2, 'label': 'Validation Directeur Région', 'role': 'directeur_region',
-                'statut_cible': 'valide_directeur_region',
-                'fait': statut_actuel in (
-                    'valide_directeur_region', 'valide_chef',
-                    'valide_directeur', 'valide_divisionnaire'
-                ),
-                'date':        record.date_validation_directeur_region,
-                'par':         record.valide_par_directeur_region,
-                'commentaire': record.commentaire_directeur_region,
-            },
-            {
-                'etape': 3, 'label': 'Validation Chef', 'role': 'chef',
-                'statut_cible': 'valide_chef',
-                'fait': statut_actuel in ('valide_chef', 'valide_directeur', 'valide_divisionnaire'),
-                'date':        record.date_validation_chef,
-                'par':         record.valide_par_chef,
-                'commentaire': record.commentaire_chef,
-            },
-            {
-                'etape': 4, 'label': 'Validation Directeur', 'role': 'directeur',
-                'statut_cible': 'valide_directeur',
-                'fait': statut_actuel in ('valide_directeur', 'valide_divisionnaire'),
-                'date':        record.date_validation_directeur,
-                'par':         record.valide_par_directeur,
-                'commentaire': record.commentaire_directeur,
-            },
-            {
-                'etape': 5, 'label': 'Validation Divisionnaire', 'role': 'divisionnaire',
-                'statut_cible': 'valide_divisionnaire',
-                'fait': statut_actuel == 'valide_divisionnaire',
-                'date':        record.date_validation_divisionnaire,
-                'par':         record.valide_par_divisionnaire,
-                'commentaire': record.commentaire_divisionnaire,
-            },
-        ]
-
-        prochaine_etape = None
-        if not est_rejete and statut_actuel != 'valide_divisionnaire':
-            mapping_prochaine = {
-                'brouillon':               {'action': 'Soumettre',                  'role': 'responsable_structure', 'url': f'/recap/budget/soumettre/{record_id}/'},
-                'soumis':                  {'action': 'Valider (Directeur Région)', 'role': 'directeur_region',      'url': f'/recap/budget/valider/directeur-region/{record_id}/'},
-                'valide_directeur_region': {'action': 'Valider (Chef)',             'role': 'chef',                  'url': f'/recap/budget/valider/chef/{record_id}/'},
-                'valide_chef':             {'action': 'Valider (Directeur)',        'role': 'directeur',             'url': f'/recap/budget/valider/directeur/{record_id}/'},
-                'valide_directeur':        {'action': 'Valider (Divisionnaire)',    'role': 'divisionnaire',         'url': f'/recap/budget/valider/divisionnaire/{record_id}/'},
-            }
-            prochaine_etape = mapping_prochaine.get(statut_actuel)
-
-        return Response({
-            'success': True,
-            'projet': {
-                'id':            record.id,
-                'code_division': record.code_division,
-                'libelle':       record.libelle,
-                'region':        record.region,
-                'annee':         getattr(record, 'annee', None),
-            },
-            'validation': {
-                'statut_actuel':   statut_actuel,
-                'est_valide':      statut_actuel == 'valide_divisionnaire',
-                'est_rejete':      est_rejete,
-                'progression':     f"{progression}%",
-                'prochaine_etape': prochaine_etape,
-                'rejet': {
-                    'rejete_par': record.rejete_par,
-                    'date_rejet': record.date_rejet,
-                    'motif':      record.motif_rejet,
-                } if est_rejete else None,
-                'etapes': etapes,
-            }
-        })
 
 
 # ─────────────────────────────────────────
@@ -5733,7 +5904,7 @@ class ListeProjetsSoumisDRView(APIView):
         # ✅ Inclut TOUS les projets (is_active=True ou False)
         qs = BudgetRecord.objects.filter(
             region_id=region_id,
-            statut='soumis'
+            statut_workflow='soumis'
         ).order_by('-id')
 
         return Response({
@@ -5742,29 +5913,6 @@ class ListeProjetsSoumisDRView(APIView):
         })
 
 
-# class ListeProjetsValidesDRView(APIView):
-#     """
-#     GET /recap/budget/directeur-region/valides/
-#     Projets validés par DR (actifs + inactifs)
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsDirecteurRegion]
-
-#     def get(self, request):
-#         region_id = getattr(request.user, 'region_id', None)
-#         if not region_id:
-#             return Response({'error': 'region_id manquant'}, status=403)
-
-#         # ✅ Inclut TOUS les projets (is_active=True ou False)
-#         qs = BudgetRecord.objects.filter(
-#             region_id=region_id,
-#             statut='valide_directeur_region'
-#         ).order_by('-id')
-
-#         return Response({
-#             'count': qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data
-#         })
 
 class ListeProjetsValidesDRView(APIView):
     """
@@ -5800,35 +5948,12 @@ class ListeProjetsValidesDRView(APIView):
             'count': qs.count(),
             'projets': serializer.data
         })
-class ListeProjetsReserveAgentDRView(APIView):
+
+
+class ListeProjetsRejetesDRView(APIView):
     """
-    GET /recap/budget/directeur-region/reserve-agent/
-    Projets réservés par l'agent (actifs + inactifs)
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDirecteurRegion]
-
-    def get(self, request):
-        region_id = getattr(request.user, 'region_id', None)
-        if not region_id:
-            return Response({'error': 'region_id manquant'}, status=403)
-
-        # ✅ Inclut TOUS les projets (is_active=True ou False)
-        qs = BudgetRecord.objects.filter(
-            region_id=region_id,
-            statut='reserve_agent'
-        ).order_by('-id')
-
-        return Response({
-            'count': qs.count(),
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-class ListeProjetsReserveChefDRView(APIView):
-    """
-    GET /recap/budget/directeur-region/reserve-chef/
-    Projets réservés par le chef (actifs + inactifs)
+    GET /recap/budget/directeur-region/rejetes/
+    Projets rejetés (actifs + inactifs)
     """
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsDirecteurRegion]
@@ -5841,7 +5966,7 @@ class ListeProjetsReserveChefDRView(APIView):
         # ✅ Inclut TOUS les projets (is_active=True ou False)
         qs = BudgetRecord.objects.filter(
             region_id=region_id,
-            statut='reserve_chef'
+            statut_final='rejete_directeur_region'
         ).order_by('-id')
 
         return Response({
@@ -5866,7 +5991,7 @@ class ListeProjetsReserveDirecteurDRView(APIView):
         # ✅ Inclut TOUS les projets (is_active=True ou False)
         qs = BudgetRecord.objects.filter(
             region_id=region_id,
-            statut='reserve_directeur'
+            statut_workflow='reserve_directeur'
         ).order_by('-id')
 
         return Response({
@@ -5880,69 +6005,147 @@ class ListeProjetsTousDRView(APIView):
     GET /recap/budget/directeur-region/tous/
     Tous les projets de la région (actifs + inactifs)
     """
+
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsDirecteurRegion]
 
-    STATUTS_INCLUS = [
-        'soumis',
-        'reserve_agent',
-        'reserve_chef',
+    ALLOWED_WORKFLOW = [
         'reserve_directeur',
-        'valide_directeur_region',
-        'valide_agent',
-        'valide_chef',
-        'valide_directeur',
+    ]
+
+    ALLOWED_FINAL = [
         'valide_divisionnaire',
-        'rejete',
-        'brouillon'
+        'rejete_divisionnaire',
+        'annule_divisionnaire',
+        'valide_directeur_region',
+        'rejete_directeur_region',
     ]
 
     def get(self, request):
         region_id = getattr(request.user, 'region_id', None)
+
         if not region_id:
             return Response({'error': 'region_id manquant'}, status=403)
 
-        # ✅ Inclut TOUS les projets (is_active=True ou False)
-        qs = BudgetRecord.objects.filter(
-            region_id=region_id,
-            statut__in=self.STATUTS_INCLUS
-        ).order_by('-id')
+        from django.db.models import Q
 
-        from django.db.models import Count
-        compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
-        }
-
-        return Response({
-            'count': qs.count(),
-            'compteurs_par_statut': compteurs,
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-class ListeProjetsHistoriqueDRView(APIView):
-    """
-    GET /recap/budget/directeur-region/historique/
-    TOUS les projets sans filtre de statut (actifs + inactifs)
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDirecteurRegion]
-
-    def get(self, request):
-        region_id = getattr(request.user, 'region_id', None)
-        if not region_id:
-            return Response({'error': 'region_id manquant'}, status=403)
-
-        # ✅ Inclut TOUS les projets, TOUS les statuts, is_active=True ou False
         qs = BudgetRecord.objects.filter(
             region_id=region_id
+        ).filter(
+            Q(statut_workflow__in=self.ALLOWED_WORKFLOW) |
+            Q(statut_final__in=self.ALLOWED_FINAL)
         ).order_by('-id')
 
         from django.db.models import Count
+
         compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
+            item['statut_workflow'] or item['statut_final']: item['total']
+            for item in qs.values('statut_workflow', 'statut_final')
+            .annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'compteurs_par_statut': compteurs,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+    
+class ListeProjetsValideDivisionnaireView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut_final='valide_divisionnaire'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+class ListeProjetsRejeteDivisionnaireView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut_final='rejete_divisionnaire'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+class ListeProjetsAnnuleDivisionnaireView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id,
+            statut_final='annule_divisionnaire'
+        ).order_by('-id')
+
+        return Response({
+            'count': qs.count(),
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+class ListeProjetsrevoirDRView(APIView):
+    """
+    GET /recap/budget/directeur-region/revoir/
+    Tous les projets de la région (actifs + inactifs)
+    """
+
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsDirecteurRegion]
+
+    ALLOWED_WORKFLOW = [
+        'reserve_directeur',
+    ]
+
+    ALLOWED_FINAL = [
+        'rejete_divisionnaire',
+        'annule_divisionnaire',
+    ]
+
+    def get(self, request):
+        region_id = getattr(request.user, 'region_id', None)
+
+        if not region_id:
+            return Response({'error': 'region_id manquant'}, status=403)
+
+        from django.db.models import Q
+
+        qs = BudgetRecord.objects.filter(
+            region_id=region_id
+        ).filter(
+            Q(statut_workflow__in=self.ALLOWED_WORKFLOW) |
+            Q(statut_final__in=self.ALLOWED_FINAL)
+        ).order_by('-id')
+
+        from django.db.models import Count
+
+        compteurs = {
+            item['statut_workflow'] or item['statut_final']: item['total']
+            for item in qs.values('statut_workflow', 'statut_final')
+            .annotate(total=Count('id'))
         }
 
         return Response({
@@ -5951,138 +6154,23 @@ class ListeProjetsHistoriqueDRView(APIView):
             'projets': BudgetRecordSerializer(qs, many=True).data
         })
 
-
-class ListeProjetsRejetesDRView(APIView):
-    """
-    GET /recap/budget/directeur-region/rejetes/
-    Projets rejetés (actifs + inactifs)
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDirecteurRegion]
-
-    def get(self, request):
-        region_id = getattr(request.user, 'region_id', None)
-        if not region_id:
-            return Response({'error': 'region_id manquant'}, status=403)
-
-        # ✅ Inclut TOUS les projets (is_active=True ou False)
-        qs = BudgetRecord.objects.filter(
-            region_id=region_id,
-            statut='rejete'
-        ).order_by('-id')
-
-        return Response({
-            'count': qs.count(),
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-class ListeProjetsBrouillonDRView(APIView):
-    """
-    GET /recap/budget/directeur-region/brouillon/
-    Projets en brouillon (actifs + inactifs)
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDirecteurRegion]
-
-    def get(self, request):
-        region_id = getattr(request.user, 'region_id', None)
-        if not region_id:
-            return Response({'error': 'region_id manquant'}, status=403)
-
-        # ✅ Inclut TOUS les projets (is_active=True ou False)
-        qs = BudgetRecord.objects.filter(
-            region_id=region_id,
-            statut='brouillon'
-        ).order_by('-id')
-
-        return Response({
-            'count': qs.count(),
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-# # ================================================================== #
-# #  AGENT
-# #  Pas de filtre auto par structure/région
-# #  Voit tous les projets valide_directeur_region
-# # ================================================================== #
-# class ListeProjetsAgentView(APIView):
+# class ListeProjetsHistoriqueDRView(APIView):
 #     """
-#     GET /recap/budget/projets/agent/
-#     ?type_projet=nouveau|en_cours
-#     ?code_division=PROJ001
+#     GET /recap/budget/directeur-region/historique/
+#     TOUS les projets sans filtre de statut (actifs + inactifs)
 #     """
 #     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes     = [IsAgent]
+#     permission_classes = [IsDirecteurRegion]
 
 #     def get(self, request):
+#         region_id = getattr(request.user, 'region_id', None)
+#         if not region_id:
+#             return Response({'error': 'region_id manquant'}, status=403)
+
+#         # ✅ Inclut TOUS les projets, TOUS les statuts, is_active=True ou False
 #         qs = BudgetRecord.objects.filter(
-#             statut='valide_directeur_region',
-#             is_active=True,
-#         )
-
-#         type_projet   = request.query_params.get('type_projet')
-#         code_division = request.query_params.get('code_division')
-
-#         if type_projet:
-#             qs = qs.filter(type_projet=type_projet)
-#         if code_division:
-#             qs = qs.filter(code_division__icontains=code_division)
-
-#         qs = qs.order_by('-id')
-
-#         return Response({
-#             'count':   qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data,
-#         })
-
-
-# # ================================================================== #
-# #  CHEF
-# #  Pas de filtre auto par structure/région
-# #  Voit valide_agent + reserve_agent
-# # ================================================================== #
-# class ListeProjetsChefView(APIView):
-#     """
-#     GET /recap/budget/projets/chef/
-#     ?statut=valide_agent|reserve_agent|tous
-#     ?type_projet=nouveau|en_cours
-#     ?code_division=PROJ001
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes     = [IsChef]
-
-#     STATUTS_PAR_DEFAUT = ['valide_agent', 'reserve_agent']
-
-#     def get(self, request):
-#         qs = BudgetRecord.objects.filter(
-#             is_active=True,
-#         )
-
-#         statut        = request.query_params.get('statut')
-#         type_projet   = request.query_params.get('type_projet')
-#         code_division = request.query_params.get('code_division')
-
-#         if statut and statut != 'tous':
-#             if statut not in self.STATUTS_PAR_DEFAUT:
-#                 return Response(
-#                     {
-#                         'error': (
-#                             f"Statut '{statut}' non autorisé. "
-#                             f"Acceptés : {', '.join(self.STATUTS_PAR_DEFAUT)}"
-#                         )
-#                     },
-#                     status=400
-#                 )
-#             qs = qs.filter(statut=statut)
-#         else:
-#             qs = qs.filter(statut__in=self.STATUTS_PAR_DEFAUT)
-
-#         if type_projet:
-#             qs = qs.filter(type_projet=type_projet)
-#         if code_division:
-#             qs = qs.filter(code_division__icontains=code_division)
-
-#         qs = qs.order_by('-id')
+#             region_id=region_id
+#         ).order_by('-id')
 
 #         from django.db.models import Count
 #         compteurs = {
@@ -6091,379 +6179,114 @@ class ListeProjetsBrouillonDRView(APIView):
 #         }
 
 #         return Response({
-#             'count':                qs.count(),
+#             'count': qs.count(),
 #             'compteurs_par_statut': compteurs,
-#             'projets':              BudgetRecordSerializer(qs, many=True).data,
+#             'projets': BudgetRecordSerializer(qs, many=True).data
 #         })
 
 
 
 
 
-# ================================================================== #
-#  AGENT gets
-# ================================================================== #
-# class ListeProjetsAgentView(APIView):
+# class ListeProjetsBrouillonDRView(APIView):
+#     """
+#     GET /recap/budget/directeur-region/brouillon/
+#     Projets en brouillon (actifs + inactifs)
+#     """
 #     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes     = [IsAgent]
-
-#     # ✅ Tous les statuts que l'agent doit voir
-#     STATUTS_AGENT = [
-#         'valide_directeur_region',  # projets à saisir
-#         'reserve_agent',            # projets retournés par le chef
-#     ]
+#     permission_classes = [IsDirecteurRegion]
 
 #     def get(self, request):
+#         region_id = getattr(request.user, 'region_id', None)
+#         if not region_id:
+#             return Response({'error': 'region_id manquant'}, status=403)
+
+#         # ✅ Inclut TOUS les projets (is_active=True ou False)
 #         qs = BudgetRecord.objects.filter(
-#             statut__in=self.STATUTS_AGENT,  # ✅ était: statut='valide_directeur_region'
-#             is_active=True,
-#         )
-
-#         type_projet   = request.query_params.get('type_projet')
-#         code_division = request.query_params.get('code_division')
-
-#         if type_projet:
-#             qs = qs.filter(type_projet=type_projet)
-#         if code_division:
-#             qs = qs.filter(code_division__icontains=code_division)
-
-#         qs = qs.order_by('-id')
+#             region_id=region_id,
+#             statut='brouillon'
+#         ).order_by('-id')
 
 #         return Response({
-#             'count':   qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data,
+#             'count': qs.count(),
+#             'projets': BudgetRecordSerializer(qs, many=True).data
 #         })
-# ================================================================== #
-#  AGENT - LISTES SPÉCIFIQUES
-# ================================================================== #
-
-class ListeProjetsAgentValidesDRView(APIView):
-    """
-    GET /recap/budget/agent/valides-dr/
-    Projets validés par DR (à saisir par l'agent)
-    Inclut actifs + inactifs
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAgent]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.filter(
-            statut='valide_directeur_region'
-        ).order_by('-id')
-
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        return Response({
-            'count': qs.count(),
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-class ListeProjetsAgentReserveView(APIView):
-    """
-    GET /recap/budget/agent/reserve/
-    Projets réservés par l'agent (retournés par le chef)
-    Inclut actifs + inactifs
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAgent]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.filter(
-            statut='reserve_agent'
-        ).order_by('-id')
-
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        return Response({
-            'count': qs.count(),
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-class ListeProjetsAgentValidesView(APIView):
-    """
-    GET /recap/budget/agent/valides/
-    Projets déjà validés par l'agent
-    Inclut actifs + inactifs
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAgent]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.filter(
-            statut='valide_agent'
-        ).order_by('-id')
-
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        return Response({
-            'count': qs.count(),
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-class ListeProjetsAgentTousView(APIView):
-    """
-    GET /recap/budget/agent/tous/
-    Tous les projets de l'agent (valides DR + réservés + valides agent)
-    Inclut actifs + inactifs
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAgent]
-
-    STATUTS_AGENT = [
-        'valide_directeur_region',  # projets à saisir
-        'reserve_agent',            # projets retournés par le chef
-        'valide_agent',             # projets déjà validés par l'agent
-    ]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.filter(
-            statut__in=self.STATUTS_AGENT
-        ).order_by('-id')
-
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        from django.db.models import Count
-        compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
-        }
-
-        return Response({
-            'count': qs.count(),
-            'compteurs_par_statut': compteurs,
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-class ListeProjetsAgentHistoriqueView(APIView):
-    """
-    GET /recap/budget/agent/historique/
-    TOUS les projets (tous statuts) pour historique
-    Inclut actifs + inactifs
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAgent]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.all().order_by('-id')
-
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        from django.db.models import Count
-        compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
-        }
-
-        return Response({
-            'count': qs.count(),
-            'compteurs_par_statut': compteurs,
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
 
 # ================================================================== #
 #  CHEF les gets 
 # ================================================================== #
 
-# ================================================================== #
-#  CHEF - LISTES SPÉCIFIQUES
-# ================================================================== #
 
-# class ListeProjetsChefValidesAgentView(APIView):
-#     """
-#     GET /recap/budget/chef/valides-agent/
-#     Projets validés par l'agent (à valider par le chef)
-#     Inclut actifs + inactifs
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsChef]
-
-#     def get(self, request):
-#         qs = BudgetRecord.objects.filter(
-#             statut='valide_agent'
-#         ).order_by('-id')
-
-#         type_projet = request.query_params.get('type_projet')
-#         code_division = request.query_params.get('code_division')
-
-#         if type_projet:
-#             qs = qs.filter(type_projet=type_projet)
-#         if code_division:
-#             qs = qs.filter(code_division__icontains=code_division)
-
-#         return Response({
-#             'count': qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data
-#         })
-
-
-# class ListeProjetsChefReserveAgentView(APIView):
-#     """
-#     GET /recap/budget/chef/reserve-agent/
-#     Projets réservés par l'agent (retournés au chef pour révision)
-#     Inclut actifs + inactifs
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsChef]
-
-#     def get(self, request):
-#         qs = BudgetRecord.objects.filter(
-#             statut='reserve_agent'
-#         ).order_by('-id')
-
-#         type_projet = request.query_params.get('type_projet')
-#         code_division = request.query_params.get('code_division')
-
-#         if type_projet:
-#             qs = qs.filter(type_projet=type_projet)
-#         if code_division:
-#             qs = qs.filter(code_division__icontains=code_division)
-
-#         return Response({
-#             'count': qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data
-#         })
 
 class ListeProjetsChefView(APIView):
     """
-    GET /recap/budget/chef/projets/
-    
-    Récupère TOUS les projets de l'agent:
-        - statut = 'valide_agent' (validés par l'agent)
-        - statut = 'reserve_agent' (réservés/retournés par l'agent)
-    
-    Sans aucun paramètre obligatoire
+    GET /recap/budget/chef/valider-DR/
+
+    Récupère uniquement les projets validés par le directeur région
     """
+
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsChef]
 
     def get(self, request):
-        # Récupérer TOUS les projets validés ou réservés par l'agent
         qs = BudgetRecord.objects.filter(
-            statut__in=['valide_agent', 'reserve_agent']
+            statut_final='valide_directeur_region'
         ).order_by('-id')
-        
-        # Sérialisation
+
         serializer = BudgetRecordSerializer(
-            qs, 
-            many=True, 
+            qs,
+            many=True,
             context={'request': request}
         )
-        
+
         return Response({
             'success': True,
             'count': qs.count(),
             'projets': serializer.data
         })
-# class ListeProjetsChefValidesView(APIView):
-#     """
-#     GET /recap/budget/chef/valides/
-#     Projets déjà validés par le chef
-#     Inclut actifs + inactifs
-#     """
-#     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes = [IsChef]
 
-#     def get(self, request):
-#         qs = BudgetRecord.objects.filter(
-#             statut='valide_chef'
-#         ).order_by('-id')
-
-#         type_projet = request.query_params.get('type_projet')
-#         code_division = request.query_params.get('code_division')
-
-#         if type_projet:
-#             qs = qs.filter(type_projet=type_projet)
-#         if code_division:
-#             qs = qs.filter(code_division__icontains=code_division)
-
-#         return Response({
-#             'count': qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data
-#         })
 class ListeProjetsChefValidesView(APIView):
     """
-    GET /recap/budget/chef/valides/
-    
-    Projets déjà validés par le chef (historique complet)
-    Filtre sur valide_par_chef NOT NULL (indépendant du statut actuel)
-    Inclut actifs + inactifs
+    GET /recap/budget/chef/pre_approuve/
+    Projets déjà pré-approuvés par le chef
     """
+
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsChef]
 
     def get(self, request):
-        # ✅ Filtre sur le champ de validation, pas sur le statut
+
         qs = BudgetRecord.objects.filter(
-            valide_par_chef__isnull=False  # ← La clé !
-        ).order_by('-date_validation_chef')  # Tri par date de validation
-        
-        # Filtres optionnels
+            preapprouve_par_chef__isnull=False
+        ).order_by('-date_preapprouve_chef')  # ✅ FIX ICI
+
+        # filtres optionnels
         type_projet = request.query_params.get('type_projet')
         code_division = request.query_params.get('code_division')
-        
+
         if type_projet:
             qs = qs.filter(type_projet=type_projet)
+
         if code_division:
             qs = qs.filter(code_division__icontains=code_division)
-        
-        # Sérialisation avec contexte
+
         serializer = BudgetRecordSerializer(
-            qs, 
-            many=True, 
+            qs,
+            many=True,
             context={'request': request}
         )
-        
-        # Statistiques optionnelles
+
         stats = {
             'total': qs.count(),
-            'par_statut_actuel': {
-                'valide_directeur_region': qs.filter(statut='valide_directeur_region').count(),
-                'valide_chef': qs.filter(statut='valide_chef').count(),
-                'valide_directeur_national': qs.filter(statut='valide_directeur_national').count(),
-                'rejete': qs.filter(statut='rejete').count(),
-                'autres': qs.exclude(statut__in=[
-                    'valide_directeur_region', 
-                    'valide_chef', 
-                    'valide_directeur_national',
-                    'rejete'
-                ]).count()
-            }
+            # 'par_statut_final': {
+            #     'valide_directeur_region': qs.filter(statut_final='valide_directeur_region').count(),
+            #     'rejete_directeur_region': qs.filter(statut_final='rejete_directeur_region').count(),
+            #     'valide_divisionnaire': qs.filter(statut_final='valide_divisionnaire').count(),
+            #     'rejete_divisionnaire': qs.filter(statut_final='rejete_divisionnaire').count(),
+            #     'annule_divisionnaire': qs.filter(statut_final='annule_divisionnaire').count(),
+            # }
         }
-        
+
         return Response({
             'success': True,
             'stats': stats,
@@ -6482,7 +6305,7 @@ class ListeProjetsChefReserveChefView(APIView):
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
-            statut='reserve_chef'
+            statut_workflow='reserve_chef'
         ).order_by('-id')
 
         type_projet = request.query_params.get('type_projet')
@@ -6502,118 +6325,83 @@ class ListeProjetsChefReserveChefView(APIView):
 class ListeProjetsChefTousView(APIView):
     """
     GET /recap/budget/chef/tous/
-    Tous les projets du chef (valides agent + réservés agent + valides chef + réservés chef)
-    Inclut actifs + inactifs
+
+    Affiche uniquement :
+    - pré-approuvés chef
+    - réservés chef
+    - validés directeur région
     """
+
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsChef]
 
-    STATUTS_CHEF = [
-        'valide_agent',     # projets à valider
-        'reserve_agent',    # projets réservés par agent
-        'valide_chef',      # projets déjà validés par chef
-        'reserve_chef',     # projets réservés par chef
-    ]
-
     def get(self, request):
+
         qs = BudgetRecord.objects.filter(
-            statut__in=self.STATUTS_CHEF
-        ).order_by('-id')
+            # 🔵 chef actions
+            # preapprouve_par_chef__isnull=False
+            statut_workflow='pre_approuve_chef'
+        ) | BudgetRecord.objects.filter(
+            # reserve_par_chef__isnull=False
+            statut_workflow='reserve_chef'
+        ) | BudgetRecord.objects.filter(
+            statut_final='valide_directeur_region'
+        )
 
+        qs = qs.distinct().order_by('-id')
+
+        # filtres optionnels
         type_projet = request.query_params.get('type_projet')
         code_division = request.query_params.get('code_division')
 
         if type_projet:
             qs = qs.filter(type_projet=type_projet)
+
         if code_division:
             qs = qs.filter(code_division__icontains=code_division)
 
-        from django.db.models import Count
-        compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
+        # 📊 stats propres
+        stats = {
+            "total": qs.count(),
+
+            "preapprouves_chef": qs.filter(preapprouve_par_chef__isnull=False).count(),
+            "reserves_chef": qs.filter(reserve_par_chef__isnull=False).count(),
+            "valide_directeur_region": qs.filter(statut_final='valide_directeur_region').count(),
         }
 
+        serializer = BudgetRecordSerializer(
+            qs,
+            many=True,
+            context={'request': request}
+        )
+
         return Response({
-            'count': qs.count(),
-            'compteurs_par_statut': compteurs,
-            'projets': BudgetRecordSerializer(qs, many=True).data
+            "success": True,
+            "stats": stats,
+            "count": qs.count(),
+            "projets": serializer.data
         })
 
 
-class ListeProjetsChefHistoriqueView(APIView):
-    """
-    GET /recap/budget/chef/historique/
-    TOUS les projets (tous statuts) pour historique
-    Inclut actifs + inactifs
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsChef]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.all().order_by('-id')
-
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        from django.db.models import Count
-        compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
-        }
-
-        return Response({
-            'count': qs.count(),
-            'compteurs_par_statut': compteurs,
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-
-
-# class ListeProjetsChefView(APIView):
+# class ListeProjetsChefHistoriqueView(APIView):
+#     """
+#     GET /recap/budget/chef/historique/
+#     TOUS les projets (tous statuts) pour historique
+#     Inclut actifs + inactifs
+#     """
 #     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes     = [IsChef]
-
-#     # ✅ Inclure valide_chef pour que le chef voie ses projets déjà validés
-#     STATUTS_PAR_DEFAUT = ['valide_agent', 'reserve_agent', 'valide_chef', 'reserve_chef']
-
-#     # Statuts filtrables via ?statut=
-#     STATUTS_AUTORISÉS  = {'valide_agent', 'reserve_agent', 'valide_chef', 'reserve_chef'}
+#     permission_classes = [IsChef]
 
 #     def get(self, request):
-#         qs = BudgetRecord.objects.filter(is_active=True)
+#         qs = BudgetRecord.objects.all().order_by('-id')
 
-#         statut        = request.query_params.get('statut')
-#         type_projet   = request.query_params.get('type_projet')
+#         type_projet = request.query_params.get('type_projet')
 #         code_division = request.query_params.get('code_division')
-
-#         if statut and statut != 'tous':
-#             if statut not in self.STATUTS_AUTORISÉS:  # ✅ vérifie dans le bon set
-#                 return Response(
-#                     {
-#                         'error': (
-#                             f"Statut '{statut}' non autorisé. "
-#                             f"Acceptés : {', '.join(sorted(self.STATUTS_AUTORISÉS))}"
-#                         )
-#                     },
-#                     status=400
-#                 )
-#             qs = qs.filter(statut=statut)
-#         else:
-#             qs = qs.filter(statut__in=self.STATUTS_PAR_DEFAUT)  # ✅ couvre valide_chef
 
 #         if type_projet:
 #             qs = qs.filter(type_projet=type_projet)
 #         if code_division:
 #             qs = qs.filter(code_division__icontains=code_division)
-
-#         qs = qs.order_by('-id')
 
 #         from django.db.models import Count
 #         compteurs = {
@@ -6622,19 +6410,10 @@ class ListeProjetsChefHistoriqueView(APIView):
 #         }
 
 #         return Response({
-#             'count':                qs.count(),
+#             'count': qs.count(),
 #             'compteurs_par_statut': compteurs,
-#             'projets':              BudgetRecordSerializer(qs, many=True).data,
+#             'projets': BudgetRecordSerializer(qs, many=True).data
 #         })
-
-# ================================================================== #
-#  DIRECTEUR
-#  Pas de filtre auto par structure/région
-#  Voit valide_chef
-# ================================================================== #
-
-
-
 
 
 
@@ -6707,8 +6486,8 @@ class ListeProjetsDirecteurView(APIView):
     GET /recap/budget/directeur/projets/
     
     Récupère TOUS les projets:
-        - statut = 'valide_chef' (validés par le chef)
-        - statut = 'reserve_chef' (réservés par le chef)
+        - statut_workflow = 'pre_approuve_chef' (pre_approuve par le chef)
+        - statut_workflow = 'reserve_chef' (réservés par le chef)
     """
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsDirecteur]
@@ -6716,7 +6495,7 @@ class ListeProjetsDirecteurView(APIView):
     def get(self, request):
         # Tous les projets (validés + réservés par le chef)
         qs = BudgetRecord.objects.filter(
-            statut__in=['valide_chef', 'reserve_chef']
+            statut_workflow__in=['pre_approuve_chef', 'reserve_chef']
         ).order_by('-id')
         
         # Filtres optionnels
@@ -6731,8 +6510,8 @@ class ListeProjetsDirecteurView(APIView):
         # Statistiques
         stats = {
             'total': qs.count(),
-            'valides_chef': qs.filter(statut='valide_chef').count(),
-            'reserve_chef': qs.filter(statut='reserve_chef').count(),
+            'pre_approuve_chef': qs.filter(statut_workflow='pre_approuve_chef').count(),
+            'reserve_chef': qs.filter(statut_workflow='reserve_chef').count(),
         }
         
         # Sérialisation
@@ -6748,83 +6527,107 @@ class ListeProjetsDirecteurView(APIView):
             'count': qs.count(),
             'projets': serializer.data
         })
+
 # class ListeProjetsDirecteurValidesView(APIView):
 #     """
 #     GET /recap/budget/directeur/valides/
-#     Projets déjà validés par le directeur
+    
+#     Projets déjà validés par le directeur (historique complet)
+#     Filtre sur valide_par_directeur NOT NULL (indépendant du statut actuel)
 #     Inclut actifs + inactifs
 #     """
 #     authentication_classes = [RemoteJWTAuthentication]
 #     permission_classes = [IsDirecteur]
 
 #     def get(self, request):
+#         # ✅ Filtre sur le champ de validation, pas sur le statut
 #         qs = BudgetRecord.objects.filter(
-#             statut='valide_directeur'
-#         ).order_by('-id')
-
+#             approuve_par_directeur__isnull=False  # ← La clé !
+#         ).order_by('-date_approuve_directeur')  # Tri par date de validation
+        
+#         # Filtres optionnels
 #         type_projet = request.query_params.get('type_projet')
 #         code_division = request.query_params.get('code_division')
-
+        
 #         if type_projet:
 #             qs = qs.filter(type_projet=type_projet)
 #         if code_division:
 #             qs = qs.filter(code_division__icontains=code_division)
-
+        
+#         # Statistiques optionnelles
+#         stats = {
+#             'total': qs.count(),
+#             'par_statut_actuel': {
+#                 # 'valide_divisionnaire': qs.filter(statut='valide_divisionnaire').count(),
+#                 'approuve_directeur': qs.filter(statut_workflow='approuve_directeur').count(),
+#                 'rejete': qs.filter(statut='rejete').count(),
+    
+#             }
+#         }
+        
+#         # Sérialisation
+#         serializer = BudgetRecordSerializer(
+#             qs, 
+#             many=True, 
+#             context={'request': request}
+#         )
+        
 #         return Response({
+#             'success': True,
+#             'stats': stats,
 #             'count': qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data
+#             'projets': serializer.data
 #         })
 class ListeProjetsDirecteurValidesView(APIView):
     """
     GET /recap/budget/directeur/valides/
-    
-    Projets déjà validés par le directeur (historique complet)
-    Filtre sur valide_par_directeur NOT NULL (indépendant du statut actuel)
-    Inclut actifs + inactifs
+    Historique des projets approuvés par le directeur
     """
+
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsDirecteur]
 
     def get(self, request):
-        # ✅ Filtre sur le champ de validation, pas sur le statut
+
         qs = BudgetRecord.objects.filter(
-            valide_par_directeur__isnull=False  # ← La clé !
-        ).order_by('-date_validation_directeur')  # Tri par date de validation
-        
-        # Filtres optionnels
+            approuve_par_directeur__isnull=False
+        ).order_by('-date_approuve_directeur')
+
+        # filtres optionnels
         type_projet = request.query_params.get('type_projet')
         code_division = request.query_params.get('code_division')
-        
+
         if type_projet:
             qs = qs.filter(type_projet=type_projet)
+
         if code_division:
             qs = qs.filter(code_division__icontains=code_division)
-        
-        # Statistiques optionnelles
+
+        # ✅ STATS CORRIGÉES
         stats = {
-            'total': qs.count(),
-            'par_statut_actuel': {
-                'valide_divisionnaire': qs.filter(statut='valide_divisionnaire').count(),
-                'valide_directeur': qs.filter(statut='valide_directeur').count(),
-                'rejete': qs.filter(statut='rejete').count(),
-    
-            }
+            "total": qs.count(),
+
+            "approuves_directeur": qs.filter(approuve_par_directeur__isnull=False).count(),
+
+            # "reserves_directeur": qs.filter(reserve_par_directeur__isnull=False).count(),
+
+            # "valide_directeur_region": qs.filter(statut_final='valide_directeur_region').count(),
+
+            # "rejete_directeur_region": qs.filter(statut_final='rejete_directeur_region').count(),
         }
-        
-        # Sérialisation
+
         serializer = BudgetRecordSerializer(
-            qs, 
-            many=True, 
+            qs,
+            many=True,
             context={'request': request}
         )
-        
-        return Response({
-            'success': True,
-            'stats': stats,
-            'count': qs.count(),
-            'projets': serializer.data
-        })
 
+        return Response({
+            "success": True,
+            "stats": stats,
+            "count": qs.count(),
+            "projets": serializer.data
+        })
 class ListeProjetsDirecteurReserveDirecteurView(APIView):
     """
     GET /recap/budget/directeur/reserve-directeur/
@@ -6836,7 +6639,7 @@ class ListeProjetsDirecteurReserveDirecteurView(APIView):
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
-            statut='reserve_directeur'
+            statut_workflow='reserve_directeur'
         ).order_by('-id')
 
         type_projet = request.query_params.get('type_projet')
@@ -6863,15 +6666,15 @@ class ListeProjetsDirecteurTousView(APIView):
     permission_classes = [IsDirecteur]
 
     STATUTS_DIRECTEUR = [
-        'valide_chef',          # projets à valider
-        'reserve_chef',         # projets réservés par chef
-        'valide_directeur',     # projets déjà validés par directeur
+        # 'pre_approuve_chef',          # projets à valider
+        # 'reserve_chef',         # projets réservés par chef
+        'approuve_directeur',     # projets déjà validés par directeur
         'reserve_directeur',    # projets réservés par directeur
     ]
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
-            statut__in=self.STATUTS_DIRECTEUR
+            statut_workflow__in=self.STATUTS_DIRECTEUR
         ).order_by('-id')
 
         type_projet = request.query_params.get('type_projet')
@@ -6884,8 +6687,8 @@ class ListeProjetsDirecteurTousView(APIView):
 
         from django.db.models import Count
         compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
+            item['statut_workflow']: item['total']
+            for item in qs.values('statut_workflow').annotate(total=Count('id'))
         }
 
         return Response({
@@ -6895,54 +6698,19 @@ class ListeProjetsDirecteurTousView(APIView):
         })
 
 
-class ListeProjetsDirecteurHistoriqueView(APIView):
-    """
-    GET /recap/budget/directeur/historique/
-    TOUS les projets (tous statuts) pour historique
-    Inclut actifs + inactifs
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDirecteur]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.all().order_by('-id')
-
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        from django.db.models import Count
-        compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
-        }
-
-        return Response({
-            'count': qs.count(),
-            'compteurs_par_statut': compteurs,
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-    
-# class ListeProjetsDirecteurView(APIView):
+# class ListeProjetsDirecteurHistoriqueView(APIView):
 #     """
-#     GET /recap/budget/projets/directeur/
-#     ?type_projet=nouveau|en_cours
-#     ?code_division=PROJ001
+#     GET /recap/budget/directeur/historique/
+#     TOUS les projets (tous statuts) pour historique
+#     Inclut actifs + inactifs
 #     """
 #     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes     = [IsDirecteur]
+#     permission_classes = [IsDirecteur]
 
 #     def get(self, request):
-#         qs = BudgetRecord.objects.filter(
-#             statut='valide_chef',
-#             is_active=True,
-#         )
+#         qs = BudgetRecord.objects.all().order_by('-id')
 
-#         type_projet   = request.query_params.get('type_projet')
+#         type_projet = request.query_params.get('type_projet')
 #         code_division = request.query_params.get('code_division')
 
 #         if type_projet:
@@ -6950,19 +6718,18 @@ class ListeProjetsDirecteurHistoriqueView(APIView):
 #         if code_division:
 #             qs = qs.filter(code_division__icontains=code_division)
 
-#         qs = qs.order_by('-id')
+#         from django.db.models import Count
+#         compteurs = {
+#             item['statut']: item['total']
+#             for item in qs.values('statut').annotate(total=Count('id'))
+#         }
 
 #         return Response({
-#             'count':   qs.count(),
-#             'projets': BudgetRecordSerializer(qs, many=True).data,
+#             'count': qs.count(),
+#             'compteurs_par_statut': compteurs,
+#             'projets': BudgetRecordSerializer(qs, many=True).data
 #         })
-
-
-# ================================================================== #
-#  DIVISIONNAIRE
-#  Pas de filtre auto
-#  Voit valide_directeur — toutes régions
-# ================================================================== #
+    
 
 # ================================================================== #
 #  DIVISIONNAIRE - LISTES SPÉCIFIQUES
@@ -6979,7 +6746,7 @@ class ListeProjetsDivisionnaireValidesDirecteurView(APIView):
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
-            statut='valide_directeur'
+            statut_workflow='approuve_directeur'
         ).order_by('-id')
 
         type_projet = request.query_params.get('type_projet')
@@ -7003,97 +6770,64 @@ class ListeProjetsDivisionnaireValidesDirecteurView(APIView):
         })
 
 
-# class ListeProjetsDivisionnaireReserveDirecteurView(APIView):
+# class ListeProjetsDivisionnaireView(APIView):
 #     """
-#     GET /recap/budget/divisionnaire/reserve-directeur/
-#     Projets réservés par le directeur (retournés au DR, mais divisionnaire peut voir)
-#     Inclut actifs + inactifs
+#     GET /recap/budget/divisionnaire/projets/
+    
+#     Récupère TOUS les projets:
+#         - statut_workflow='approuve_directeur'(validés par le directeur)
+        
+    
+#     Inclut comptage par région
 #     """
 #     authentication_classes = [RemoteJWTAuthentication]
 #     permission_classes = [IsDivisionnaire]
 
 #     def get(self, request):
+#         from django.db.models import Count
+        
+#         # Tous les projets (validés + réservés par le directeur)
 #         qs = BudgetRecord.objects.filter(
-#             statut='reserve_directeur'
+#             statut__in=['valide_directeur', 'reserve_directeur']
 #         ).order_by('-id')
-
+        
+#         # Filtres optionnels
 #         type_projet = request.query_params.get('type_projet')
 #         code_division = request.query_params.get('code_division')
-
+        
 #         if type_projet:
 #             qs = qs.filter(type_projet=type_projet)
 #         if code_division:
 #             qs = qs.filter(code_division__icontains=code_division)
-
-#         from django.db.models import Count
+        
+#         # Comptage par région
 #         par_region = {
 #             item['region_id']: item['total']
 #             for item in qs.values('region_id').annotate(total=Count('id'))
 #         }
-
+        
+#         # Statistiques
+#         stats = {
+#             'total': qs.count(),
+#             'valides_directeur': qs.filter(statut='valide_directeur').count(),
+#             'reserve_directeur': qs.filter(statut='reserve_directeur').count(),
+#             'par_region': par_region,
+#         }
+        
+#         # Sérialisation
+#         serializer = BudgetRecordSerializer(
+#             qs, 
+#             many=True, 
+#             context={'request': request}
+#         )
+        
 #         return Response({
+#             'success': True,
+#             'stats': stats,
 #             'count': qs.count(),
 #             'par_region': par_region,
-#             'projets': BudgetRecordSerializer(qs, many=True).data
+#             'projets': serializer.data
 #         })
-class ListeProjetsDivisionnaireView(APIView):
-    """
-    GET /recap/budget/divisionnaire/projets/
-    
-    Récupère TOUS les projets:
-        - statut = 'valide_directeur' (validés par le directeur)
-        - statut = 'reserve_directeur' (réservés par le directeur)
-    
-    Inclut comptage par région
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDivisionnaire]
-
-    def get(self, request):
-        from django.db.models import Count
-        
-        # Tous les projets (validés + réservés par le directeur)
-        qs = BudgetRecord.objects.filter(
-            statut__in=['valide_directeur', 'reserve_directeur']
-        ).order_by('-id')
-        
-        # Filtres optionnels
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-        
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-        
-        # Comptage par région
-        par_region = {
-            item['region_id']: item['total']
-            for item in qs.values('region_id').annotate(total=Count('id'))
-        }
-        
-        # Statistiques
-        stats = {
-            'total': qs.count(),
-            'valides_directeur': qs.filter(statut='valide_directeur').count(),
-            'reserve_directeur': qs.filter(statut='reserve_directeur').count(),
-            'par_region': par_region,
-        }
-        
-        # Sérialisation
-        serializer = BudgetRecordSerializer(
-            qs, 
-            many=True, 
-            context={'request': request}
-        )
-        
-        return Response({
-            'success': True,
-            'stats': stats,
-            'count': qs.count(),
-            'par_region': par_region,
-            'projets': serializer.data
-        })
 
 class ListeProjetsDivisionnaireValidesView(APIView):
     """
@@ -7106,7 +6840,7 @@ class ListeProjetsDivisionnaireValidesView(APIView):
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
-            statut='valide_divisionnaire'
+            statut_final='valide_divisionnaire'
         ).order_by('-id')
 
         type_projet = request.query_params.get('type_projet')
@@ -7128,66 +6862,64 @@ class ListeProjetsDivisionnaireValidesView(APIView):
             'par_region': par_region,
             'projets': BudgetRecordSerializer(qs, many=True).data
         })
+from django.db.models import Q, Count
+
 class ListeProjetsDivisionnaireTerminesView(APIView):
     """
-    GET /recap/budget/divisionnaire/valides/
+    GET /recap/budget/divisionnaire/termines/
     
-    Projets avec statut final (terminés) :
-        - valide_divisionnaire (validé définitivement)
-        - rejete (rejeté définitivement)
-    
-    Filtre sur valide_par_divisionnaire IS NOT NULL OU rejete_par = divisionnaire
-    Inclut actifs + inactifs
+    Projets terminés par le divisionnaire :
+        - valide_divisionnaire
+        - rejete_divisionnaire
+        - annule_divisionnaire
     """
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    STATUTS_TERMINE = [
+        'valide_divisionnaire',
+        'rejete_divisionnaire',
+        'annule_divisionnaire',
+    ]
+
     def get(self, request):
-        from django.db.models import Q, Count
-        
-        # Projets avec statut final (validés OU rejetés par le divisionnaire)
+
         qs = BudgetRecord.objects.filter(
-            Q(statut='valide_divisionnaire') | Q(statut='rejete')
-        ).order_by('-date_validation_divisionnaire')  # Tri par date de validation finale
-        
-        # Filtres optionnels
+            statut_final__in=self.STATUTS_TERMINE
+        ).order_by('-date_validation_divisionnaire')
+
+        # filtres optionnels
         type_projet = request.query_params.get('type_projet')
         code_division = request.query_params.get('code_division')
-        statut_filter = request.query_params.get('statut')  # 'valide_divisionnaire' ou 'rejete'
-        
+        statut_filter = request.query_params.get('statut_final')
+
         if type_projet:
             qs = qs.filter(type_projet=type_projet)
+
         if code_division:
             qs = qs.filter(code_division__icontains=code_division)
-        if statut_filter and statut_filter in ['valide_divisionnaire', 'rejete']:
-            qs = qs.filter(statut=statut_filter)
-        
-        # Comptage par région
-        par_region = {
-            item['region_id']: item['total']
-            for item in qs.values('region_id').annotate(total=Count('id'))
-        }
-        
-        # Statistiques
+
+        if statut_filter in self.STATUTS_TERMINE:
+            qs = qs.filter(statut_final=statut_filter)
+
+        # stats
         stats = {
             'total': qs.count(),
-            'valides_divisionnaire': qs.filter(statut='valide_divisionnaire').count(),
-            'rejetes': qs.filter(statut='rejete').count(),
-            'par_region': par_region,
+            'valide_divisionnaire': qs.filter(statut_final='valide_divisionnaire').count(),
+            'rejete_divisionnaire': qs.filter(statut_final='rejete_divisionnaire').count(),
+            'annule_divisionnaire': qs.filter(statut_final='annule_divisionnaire').count(),
         }
-        
-        # Sérialisation
+
         serializer = BudgetRecordSerializer(
-            qs, 
-            many=True, 
+            qs,
+            many=True,
             context={'request': request}
         )
-        
+
         return Response({
             'success': True,
             'stats': stats,
             'count': qs.count(),
-            'par_region': par_region,
             'projets': serializer.data
         })
 class ListeProjetsDivisionnaireRejetesView(APIView):
@@ -7201,7 +6933,7 @@ class ListeProjetsDivisionnaireRejetesView(APIView):
 
     def get(self, request):
         qs = BudgetRecord.objects.filter(
-            statut='rejete'
+            statut_final='rejete_divisionnaire'
         ).order_by('-id')
 
         type_projet = request.query_params.get('type_projet')
@@ -7223,26 +6955,60 @@ class ListeProjetsDivisionnaireRejetesView(APIView):
             'par_region': par_region,
             'projets': BudgetRecordSerializer(qs, many=True).data
         })
+class ListeProjetsDivisionnaireAnnulesView(APIView):
+    """
+    GET /recap/budget/divisionnaire/annules/
+    Projets annules (le divisionnaire peut annuler)
+    Inclut actifs + inactifs
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            statut_final='annule_divisionnaire'
+        ).order_by('-id')
+
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        from django.db.models import Count
+        par_region = {
+            item['region_id']: item['total']
+            for item in qs.values('region_id').annotate(total=Count('id'))
+        }
+
+        return Response({
+            'count': qs.count(),
+            'par_region': par_region,
+            'projets': BudgetRecordSerializer(qs, many=True).data
+        })
+from django.db.models import Q, Count
+
 
 class ListeProjetsDivisionnaireTousView(APIView):
     """
     GET /recap/budget/divisionnaire/tous/
-    Tous les projets du divisionnaire (valides directeur + réservés directeur + valides divisionnaire)
-    Inclut actifs + inactifs
     """
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsDivisionnaire]
 
-    STATUTS_DIVISIONNAIRE = [
-        'valide_directeur',      # projets à valider
-        'reserve_directeur',     # projets réservés par directeur
+    STATUTS_FINAL = [
         'valide_divisionnaire',
-          # projets déjà validés par divisionnaire
+        'rejete_divisionnaire',
+        'annule_divisionnaire',
     ]
 
     def get(self, request):
+
         qs = BudgetRecord.objects.filter(
-            statut__in=self.STATUTS_DIVISIONNAIRE
+            Q(statut_workflow='approuve_directeur') |
+            Q(statut_final__in=self.STATUTS_FINAL)
         ).order_by('-id')
 
         type_projet = request.query_params.get('type_projet')
@@ -7250,13 +7016,15 @@ class ListeProjetsDivisionnaireTousView(APIView):
 
         if type_projet:
             qs = qs.filter(type_projet=type_projet)
+
         if code_division:
             qs = qs.filter(code_division__icontains=code_division)
 
-        from django.db.models import Count
+        # ✅ IMPORTANT: utiliser statut_final (pas statut)
         compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
+            item['statut_final']: item['total']
+            for item in qs.values('statut_final').annotate(total=Count('id'))
+            if item['statut_final'] is not None
         }
 
         par_region = {
@@ -7266,77 +7034,23 @@ class ListeProjetsDivisionnaireTousView(APIView):
 
         return Response({
             'count': qs.count(),
-            'compteurs_par_statut': compteurs,
+            'compteurs_par_statut_final': compteurs,
             'par_region': par_region,
             'projets': BudgetRecordSerializer(qs, many=True).data
         })
-
-
-class ListeProjetsDivisionnaireHistoriqueView(APIView):
-    """
-    GET /recap/budget/divisionnaire/historique/
-    TOUS les projets (tous statuts) pour historique
-    Inclut actifs + inactifs
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDivisionnaire]
-
-    def get(self, request):
-        qs = BudgetRecord.objects.all().order_by('-id')
-
-        type_projet = request.query_params.get('type_projet')
-        code_division = request.query_params.get('code_division')
-
-        if type_projet:
-            qs = qs.filter(type_projet=type_projet)
-        if code_division:
-            qs = qs.filter(code_division__icontains=code_division)
-
-        from django.db.models import Count
-        compteurs = {
-            item['statut']: item['total']
-            for item in qs.values('statut').annotate(total=Count('id'))
-        }
-
-        par_region = {
-            item['region_id']: item['total']
-            for item in qs.values('region_id').annotate(total=Count('id'))
-        }
-
-        return Response({
-            'count': qs.count(),
-            'compteurs_par_statut': compteurs,
-            'par_region': par_region,
-            'projets': BudgetRecordSerializer(qs, many=True).data
-        })
-
-
-
-
-
-
-
-
-
-
-
-
-# class ListeProjetsDivisionnnaireView(APIView):
+# class ListeProjetsDivisionnaireHistoriqueView(APIView):
 #     """
-#     GET /recap/budget/projets/divisionnaire/
-#     ?type_projet=nouveau|en_cours
-#     ?code_division=PROJ001
+#     GET /recap/budget/divisionnaire/historique/
+#     TOUS les projets (tous statuts) pour historique
+#     Inclut actifs + inactifs
 #     """
 #     authentication_classes = [RemoteJWTAuthentication]
-#     permission_classes     = [IsDivisionnaire]
+#     permission_classes = [IsDivisionnaire]
 
 #     def get(self, request):
-#         qs = BudgetRecord.objects.filter(
-#             statut='valide_directeur',
-#             is_active=True,
-#         )
+#         qs = BudgetRecord.objects.all().order_by('-id')
 
-#         type_projet   = request.query_params.get('type_projet')
+#         type_projet = request.query_params.get('type_projet')
 #         code_division = request.query_params.get('code_division')
 
 #         if type_projet:
@@ -7344,19 +7058,27 @@ class ListeProjetsDivisionnaireHistoriqueView(APIView):
 #         if code_division:
 #             qs = qs.filter(code_division__icontains=code_division)
 
-#         qs = qs.order_by('-id')
-
 #         from django.db.models import Count
+#         compteurs = {
+#             item['statut']: item['total']
+#             for item in qs.values('statut').annotate(total=Count('id'))
+#         }
+
 #         par_region = {
 #             item['region_id']: item['total']
 #             for item in qs.values('region_id').annotate(total=Count('id'))
 #         }
 
 #         return Response({
-#             'count':      qs.count(),
+#             'count': qs.count(),
+#             'compteurs_par_statut': compteurs,
 #             'par_region': par_region,
-#             'projets':    BudgetRecordSerializer(qs, many=True).data,
+#             'projets': BudgetRecordSerializer(qs, many=True).data
 #         })
+
+
+
+
 
 
 # ================================================================== #
@@ -8969,7 +8691,7 @@ class ExportProjetsValidesDivisionnaireView(APIView):
         
         # Récupérer les projets (sans filtre is_active)
         qs = BudgetRecord.objects.filter(
-            statut='valide_divisionnaire',
+            statut_final='valide_divisionnaire',
             annee_debut_pmt=annee_cible
         ).order_by('region', 'code_division')
         
