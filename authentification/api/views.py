@@ -24,7 +24,43 @@ from .models import User, Agent
 def nom_complet(obj):
     return f"{obj.prenom} {obj.nom}"
 
-
+def get_service_param_url():
+    try:
+        print("[DEBUG] Trying to resolve SERVICE-NODE-PARAM from Eureka...")
+        res = requests.get(
+            "http://localhost:8761/eureka/apps/SERVICE-NODE-PARAM",
+            headers={'Accept': 'application/json'},
+            timeout=5
+        )
+        
+        if res.status_code == 200:
+            data = res.json()
+            instances = data['application']['instance']
+            instance = instances[0] if isinstance(instances, list) else instances
+            host = instance['hostName']
+            port = instance['port']['$']
+            url = f"http://{host}:{port}"
+            print(f"[DEBUG] Service resolved from Eureka: {url}")
+            
+            # Vérifier si le service est accessible
+            try:
+                test_resp = requests.get(f"{url}/params/regions", timeout=2)
+                if test_resp.status_code == 200:
+                    print(f"[DEBUG] Service is accessible on {url}")
+                    return url
+                else:
+                    print(f"[DEBUG] Service on {url} returned {test_resp.status_code}, using fallback")
+            except Exception as test_e:
+                print(f"[DEBUG] Service on {url} not accessible: {test_e}")
+        else:
+            print(f"[DEBUG] Eureka returned status {res.status_code}")
+            
+    except Exception as e:
+        print(f"[DEBUG] Error resolving SERVICE-NODE-PARAM from Eureka: {e}")
+    
+    # Fallback vers le bon port
+    print("[DEBUG] Using fallback URL: http://localhost:8083")
+    return "http://localhost:8083"
 
 # ==========================
 # LOGIN API (JWT)
@@ -351,6 +387,161 @@ def api_create_user(request):
 # ASSIGN ROLE
 # ==========================
 
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def api_assign_role(request):
+#     # Cas 1: Non admin
+#     if request.user.role != 'admin':
+#         return Response({
+#             "status": "error",
+#             "code": "FORBIDDEN",
+#             "message": "Accès admin uniquement",
+#             "error_details": "Votre rôle actuel ne vous permet pas d'assigner des rôles"
+#         }, status=403)
+
+#     user_id = request.data.get('user_id')
+#     role = request.data.get('role')
+
+#     # Cas 2: Champs manquants
+#     if not user_id or not role:
+#         missing_fields = []
+#         if not user_id: missing_fields.append('user_id')
+#         if not role: missing_fields.append('role')
+        
+#         return Response({
+#             "status": "error",
+#             "code": "MISSING_FIELDS",
+#             "message": "Champs obligatoires manquants",
+#             "missing_fields": missing_fields,
+#             "required_fields": ["user_id", "role"]
+#         }, status=400)
+
+#     # Cas 3: Utilisateur non trouvé
+#     try:
+#         user = User.objects.get(id=user_id)
+#     except User.DoesNotExist:
+#         return Response({
+#             "status": "error",
+#             "code": "USER_NOT_FOUND",
+#             "message": "Utilisateur non trouvé",
+#             "error_details": f"Aucun utilisateur avec l'ID {user_id} n'existe"
+#         }, status=404)
+
+#     # ✅ CORRECTION: Liste complète des rôles depuis le modèle
+#     valid_roles = [role_code for role_code, _ in User.ROLE_CHOICES]
+    
+#     if role not in valid_roles:
+#         return Response({
+#             "status": "error",
+#             "code": "INVALID_ROLE",
+#             "message": "Rôle invalide",
+#             "error_details": f"Le rôle '{role}' n'est pas reconnu",
+#             "valid_roles": valid_roles,
+#             "valid_roles_display": [display for _, display in User.ROLE_CHOICES],
+#             "suggestion": f"Choisissez parmi: {', '.join(valid_roles)}"
+#         }, status=400)
+
+#     # Sauvegarder l'ancien rôle pour référence
+#     old_role = user.role
+    
+#     # Assigner le nouveau rôle
+#     user.role = role
+#     user.save()
+
+#     # Fonction utilitaire pour formater les infos utilisateur
+#     def format_user_info(user_obj):
+#         return {
+#             "id": user_obj.id,
+#             "nom": user_obj.nom,
+#             "prenom": user_obj.prenom,
+#             "nom_complet": nom_complet(user_obj),
+#             "email": user_obj.email,
+#             "role": user_obj.role,
+#             "role_display": dict(User.ROLE_CHOICES).get(user_obj.role, user_obj.role),
+#             "matricule": user_obj.matricule,
+#             "telephone": user_obj.telephone,
+#             "adresse": user_obj.adresse,
+#             "poste": user_obj.poste,
+#             "date_naissance": user_obj.date_naissance,
+#             "sexe": user_obj.sexe,
+#             "region_id": user_obj.region_id,
+#             "structure_id": user_obj.structure_id,
+#             "is_active": user_obj.is_active,
+#             "photo_profil": user_obj.photo_profil.url if user_obj.photo_profil else None,
+#             "date_joined": user_obj.date_joined.isoformat() if hasattr(user_obj, 'date_joined') else None,
+#             "last_login": user_obj.last_login.isoformat() if user_obj.last_login else None
+#         }
+
+#     # 🔥 Cas spécial: Assignation agent (avec création automatique dans Agent)
+#     if role == 'agent':
+#         try:
+#             # Chercher un chef (peut être n'importe quel utilisateur avec rôle 'chef')
+#             chef = User.objects.filter(role='chef').first()
+#             if not chef:
+#                 return Response({
+#                     "status": "error",
+#                     "code": "NO_CHEF_AVAILABLE",
+#                     "message": "Aucun chef trouvé dans le système",
+#                     "error_details": "Vous devez d'abord assigner un utilisateur comme chef avant de créer des agents",
+#                     "suggestion": "Assignez d'abord un rôle 'chef' à un utilisateur existant"
+#                 }, status=400)
+#         except User.DoesNotExist:
+#             return Response({
+#                 "status": "error",
+#                 "code": "NO_CHEF_AVAILABLE",
+#                 "message": "Aucun chef trouvé dans le système",
+#                 "error_details": "Vous devez d'abord assigner un utilisateur comme chef avant de créer des agents",
+#                 "suggestion": "Assignez d'abord un rôle 'chef' à un utilisateur existant"
+#             }, status=400)
+
+#         # Créer ou mettre à jour l'agent
+#         agent, created = Agent.objects.update_or_create(
+#             user=user,
+#             defaults={'chef': chef}
+#         )
+
+#         # Réponse complète pour agent
+#         return Response({
+#             "status": "success",
+#             "code": "AGENT_ASSIGNED",
+#             "message": f"{nom_complet(user)} est maintenant agent",
+#             "data": {
+#                 "user": format_user_info(user),
+#                 "agent": {
+#                     "id": agent.id,
+#                     "created": created,
+#                     "chef": format_user_info(chef)
+#                 },
+#                 "previous_role": old_role,
+#                 "new_role": role,
+#                 "assignee": format_user_info(request.user),
+#                 "timestamp": datetime.now().isoformat()
+#             }
+#         })
+
+#     # 🔥 Cas spécial: Si on enlève le rôle agent, supprimer de la table Agent
+#     if old_role == 'agent' and role != 'agent':
+#         try:
+#             agent = Agent.objects.get(user=user)
+#             agent.delete()
+#         except Agent.DoesNotExist:
+#             pass
+
+#     # Cas 6: Assignation des autres rôles (admin, chef, directeur, etc.)
+#     return Response({
+#         "status": "success",
+#         "code": "ROLE_ASSIGNED",
+#         "message": f"Rôle {dict(User.ROLE_CHOICES).get(role, role)} attribué à {nom_complet(user)}",
+#         "data": {
+#             "user": format_user_info(user),
+#             "previous_role": old_role,
+#             "new_role": role,
+#             "new_role_display": dict(User.ROLE_CHOICES).get(role, role),
+#             "assignee": format_user_info(request.user),
+#             "timestamp": datetime.now().isoformat()
+#         }
+#     })
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def api_assign_role(request):
@@ -365,6 +556,12 @@ def api_assign_role(request):
 
     user_id = request.data.get('user_id')
     role = request.data.get('role')
+    
+    # Champs supplémentaires pour les rôles spécifiques
+    direction_id = request.data.get('direction_id')  # Pour responsable_departement
+    region_id = request.data.get('region_id')        # Pour responsable_structure
+    structure_id = request.data.get('structure_id')  # Pour responsable_structure (optionnel)
+    departement_id = request.data.get('departement_id')  # Pour responsable_departement (optionnel)
 
     # Cas 2: Champs manquants
     if not user_id or not role:
@@ -380,6 +577,29 @@ def api_assign_role(request):
             "required_fields": ["user_id", "role"]
         }, status=400)
 
+    # Validation pour responsable_departement
+    if role == 'responsable_departement':
+        if not direction_id:
+            return Response({
+                "status": "error",
+                "code": "MISSING_DIRECTION_ID",
+                "message": "direction_id requis pour le rôle responsable_departement",
+                "error_details": "Un responsable département doit être associé à une direction",
+                "required_fields": ["user_id", "role", "direction_id"]
+            }, status=400)
+
+    # Validation pour responsable_structure
+    if role == 'responsable_structure':
+        if not region_id:
+            return Response({
+                "status": "error",
+                "code": "MISSING_REGION_ID",
+                "message": "region_id requis pour le rôle responsable_structure",
+                "error_details": "Un responsable structure doit être associé à une région",
+                "required_fields": ["user_id", "role", "region_id"]
+            }, status=400)
+        # structure_id est optionnel, pas de validation
+
     # Cas 3: Utilisateur non trouvé
     try:
         user = User.objects.get(id=user_id)
@@ -391,7 +611,7 @@ def api_assign_role(request):
             "error_details": f"Aucun utilisateur avec l'ID {user_id} n'existe"
         }, status=404)
 
-    # ✅ CORRECTION: Liste complète des rôles depuis le modèle
+    # Liste complète des rôles depuis le modèle
     valid_roles = [role_code for role_code, _ in User.ROLE_CHOICES]
     
     if role not in valid_roles:
@@ -408,6 +628,33 @@ def api_assign_role(request):
     # Sauvegarder l'ancien rôle pour référence
     old_role = user.role
     
+    # Mettre à jour les champs spécifiques selon le rôle
+    if role == 'responsable_departement':
+        user.direction_id = direction_id
+        user.departement_id = departement_id  # Optionnel
+        user.region_id = None
+        user.structure_id = None
+    elif role == 'responsable_structure':
+        user.region_id = region_id
+        # structure_id est optionnel
+        if structure_id:
+            user.structure_id = structure_id
+        else:
+            user.structure_id = None
+        user.direction_id = None
+        user.departement_id = None
+    elif role == 'agent':
+        user.direction_id = None
+        user.region_id = None
+        user.structure_id = None
+        user.departement_id = None
+    else:
+        # Pour les autres rôles (admin, chef, etc.)
+        user.direction_id = None
+        user.region_id = None
+        user.structure_id = None
+        user.departement_id = None
+    
     # Assigner le nouveau rôle
     user.role = role
     user.save()
@@ -418,7 +665,7 @@ def api_assign_role(request):
             "id": user_obj.id,
             "nom": user_obj.nom,
             "prenom": user_obj.prenom,
-            "nom_complet": nom_complet(user_obj),
+            "nom_complet": f"{user_obj.prenom} {user_obj.nom}" if user_obj.prenom else user_obj.nom,
             "email": user_obj.email,
             "role": user_obj.role,
             "role_display": dict(User.ROLE_CHOICES).get(user_obj.role, user_obj.role),
@@ -430,13 +677,15 @@ def api_assign_role(request):
             "sexe": user_obj.sexe,
             "region_id": user_obj.region_id,
             "structure_id": user_obj.structure_id,
+            "direction_id": user_obj.direction_id,
+            "departement_id": user_obj.departement_id,
             "is_active": user_obj.is_active,
             "photo_profil": user_obj.photo_profil.url if user_obj.photo_profil else None,
             "date_joined": user_obj.date_joined.isoformat() if hasattr(user_obj, 'date_joined') else None,
             "last_login": user_obj.last_login.isoformat() if user_obj.last_login else None
         }
 
-    # 🔥 Cas spécial: Assignation agent (avec création automatique dans Agent)
+    # Cas spécial: Assignation agent (avec création automatique dans Agent)
     if role == 'agent':
         try:
             # Chercher un chef (peut être n'importe quel utilisateur avec rôle 'chef')
@@ -468,7 +717,7 @@ def api_assign_role(request):
         return Response({
             "status": "success",
             "code": "AGENT_ASSIGNED",
-            "message": f"{nom_complet(user)} est maintenant agent",
+            "message": f"{format_user_info(user)['nom_complet']} est maintenant agent",
             "data": {
                 "user": format_user_info(user),
                 "agent": {
@@ -483,7 +732,7 @@ def api_assign_role(request):
             }
         })
 
-    # 🔥 Cas spécial: Si on enlève le rôle agent, supprimer de la table Agent
+    # Cas spécial: Si on enlève le rôle agent, supprimer de la table Agent
     if old_role == 'agent' and role != 'agent':
         try:
             agent = Agent.objects.get(user=user)
@@ -491,11 +740,23 @@ def api_assign_role(request):
         except Agent.DoesNotExist:
             pass
 
-    # Cas 6: Assignation des autres rôles (admin, chef, directeur, etc.)
+    # Cas spécial: Si on enlève responsable_departement, clear direction_id et departement_id
+    if old_role == 'responsable_departement' and role != 'responsable_departement':
+        user.direction_id = None
+        user.departement_id = None
+        user.save()
+    
+    # Cas spécial: Si on enlève responsable_structure, clear region_id et structure_id
+    if old_role == 'responsable_structure' and role != 'responsable_structure':
+        user.region_id = None
+        user.structure_id = None
+        user.save()
+
+    # Assignation des autres rôles (admin, chef, directeur, etc.)
     return Response({
         "status": "success",
         "code": "ROLE_ASSIGNED",
-        "message": f"Rôle {dict(User.ROLE_CHOICES).get(role, role)} attribué à {nom_complet(user)}",
+        "message": f"Rôle {dict(User.ROLE_CHOICES).get(role, role)} attribué à {format_user_info(user)['nom_complet']}",
         "data": {
             "user": format_user_info(user),
             "previous_role": old_role,
@@ -505,8 +766,6 @@ def api_assign_role(request):
             "timestamp": datetime.now().isoformat()
         }
     })
-
-
 from datetime import datetime
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -1648,6 +1907,89 @@ def api_list_responsables_structure(request):
     } for u in users]
 
     return Response({"status": "success", "count": len(data), "users": data})
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_get_responsables_structure_by_region(request, region_id):
+    """
+    GET /api/users/responsables-structure/region/{region_id}/
+    
+    Récupère tous les responsables structure d'une région spécifique
+    """
+    # Filtrer les responsables par région
+    responsables = User.objects.filter(
+        role='responsable_structure',
+        region_id=region_id
+    )
+    
+    if not responsables.exists():
+        return Response({
+            "status": "success",
+            "message": "Aucun responsable structure trouvé pour cette région",
+            "region_id": region_id,
+            "count": 0,
+            "data": []
+        }, status=200)
+    
+    # Récupérer le token pour appeler le service param
+    token = request.headers.get('Authorization', '')
+    service_url = get_service_param_url()
+    
+    # Récupérer le nom de la région
+    region_nom = None
+    region_code = None
+    try:
+        url = f"{service_url}/params/regions/id/{region_id}"
+        response = requests.get(url, headers={'Authorization': token}, timeout=3)
+        if response.status_code == 200:
+            region_data = response.json().get('data', {})
+            region_nom = region_data.get('nom_region')
+            region_code = region_data.get('code_region')
+    except Exception as e:
+        print(f"Erreur récupération région: {e}")
+    
+    # Formater les données
+    data = []
+    for responsable in responsables:
+        # Récupérer le nom de la structure (si existe)
+        structure_nom = None
+        if responsable.structure_id:
+            try:
+                url = f"{service_url}/params/structures/{responsable.structure_id}"
+                response = requests.get(url, headers={'Authorization': token}, timeout=3)
+                if response.status_code == 200:
+                    structure_data = response.json().get('data', {})
+                    structure_nom = structure_data.get('nom_structure')
+            except:
+                pass
+        
+        data.append({
+            "id": responsable.id,
+            "nom": responsable.nom,
+            "prenom": responsable.prenom,
+            "nom_complet": f"{responsable.prenom} {responsable.nom}" if responsable.prenom else responsable.nom,
+            "email": responsable.email,
+            "matricule": responsable.matricule,
+            "telephone": responsable.telephone,
+            "role": responsable.role,
+            "role_display": "Responsable Structure",
+            "region_id": responsable.region_id,
+            "structure_id": responsable.structure_id,
+            "structure_nom": structure_nom,
+            "is_active": responsable.is_active,
+        })
+    
+    return Response({
+        "status": "success",
+        "region_id": region_id,
+        "region_nom": region_nom,
+        "region_code": region_code,
+        "count": len(data),
+        "data": data
+    }, status=200)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_list_responsables_structure_affectes(request):
@@ -1664,6 +2006,248 @@ def api_list_responsables_structure_affectes(request):
     } for u in users]
 
     return Response({"status": "success", "count": len(data), "users": data})
+# views.py
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_get_responsable_structure(request, id):
+    """
+    GET /api/users/responsables-structure/{id}/
+    
+    Récupère un responsable structure spécifique par son ID
+    """
+    try:
+        responsable = User.objects.get(id=id, role='responsable_structure')
+    except User.DoesNotExist:
+        return Response({
+            "status": "error",
+            "code": "NOT_FOUND",
+            "message": "Responsable structure non trouvé",
+            "error_details": f"Aucun responsable structure avec l'ID {id} n'existe"
+        }, status=404)
+    
+    # Récupérer le token pour appeler le service param
+    token = request.headers.get('Authorization', '')
+    service_url = get_service_param_url()
+    
+    # Récupérer le nom de la région
+    region_nom = None
+    region_code = None
+    if responsable.region_id:
+        try:
+            url = f"{service_url}/params/regions/id/{responsable.region_id}"
+            response = requests.get(url, headers={'Authorization': token}, timeout=3)
+            if response.status_code == 200:
+                region_data = response.json().get('data', {})
+                region_nom = region_data.get('nom_region')
+                region_code = region_data.get('code_region')
+        except Exception as e:
+            print(f"Erreur récupération région: {e}")
+    
+    # Récupérer le nom de la structure (si existe)
+    structure_nom = None
+    if responsable.structure_id:
+        try:
+            url = f"{service_url}/params/structures/id/{responsable.structure_id}"
+            response = requests.get(url, headers={'Authorization': token}, timeout=3)
+            if response.status_code == 200:
+                structure_data = response.json().get('data', {})
+                structure_nom = structure_data.get('nom_structure')
+        except Exception as e:
+            print(f"Erreur récupération structure: {e}")
+    
+    # Formatage de la réponse
+    data = {
+        "id": responsable.id,
+        "nom": responsable.nom,
+        "prenom": responsable.prenom,
+        "nom_complet": f"{responsable.prenom} {responsable.nom}" if responsable.prenom else responsable.nom,
+        "email": responsable.email,
+        "matricule": responsable.matricule,
+        "telephone": responsable.telephone,
+        "adresse": responsable.adresse,
+        "poste": responsable.poste,
+        "date_naissance": responsable.date_naissance,
+        "sexe": responsable.sexe,
+        "role": responsable.role,
+        "role_display": "Responsable Structure",
+        "region_id": responsable.region_id,
+        "region_nom": region_nom,
+        "region_code": region_code,
+        "structure_id": responsable.structure_id,
+        "structure_nom": structure_nom,
+        "is_active": responsable.is_active,
+        "photo_profil": responsable.photo_profil.url if responsable.photo_profil else None,
+        "date_joined": responsable.date_joined.isoformat() if responsable.date_joined else None,
+        "last_login": responsable.last_login.isoformat() if responsable.last_login else None
+    }
+    
+    return Response({
+        "status": "success",
+        "data": data
+    }, status=200)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_get_responsable_departement(request, id):
+    """
+    GET /api/users/responsables-departement/{id}/
+    
+    Récupère un responsable département spécifique par son ID
+    """
+    try:
+        responsable = User.objects.get(id=id, role='responsable_departement')
+    except User.DoesNotExist:
+        return Response({
+            "status": "error",
+            "code": "NOT_FOUND",
+            "message": "Responsable département non trouvé",
+            "error_details": f"Aucun responsable département avec l'ID {id} n'existe"
+        }, status=404)
+    
+    # Récupérer le token pour appeler le service param
+    token = request.headers.get('Authorization', '')
+    service_url = get_service_param_url()
+    
+    # Récupérer le nom de la direction
+    direction_nom = None
+    direction_code = None
+    if responsable.direction_id:
+        try:
+            url = f"{service_url}/params/directions/id/{responsable.direction_id}"
+            response = requests.get(url, headers={'Authorization': token}, timeout=3)
+            if response.status_code == 200:
+                direction_data = response.json().get('data', {})
+                direction_nom = direction_data.get('nom_direction')
+                direction_code = direction_data.get('code_direction')
+        except Exception as e:
+            print(f"Erreur récupération direction: {e}")
+    
+    # Récupérer le nom du département (si existe)
+    departement_nom = None
+    if responsable.departement_id:
+        try:
+            url = f"{service_url}/params/departements/id/{responsable.departement_id}"
+            response = requests.get(url, headers={'Authorization': token}, timeout=3)
+            if response.status_code == 200:
+                departement_data = response.json().get('data', {})
+                departement_nom = departement_data.get('nom_departement')
+        except Exception as e:
+            print(f"Erreur récupération département: {e}")
+    
+    # Formatage de la réponse
+    data = {
+        "id": responsable.id,
+        "nom": responsable.nom,
+        "prenom": responsable.prenom,
+        "nom_complet": f"{responsable.prenom} {responsable.nom}" if responsable.prenom else responsable.nom,
+        "email": responsable.email,
+        "matricule": responsable.matricule,
+        "telephone": responsable.telephone,
+        "adresse": responsable.adresse,
+        "poste": responsable.poste,
+        "date_naissance": responsable.date_naissance,
+        "sexe": responsable.sexe,
+        "role": responsable.role,
+        "role_display": "Responsable Département",
+        "direction_id": responsable.direction_id,
+        "direction_nom": direction_nom,
+        "direction_code": direction_code,
+        "departement_id": responsable.departement_id,
+        "departement_nom": departement_nom,
+        "is_active": responsable.is_active,
+        "photo_profil": responsable.photo_profil.url if responsable.photo_profil else None,
+        "date_joined": responsable.date_joined.isoformat() if responsable.date_joined else None,
+        "last_login": responsable.last_login.isoformat() if responsable.last_login else None
+    }
+    
+    return Response({
+        "status": "success",
+        "data": data
+    }, status=200)
+# views.py
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_get_responsables_departement_by_direction(request, direction_id):
+    """
+    GET /api/users/responsables-departement/direction/{direction_id}/
+    
+    Récupère tous les responsables département d'une direction spécifique
+    """
+    # Filtrer les responsables par direction
+    responsables = User.objects.filter(
+        role='responsable_departement',
+        direction_id=direction_id
+    )
+    
+    if not responsables.exists():
+        return Response({
+            "status": "success",
+            "message": "Aucun responsable département trouvé pour cette direction",
+            "direction_id": direction_id,
+            "count": 0,
+            "data": []
+        }, status=200)
+    
+    # Récupérer le token pour appeler le service param
+    token = request.headers.get('Authorization', '')
+    service_url = get_service_param_url()
+    
+    # Récupérer le nom de la direction
+    direction_nom = None
+    direction_code = None
+    try:
+        url = f"{service_url}/params/directions/{direction_id}"
+        response = requests.get(url, headers={'Authorization': token}, timeout=3)
+        if response.status_code == 200:
+            direction_data = response.json().get('data', {})
+            direction_nom = direction_data.get('nom_direction')
+            direction_code = direction_data.get('code_direction')
+    except Exception as e:
+        print(f"Erreur récupération direction: {e}")
+    
+    # Formater les données
+    data = []
+    for responsable in responsables:
+        # Récupérer le nom du département (si existe)
+        departement_nom = None
+        if responsable.departement_id:
+            try:
+                url = f"{service_url}/params/departements/id/{responsable.departement_id}"
+                response = requests.get(url, headers={'Authorization': token}, timeout=3)
+                if response.status_code == 200:
+                    departement_data = response.json().get('data', {})
+                    departement_nom = departement_data.get('nom_departement')
+            except:
+                pass
+        
+        data.append({
+            "id": responsable.id,
+            "nom": responsable.nom,
+            "prenom": responsable.prenom,
+            "nom_complet": f"{responsable.prenom} {responsable.nom}" if responsable.prenom else responsable.nom,
+            "email": responsable.email,
+            "matricule": responsable.matricule,
+            "telephone": responsable.telephone,
+            "role": responsable.role,
+            "role_display": "Responsable Département",
+            "direction_id": responsable.direction_id,
+            "departement_id": responsable.departement_id,
+            "departement_nom": departement_nom,
+            "is_active": responsable.is_active,
+        })
+    
+    return Response({
+        "status": "success",
+        "direction_id": direction_id,
+        "direction_nom": direction_nom,
+        "direction_code": direction_code,
+        "count": len(data),
+        "data": data
+    }, status=200)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_list_directeurs_region(request):
