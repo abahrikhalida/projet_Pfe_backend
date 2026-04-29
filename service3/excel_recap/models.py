@@ -278,6 +278,33 @@ class BudgetRecord(models.Model):
     is_active = models.BooleanField(default=True)
     version_comment = models.TextField(null=True, blank=True)
     created_by     = models.IntegerField(null=True, blank=True)
+    duree_realisation = models.IntegerField(
+        null=True, 
+        blank=True,
+        help_text="Durée de réalisation du projet en mois (ex: 36)"
+    )
+    
+    # Point de situation (avancement du projet)
+    point_situation = models.TextField(
+        null=True, 
+        blank=True,
+        help_text="Point de situation du projet en pourcentage (ex: 75.50)"
+    )
+    
+    # Optionnel: Commentaire sur le point de situation
+    commentaire_point_situation = models.TextField(
+        null=True, 
+        blank=True,
+        help_text="Commentaire sur le point de situation"
+    )
+    
+    # Optionnel: Date de mise à jour du point de situation
+    date_maj_point_situation = models.DateTimeField(
+        null=True, 
+        blank=True,
+        auto_now=True,
+        help_text="Date de dernière mise à jour du point de situation"
+    )
 
     # ================================================================
     # STATUTS SÉPARÉS

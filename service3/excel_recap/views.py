@@ -3210,6 +3210,11 @@ class BaseNouveauProjetView(APIView):
             [f'{m}_dont_dex' for m in self.MOIS_KEYS]
         )
 
+        # 🔥 Récupérer les nouveaux champs (utiliser des noms différents)
+        duree_realisation_val = data.get('duree_realisation')
+        point_situation_val = data.get('point_situation')
+        commentaire_point_situation_val = data.get('commentaire_point_situation')
+
         record = BudgetRecord.objects.create(
             upload = upload,
 
@@ -3248,6 +3253,11 @@ class BaseNouveauProjetView(APIView):
             statut_workflow = 'soumis',
             statut_final    = None,
 
+            # 🔥 NOUVEAUX CHAMPS (avec les bonnes variables)
+            duree_realisation = duree_realisation_val,
+            point_situation = point_situation_val,
+            commentaire_point_situation = commentaire_point_situation_val,
+
             # Réalisation NULL (nouveau projet)
             realisation_cumul_n_mins1_total    = None,
             realisation_cumul_n_mins1_dont_dex = None,
@@ -3273,7 +3283,8 @@ class BaseNouveauProjetView(APIView):
         logger.info(
             f"✅ BudgetRecord id={record.id} | "
             f"code_division={code_division} | "
-            f"region={region} | direction={direction}"
+            f"region={region} | direction={direction} | "
+            f"duree={duree_realisation_val} | point={point_situation_val}"
         )
         return record
 
