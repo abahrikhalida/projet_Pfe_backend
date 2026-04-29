@@ -35,11 +35,13 @@ urlpatterns = [
     path('users/<int:user_id>/affecter-departement/', views.api_affecter_departement, name='affecter-departement'),
 
     path('users/responsables-structure/', views.api_list_responsables_structure, name='list-responsables-structure'),
+    path('users/responsables-structure/region/<str:region_id>/',views.api_get_responsables_structure_by_region),
     path('users/responsables-structure/affectes/', views.api_list_responsables_structure_affectes, name='list-responsables-affectes'),
     path('users/directeurs-region/', views.api_list_directeurs_region, name='list-directeurs-region'),
     path('users/directeurs-region/affectes/', views.api_list_directeurs_region_affectes, name='list-directeurs-region-affectes'),
     path('users/directeurs-direction/affectes/',views.api_list_directeurs_direction_affectes,name='list-directeurs-direction-affectes'),
     path('users/responsables-departement/affectes/',views.api_list_responsables_departement_affectes,name='list-responsables-departement-affectes'),
+    path('users/responsables-departement/direction/<str:direction_id>/', views.api_get_responsables_departement_by_direction,name='responsables-departement-by-direction'),
     # affectation role
     path('assign-role/',views.api_assign_role,name='api_assign_role'),
 
