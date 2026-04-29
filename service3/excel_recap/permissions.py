@@ -66,6 +66,15 @@ class IsResponsableStructure(BasePermission):
             and request.user.is_authenticated
             and getattr(request.user, 'role', None) == 'responsable_structure'
         )
+class IsResponsableDepartement(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, 'role', None) == 'responsable_departement'
+        )
+     
+
 # permissions.py — ajouter ce qui manque
 class IsDirecteurRegion(BasePermission):
     def has_permission(self, request, view):
@@ -73,4 +82,11 @@ class IsDirecteurRegion(BasePermission):
             request.user
             and request.user.is_authenticated
             and getattr(request.user, 'role', None) == 'directeur_region'
+        )
+class IsDirecteurDirection(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, 'role', None) == 'directeur_direction'
         )

@@ -1054,6 +1054,8 @@ def api_me(request):
         'nom_complet': f"{user.prenom} {user.nom}",
         'region_id':    str(user.region_id)    if user.region_id    else None,
         'structure_id': str(user.structure_id) if user.structure_id else None,
+        'direction_id':    str(user.direction_id)    if user.direction_id    else None,
+        'departement_id': str(user.departement_id) if user.departement_id else None,
         'is_active': user.is_active,
     })
 

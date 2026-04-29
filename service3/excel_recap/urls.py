@@ -21,12 +21,16 @@ urlpatterns = [
 
     # creation projet:(nv , ancien)
     path('budget/nouveau-projet/', NouveauProjetView.as_view(), name='create-budget-manuel'),#valider
+    path('budget/nouveau-projet/departement', NouveauProjetDepartementView.as_view(), name='create-budget-manuel'),#valider
+
     path('budget/admin/patch-projet/<str:code_division>/',PatchProjetAdminView.as_view(),name='admin-patch-projet',),
-    path('budget/responsable/modifier-projet/<str:code_division>/',ModifierProjetResponsableView.as_view(),name='responsable-modifier-projet',),
+    path('budget/responsable/modifier-projet/<str:code_division>/',ModifierProjetStructureView.as_view(),name='responsable-modifier-projet',),
+    path('budget/departement/modifier-projet/<str:code_division>/',ModifierProjetDepartementView.as_view(),name='departement-modifier-projet',),
    
     #historique:
     path('budget/historique/<str:code_division>/',HistoriqueProjetView.as_view(),name='historique-projet'),#valider
     path('budget/historique/<str:code_division>/actif/',HistoriqueProjetView.as_view(),{'mode': 'actif'},name='historique-projet-actif'),#valider
+    path('budget/projet/<str:code_division>/with-previous/',ProjetAvecVersionPrecedenteView.as_view(),name='version-precedent-projet-actif'),
 
 
 
