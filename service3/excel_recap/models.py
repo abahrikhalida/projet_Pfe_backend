@@ -251,7 +251,10 @@ class BudgetRecord(models.Model):
     upload = models.ForeignKey(ExcelUpload, on_delete=models.CASCADE, related_name='records')
     activite = models.CharField(max_length=10, blank=True, null=True)
     # region = models.CharField(max_length=10, blank=True, null=True)
-    region_direction = models.CharField(max_length=50,blank=True,null=True,help_text="code_region si structure | code_direction si département")
+    # region_direction = models.CharField(max_length=50,blank=True,null=True,help_text="code_region si structure | code_direction si département")
+    # ── Région / Direction séparés ────────────────────────────────────
+    region = models.CharField(max_length=50, blank=True, null=True,help_text="Code région — responsable_structure uniquement")
+    direction = models.CharField(max_length=50, blank=True, null=True,help_text="Code direction — responsable_departement uniquement")
     perm = models.CharField(max_length=255, blank=True, null=True)
     famille = models.CharField(max_length=50, blank=True, null=True)
     code_division = models.CharField(max_length=50, blank=True, null=True)
@@ -274,6 +277,7 @@ class BudgetRecord(models.Model):
     version = models.IntegerField(default=1)
     is_active = models.BooleanField(default=True)
     version_comment = models.TextField(null=True, blank=True)
+    created_by     = models.IntegerField(null=True, blank=True)
 
     # ================================================================
     # STATUTS SÉPARÉS

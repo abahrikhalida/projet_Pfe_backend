@@ -97,6 +97,8 @@ class RemoteUser:
     nom_complet: str
     region_id: str = None       # ✅ ajouté
     structure_id: str = None    # ✅ ajouté
+    direction_id: str = None      # 🔥 AJOUT
+    departement_id: str = None    # 🔥 AJOUT
     is_authenticated: bool = True
     is_active: bool = True
 
@@ -143,4 +145,7 @@ class RemoteJWTAuthentication(BaseAuthentication):
             nom_complet=data.get('nom_complet', ''),
             region_id=data.get('region_id'),        # ✅ ajouté
             structure_id=data.get('structure_id'),  # ✅ ajouté
+            direction_id=data.get('direction_id'),        # 🔥 AJOUT
+            departement_id=data.get('departement_id'),    # 🔥 AJOUT
         ), token)
+        

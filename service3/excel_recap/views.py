@@ -2903,6 +2903,28 @@ logger = logging.getLogger(__name__)
 # ##############################################################################
 # views.py
 
+# 
+
+
+
+"""
+views_creation.py
+=================
+Deux endpoints de création de projet budget :
+
+  POST /api/budget/nouveau-projet/structure/
+      → responsable_structure  (region_id + structure_id depuis JWT)
+      → body : activite, famille, code_division, libelle, perimetre
+      → BudgetRecord.region    = code résolu via service param
+      → BudgetRecord.direction = None
+
+  POST /api/budget/nouveau-projet/departement/
+      → responsable_departement  (direction_id + departement_id depuis JWT)
+      → body : activite, famille, code_division, libelle
+      → BudgetRecord.region    = None
+      → BudgetRecord.direction = code résolu via service param
+"""
+
 import traceback
 import requests
 from datetime import datetime
@@ -2913,49 +2935,36 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from .models import BudgetRecord, ExcelUpload
-from .serializers import BudgetRecordSerializer
+from .serializers import BudgetRecordSerializer, get_service_param_url
 from .remote_auth import RemoteJWTAuthentication
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-class NouveauProjetView(APIView):
-    """
-    POST /api/budget/nouveau-projet/
+# ══════════════════════════════════════════════════════════════════════════════
+# CLASSE DE BASE — logique partagée
+# ══════════════════════════════════════════════════════════════════════════════
 
-    Crée la première version d'un projet (version 1, sans historique).
-
-    Supporte deux rôles :
-      - responsable_structure   : region_id + structure_id
-                                  → region_direction = code_region
-                                  → perm = perimetre, famille, activite
-
-      - responsable_departement : direction_id + departement_id
-                                  → region_direction = code_direction
-                                  → famille, activite (pas de perm)
-
-    Tous les champs de réalisation sont NULL à la création.
-    """
+class BaseNouveauProjetView(APIView):
 
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes     = [IsAuthenticated]
 
-    ROLES_AUTORISES = ['responsable_structure', 'responsable_departement']
-
-    PREVISIONS_KEYS = ['prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5']
+    PREVISIONS_KEYS = [
+        'prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5'
+    ]
     MOIS_KEYS = [
         'janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
         'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'
     ]
 
-    # ═════════════════════════════════════════════════════════════════
-    # HELPERS
-    # ═════════════════════════════════════════════════════════════════
+    # ─────────────────────────────────────────────────────────────────
+    # UTILITAIRES FINANCIERS
+    # ─────────────────────────────────────────────────────────────────
 
     @staticmethod
     def _to_float_or_none(val):
-        """Convertit une valeur en float ou retourne None."""
         if val in (None, '', 'null', 'None'):
             return None
         try:
@@ -2965,29 +2974,21 @@ class NouveauProjetView(APIView):
 
     @staticmethod
     def _safe_sum(values):
-        """Somme en ignorant les None. Retourne None si tout est None."""
         filtered = [v for v in values if v is not None]
         return round(sum(filtered), 2) if filtered else None
 
     def _validate_total_ge_dex(self, total, dex, field_name):
-        """Lève ValidationError si total < dex (quand les deux sont non-None)."""
         if total is not None and dex is not None and total < dex:
             raise ValidationError(
-                f"{field_name}: Le total ({total}) ne peut pas être "
+                f"{field_name} : le total ({total}) ne peut pas être "
                 f"inférieur au DEX ({dex})."
             )
 
     def _validate_all_totals(self, v,
-                              prev_n_plus1_total, prev_n_plus1_dex,
-                              rar_total, rar_dex,
-                              cout_total, cout_dex):
-        """
-        Valide toutes les paires (total / dont_dex) et collecte
-        toutes les violations avant de lever une seule exception.
-        """
+                              prev_n1_t, prev_n1_d,
+                              rar_t, rar_d,
+                              cout_t, cout_d):
         errors = []
-
-        # Mois + prévisions annuelles
         for key in self.MOIS_KEYS + self.PREVISIONS_KEYS:
             try:
                 self._validate_total_ge_dex(
@@ -2998,11 +2999,10 @@ class NouveauProjetView(APIView):
             except ValidationError as e:
                 errors.append(str(e))
 
-        # Totaux calculés
         for total, dex, label in [
-            (prev_n_plus1_total, prev_n_plus1_dex, "Prévision N+1"),
-            (rar_total,          rar_dex,           "Reste à réaliser (RAR)"),
-            (cout_total,         cout_dex,           "Coût initial"),
+            (prev_n1_t, prev_n1_d, "Prévision N+1"),
+            (rar_t,     rar_d,     "Reste à réaliser (RAR)"),
+            (cout_t,    cout_d,    "Coût initial"),
         ]:
             try:
                 self._validate_total_ge_dex(total, dex, label)
@@ -3012,143 +3012,143 @@ class NouveauProjetView(APIView):
         if errors:
             raise ValidationError({"total_dex_mismatches": errors})
 
-    # ═════════════════════════════════════════════════════════════════
-    # CONTEXTE MÉTIER SELON LE RÔLE
-    # ═════════════════════════════════════════════════════════════════
+    # ─────────────────────────────────────────────────────────────────
+    # CHAMPS COMMUNS OBLIGATOIRES
+    # ─────────────────────────────────────────────────────────────────
 
-    def _build_context(self, request, data):
+    def _validate_common_fields(self, data):
         """
-        Lit le rôle depuis le token JWT et retourne un dict ctx{} unifié.
-
-        Clés retournées :
-          role, region_id, structure_id, direction_id, departement_id,
-          region_direction_source ('region' | 'direction'),
-          lookup_id, perimetre, famille, activite
+        Valide activite, famille, code_division, libelle.
+        Retourne (code_division, libelle, activite, famille).
         """
-        user  = request.user
-        role  = getattr(user, 'role', None)
+        fields = {
+            'activite':      data.get('activite'),
+            'famille':       data.get('famille'),
+            'code_division': data.get('code_division'),
+            'libelle':       data.get('libelle'),
+        }
+        missing = [k for k, v in fields.items() if not v]
+        if missing:
+            raise ValidationError(
+                f"Champs obligatoires manquants : {', '.join(missing)}"
+            )
+        return (
+            fields['code_division'],
+            fields['libelle'],
+            fields['activite'],
+            fields['famille'],
+        )
 
-        if role not in self.ROLES_AUTORISES:
-            raise PermissionDenied(
-                f"Rôle '{role}' non autorisé. "
-                f"Rôles acceptés : {self.ROLES_AUTORISES}"
+    # ─────────────────────────────────────────────────────────────────
+    # INTERVALLE PMT
+    # ─────────────────────────────────────────────────────────────────
+
+    # def _parse_pmt(self, data):
+    #     intervalle = data.get('intervalle_pmt')
+    #     if isinstance(intervalle, list) and len(intervalle) == 2:
+    #         annee_debut = int(intervalle[0])
+    #         annee_fin   = int(intervalle[1])
+    #     else:
+    #         annee_debut = data.get('annee_debut_pmt')
+    #         annee_fin   = data.get('annee_fin_pmt')
+
+    #     if annee_debut and annee_fin:
+    #         if int(annee_debut) > int(annee_fin):
+    #             raise ValidationError(
+    #                 "L'année début PMT ne peut pas être supérieure à l'année fin PMT."
+    #             )
+    #     return annee_debut, annee_fin
+    def _parse_pmt(self, data):
+        """Parse l'intervalle PMT et calcule automatiquement fin = debut + 4 si nécessaire"""
+        
+        intervalle = data.get('intervalle_pmt')
+        
+        # Cas 1: intervalle_pmt = [debut, fin]
+        if isinstance(intervalle, list) and len(intervalle) == 2:
+            annee_debut = int(intervalle[0])
+            annee_fin = int(intervalle[1])
+            
+        # Cas 2: intervalle_pmt = [debut] seulement
+        elif isinstance(intervalle, list) and len(intervalle) == 1:
+            annee_debut = int(intervalle[0])
+            annee_fin = annee_debut + 4  # ← +4 ans
+            
+        # Cas 3: annee_debut_pmt directement
+        else:
+            annee_debut = data.get('annee_debut_pmt')
+            annee_fin = data.get('annee_fin_pmt')
+            
+            # Si fin est null mais debut existe, calculer fin = debut + 4
+            if annee_debut and not annee_fin:
+                annee_fin = annee_debut + 4
+        
+        if annee_debut and annee_fin:
+            if int(annee_debut) > int(annee_fin):
+                raise ValidationError(
+                    "L'année début PMT ne peut pas être supérieure à l'année fin PMT."
+                )
+        
+        return annee_debut, annee_fin
+
+    # ─────────────────────────────────────────────────────────────────
+    # CHAMPS FINANCIERS + CALCULS
+    # ─────────────────────────────────────────────────────────────────
+
+    def _load_financials(self, data):
+        v = {}
+        for key in self.PREVISIONS_KEYS + self.MOIS_KEYS:
+            v[f'{key}_total']    = self._to_float_or_none(data.get(f'{key}_total'))
+            v[f'{key}_dont_dex'] = self._to_float_or_none(data.get(f'{key}_dont_dex'))
+
+        # prev_n_plus1 = somme des 12 mois
+        prev_n1_t = self._safe_sum([v[f'{m}_total']    for m in self.MOIS_KEYS])
+        prev_n1_d = self._safe_sum([v[f'{m}_dont_dex'] for m in self.MOIS_KEYS])
+
+        # RAR = N+2 → N+5
+        rar_t = self._safe_sum([v[f'{k}_total']    for k in self.PREVISIONS_KEYS])
+        rar_d = self._safe_sum([v[f'{k}_dont_dex'] for k in self.PREVISIONS_KEYS])
+
+        # Coût initial = prev_n+1 + RAR
+        cout_t = self._safe_sum([prev_n1_t, rar_t])
+        cout_d = self._safe_sum([prev_n1_d, rar_d])
+
+        logger.info(
+            f"🧮 prev_n+1={prev_n1_t}/{prev_n1_d} | "
+            f"RAR={rar_t}/{rar_d} | Coût={cout_t}/{cout_d}"
+        )
+
+        self._validate_all_totals(v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d)
+        return v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d
+
+    # ─────────────────────────────────────────────────────────────────
+    # UNICITÉ code_division
+    # ─────────────────────────────────────────────────────────────────
+
+    def _check_code_division_unique(self, code_division):
+        if BudgetRecord.objects.filter(code_division=code_division).exists():
+            raise ValidationError(
+                f"Le code_division '{code_division}' existe déjà. "
+                f"Utilisez l'API de modification."
             )
 
-        # ── Champs communs aux deux rôles ─────────────────────────────
-        activite = data.get('activite')
-        famille  = data.get('famille')
+    # ─────────────────────────────────────────────────────────────────
+    # RÉSOLUTION CODE VIA SERVICE PARAM
+    # ─────────────────────────────────────────────────────────────────
 
-        if not activite:
-            raise ValidationError("Le champ 'activite' est obligatoire.")
-        if not famille:
-            raise ValidationError("Le champ 'famille' est obligatoire.")
-
-        # ── Responsable Structure ──────────────────────────────────────
-        if role == 'responsable_structure':
-            region_id    = getattr(user, 'region_id',    None)
-            structure_id = getattr(user, 'structure_id', None)
-
-            if not region_id:
-                raise ValidationError(
-                    "region_id manquant dans le token JWT."
-                )
-            if not structure_id:
-                raise ValidationError(
-                    "structure_id manquant dans le token JWT."
-                )
-
-            perimetre = data.get('perimetre')
-            if not perimetre:
-                raise ValidationError(
-                    "Le champ 'perimetre' est obligatoire "
-                    "pour responsable_structure."
-                )
-
-            logger.info(
-                f"✅ Contexte STRUCTURE — "
-                f"region_id={region_id} | structure_id={structure_id}"
-            )
-
-            return {
-                'role':                     role,
-                # IDs portés par l'utilisateur
-                'region_id':                region_id,
-                'structure_id':             structure_id,
-                'direction_id':             None,
-                'departement_id':           None,
-                # Source pour résolution region_direction
-                'region_direction_source':  'region',
-                'lookup_id':                region_id,
-                # Champs métier
-                'perimetre':                perimetre,  # → perm dans BudgetRecord
-                'famille':                  famille,
-                'activite':                 activite,
-            }
-
-        # ── Responsable Département ────────────────────────────────────
-        if role == 'responsable_departement':
-            direction_id   = getattr(user, 'direction_id',   None)
-            departement_id = getattr(user, 'departement_id', None)
-            region_id      = getattr(user, 'region_id',      None)  # optionnel
-
-            if not direction_id:
-                raise ValidationError(
-                    "direction_id manquant dans le token JWT."
-                )
-            if not departement_id:
-                raise ValidationError(
-                    "departement_id manquant dans le token JWT."
-                )
-
-            logger.info(
-                f"✅ Contexte DEPARTEMENT — "
-                f"direction_id={direction_id} | departement_id={departement_id}"
-            )
-
-            return {
-                'role':                     role,
-                # IDs portés par l'utilisateur
-                'region_id':                region_id,      # peut être None
-                'structure_id':             None,
-                'direction_id':             direction_id,
-                'departement_id':           departement_id,
-                # Source pour résolution region_direction
-                'region_direction_source':  'direction',
-                'lookup_id':                direction_id,
-                # Champs métier
-                'perimetre':                None,           # pas de perm
-                'famille':                  famille,
-                'activite':                 activite,
-            }
-
-    # ═════════════════════════════════════════════════════════════════
-    # RÉSOLUTION region_direction VIA SERVICE EXTERNE
-    # ═════════════════════════════════════════════════════════════════
-
-    def _resolve_region_direction(self, ctx, token, service_url):
+    def _resolve_code(self, lookup_id, source, token, service_url):
         """
-        Appelle le microservice param pour obtenir le code
-        qui remplira region_direction dans BudgetRecord.
-
-        responsable_structure   → GET /params/regions/id/{region_id}
-                                  → retourne code_region
-        responsable_departement → GET /params/directions/id/{direction_id}
-                                  → retourne code_direction
-
-        Retourne : (code_value, label)
-        Lève    : ValidationError en cas d'erreur réseau ou réponse vide
+        source='region'    → GET /params/regions/id/{id}    → retourne code_region
+        source='direction' → GET /params/directions/id/{id} → retourne code_direction
+        Retourne (code_value, label).
         """
-        source    = ctx['region_direction_source']
-        lookup_id = ctx['lookup_id']
-
         if source == 'region':
             endpoint = f"{service_url}/params/regions/id/{lookup_id}"
             code_key = 'code_region'
         else:
-            endpoint = f"{service_url}/params/directions/id/{lookup_id}"
+            endpoint = f"{service_url}/params/directions/{lookup_id}"
             code_key = 'code_direction'
 
-        logger.info(f"📡 Appel service ({source}) : {endpoint}")
+        logger.info(f"📡 Résolution {source} → {endpoint}")
 
         try:
             resp = requests.get(
@@ -3156,336 +3156,402 @@ class NouveauProjetView(APIView):
                 headers={'Authorization': token},
                 timeout=5
             )
-            logger.info(f"📊 Status HTTP : {resp.status_code}")
-
             if resp.status_code != 200:
                 raise ValidationError(
-                    f"Erreur service '{source}' : "
-                    f"HTTP {resp.status_code} — {resp.text[:200]}"
+                    f"Service '{source}' : HTTP {resp.status_code} — {resp.text[:200]}"
                 )
 
-            resp_data        = resp.json().get('data', {})
-            region_direction = resp_data.get(code_key)
-            label            = resp_data.get('nom')
+            data_resp  = resp.json().get('data', {})
+            code_value = data_resp.get(code_key)
+            label      = data_resp.get('nom')
 
-            if not region_direction:
+            if not code_value:
                 raise ValidationError(
-                    f"Champ '{code_key}' absent ou vide dans la réponse "
-                    f"du service '{source}'."
+                    f"Champ '{code_key}' absent ou vide dans la réponse du service '{source}'."
                 )
 
-            logger.info(
-                f"✅ region_direction résolu : "
-                f"{region_direction} (label={label})"
-            )
-            return region_direction, label
+            logger.info(f"✅ {source} résolu : {code_value} (label={label})")
+            return code_value, label
 
         except requests.exceptions.Timeout:
-            raise ValidationError(
-                f"Timeout (5s) lors de l'appel au service '{source}'."
-            )
+            raise ValidationError(f"Timeout (5s) — service '{source}'.")
         except ValidationError:
             raise
         except Exception as e:
             logger.error(traceback.format_exc())
-            raise ValidationError(
-                f"Exception inattendue service '{source}' : {e}"
-            )
+            raise ValidationError(f"Exception inattendue service '{source}' : {e}")
 
-    # ═════════════════════════════════════════════════════════════════
-    # POST PRINCIPAL
-    # ═════════════════════════════════════════════════════════════════
+    # ─────────────────────────────────────────────────────────────────
+    # ÉCRITURE EN BASE (commune)
+    # ─────────────────────────────────────────────────────────────────
 
-    def post(self, request):
-        logger.info("=" * 80)
-        logger.info("🔵 NOUVEAU PROJET — Début de la requête")
-        logger.info(f"📅 Timestamp : {datetime.now()}")
-        logger.info(f"👤 User      : {request.user}")
-        logger.info(f"🔑 Rôle      : {getattr(request.user, 'role', 'inconnu')}")
-        logger.info(f"📦 Data      : {request.data}")
-
+    def _create_budget_record(
+        self, request,
+        code_division, libelle, activite, famille,
+        region,        # code_region résolu   | None pour département
+        direction,     # code_direction résolu | None pour structure
+        perm,          # périmètre             | None pour département
+        region_id, structure_id, direction_id, departement_id,
+        annee_debut_pmt, annee_fin_pmt,
+        v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d,
+    ):
         data = request.data
 
-        # ── 1. Contexte selon le rôle ─────────────────────────────────
-        logger.info("── Étape 1 : Contexte rôle")
-        try:
-            ctx = self._build_context(request, data)
-        except PermissionDenied as e:
-            logger.error(f"❌ Permission refusée : {e}")
-            return Response({'error': str(e)}, status=403)
-        except ValidationError as e:
-            logger.error(f"❌ Contexte invalide : {e.detail}")
-            return Response({'error': e.detail}, status=400)
-
-        logger.info(f"📋 Contexte : {ctx}")
-
-        # ── 2. Champs communs obligatoires ────────────────────────────
-        logger.info("── Étape 2 : Champs communs")
-        code_division = data.get('code_division')
-        libelle       = data.get('libelle')
-
-        missing = [
-            f for f, val in {
-                'code_division': code_division,
-                'libelle':       libelle,
-            }.items() if not val
-        ]
-        if missing:
-            logger.error(f"❌ Champs manquants : {missing}")
-            return Response(
-                {'error': f"Champs manquants : {', '.join(missing)}"},
-                status=400
-            )
-
-        # ── 3. Unicité code_division ──────────────────────────────────
-        logger.info(f"── Étape 3 : Unicité code_division={code_division}")
-        if BudgetRecord.objects.filter(code_division=code_division).exists():
-            logger.error(f"❌ code_division déjà existant : {code_division}")
-            return Response(
-                {
-                    'error': (
-                        f"Le code_division '{code_division}' existe déjà. "
-                        f"Utilisez l'API de modification."
-                    )
-                },
-                status=400
-            )
-        logger.info("✅ code_division disponible")
-
-        # ── 4. Intervalle PMT ─────────────────────────────────────────
-        logger.info("── Étape 4 : PMT")
-        intervalle_pmt = data.get('intervalle_pmt')
-        if isinstance(intervalle_pmt, list) and len(intervalle_pmt) == 2:
-            annee_debut_pmt = int(intervalle_pmt[0])
-            annee_fin_pmt   = int(intervalle_pmt[1])
-        else:
-            annee_debut_pmt = data.get('annee_debut_pmt')
-            annee_fin_pmt   = data.get('annee_fin_pmt')
-
-        if annee_debut_pmt and annee_fin_pmt:
-            if int(annee_debut_pmt) > int(annee_fin_pmt):
-                logger.error(
-                    f"❌ PMT invalide : "
-                    f"{annee_debut_pmt} > {annee_fin_pmt}"
-                )
-                return Response(
-                    {
-                        'error': (
-                            "L'année début PMT ne peut pas être "
-                            "supérieure à l'année fin PMT."
-                        )
-                    },
-                    status=400
-                )
-        logger.info(
-            f"✅ PMT : debut={annee_debut_pmt}, fin={annee_fin_pmt}"
-        )
-
-        # ── 5. Résolution region_direction ────────────────────────────
-        logger.info(
-            f"── Étape 5 : Résolution region_direction "
-            f"(source={ctx['region_direction_source']})"
-        )
-        service_url = get_service_param_url()
-        token       = request.headers.get('Authorization', '')
-
-        try:
-            region_direction, label = self._resolve_region_direction(
-                ctx, token, service_url
-            )
-        except ValidationError as e:
-            logger.error(f"❌ Résolution region_direction échouée : {e.detail}")
-            return Response({'error': e.detail}, status=503)
-
-        # ── 6. Champs financiers ──────────────────────────────────────
-        logger.info("── Étape 6 : Champs financiers")
-        v = {}
-        for key in self.PREVISIONS_KEYS + self.MOIS_KEYS:
-            v[f'{key}_total']    = self._to_float_or_none(
-                data.get(f'{key}_total')
-            )
-            v[f'{key}_dont_dex'] = self._to_float_or_none(
-                data.get(f'{key}_dont_dex')
-            )
-
-        logger.info(
-            f"✅ {sum(1 for x in v.values() if x is not None)} "
-            f"champs financiers chargés"
-        )
-
-        # ── 7. Calculs automatiques ───────────────────────────────────
-        logger.info("── Étape 7 : Calculs")
-        prev_n_plus1_total = self._safe_sum(
-            [v[f'{m}_total']    for m in self.MOIS_KEYS]
-        )
-        prev_n_plus1_dex   = self._safe_sum(
-            [v[f'{m}_dont_dex'] for m in self.MOIS_KEYS]
-        )
-        rar_total          = self._safe_sum(
-            [v[f'{k}_total']    for k in self.PREVISIONS_KEYS]
-        )
-        rar_dex            = self._safe_sum(
-            [v[f'{k}_dont_dex'] for k in self.PREVISIONS_KEYS]
-        )
-        cout_total         = self._safe_sum([prev_n_plus1_total, rar_total])
-        cout_dex           = self._safe_sum([prev_n_plus1_dex,   rar_dex])
-
-        logger.info(
-            f"🧮 prev_n+1 : {prev_n_plus1_total}/{prev_n_plus1_dex} | "
-            f"RAR : {rar_total}/{rar_dex} | "
-            f"Coût : {cout_total}/{cout_dex}"
-        )
-
-        # ── 8. Validation total >= DEX ────────────────────────────────
-        logger.info("── Étape 8 : Validation total ≥ DEX")
-        try:
-            self._validate_all_totals(
-                v,
-                prev_n_plus1_total, prev_n_plus1_dex,
-                rar_total,          rar_dex,
-                cout_total,         cout_dex,
-            )
-            logger.info("✅ Validation total/DEX réussie")
-        except ValidationError as e:
-            logger.error(f"❌ Violations total/DEX : {e.detail}")
-            return Response(
-                {
-                    'error':   'Incohérence dans les montants financiers.',
-                    'details': e.detail
-                },
-                status=400
-            )
-
-        # ── 9. Création en base ───────────────────────────────────────
-        logger.info("── Étape 9 : Création en base")
-
-        logger.info("💾 Création ExcelUpload...")
         upload = ExcelUpload.objects.create(
             file_name=f"nouveau_projet_{code_division}",
             status='processed'
         )
-        logger.info(f"✅ ExcelUpload id={upload.id}")
+        logger.info(f"📁 ExcelUpload id={upload.id}")
 
-        logger.info("💾 Création BudgetRecord...")
-        try:
-            record = BudgetRecord.objects.create(
-                upload=upload,
+        financials_keys = (
+            [f'{k}_total'    for k in self.PREVISIONS_KEYS] +
+            [f'{k}_dont_dex' for k in self.PREVISIONS_KEYS] +
+            [f'{m}_total'    for m in self.MOIS_KEYS]       +
+            [f'{m}_dont_dex' for m in self.MOIS_KEYS]
+        )
 
-                # ── Identité du projet ──────────────────────────────
-                code_division             = code_division,
-                libelle                   = libelle,
-                description_technique     = data.get('description_technique'),
-                opportunite_projet        = data.get('opportunite_projet'),
-                type_projet               = 'nouveau',
+        record = BudgetRecord.objects.create(
+            upload = upload,
 
-                # ── Champs métier (dépendent du rôle) ───────────────
-                # region_direction = code_region (structure)
-                #                  = code_direction (département)
-                region_direction          = region_direction,
-                famille                   = ctx['famille'],
-                activite                  = ctx['activite'],
-                perm                      = ctx['perimetre'],  # None si département
+            # Identité
+            code_division         = code_division,
+            libelle               = libelle,
+            description_technique = data.get('description_technique'),
+            opportunite_projet    = data.get('opportunite_projet'),
+            type_projet           = 'nouveau',
 
-                # ── IDs utilisateur ──────────────────────────────────
-                region_id                 = ctx['region_id'],
-                structure_id              = ctx['structure_id'],
-                direction_id              = ctx['direction_id'],
-                departement_id            = ctx['departement_id'],
-                created_by                = request.user.id,
+            # ── Champs séparés région / direction ─────────────────────
+            region    = region,       # rempli pour structure,   None pour département
+            direction = direction,    # rempli pour département, None pour structure
 
-                # ── PMT ──────────────────────────────────────────────
-                annee_debut_pmt           = annee_debut_pmt,
-                annee_fin_pmt             = annee_fin_pmt,
+            # Métier
+            famille  = famille,
+            activite = activite,
+            perm     = perm,          # None pour département
 
-                # ── Versionnement ────────────────────────────────────
-                parent_id                 = None,
-                version                   = 1,
-                is_active                 = True,
-                version_comment           = "Création initiale",
-                statut_workflow           = 'soumis',
-                statut_final              = None,
+            # IDs utilisateur
+            region_id      = region_id,
+            structure_id   = structure_id,    # None pour département
+            direction_id   = direction_id,    # None pour structure
+            departement_id = departement_id,  # None pour structure
+            created_by     = request.user.id,
 
-                # ── Réalisation (NULL — nouveau projet) ──────────────
-                realisation_cumul_n_mins1_total    = None,
-                realisation_cumul_n_mins1_dont_dex = None,
-                real_s1_n_total                    = None,
-                real_s1_n_dont_dex                 = None,
-                prev_s2_n_total                    = None,
-                prev_s2_n_dont_dex                 = None,
-                prev_cloture_n_total               = None,
-                prev_cloture_n_dont_dex            = None,
+            # PMT
+            annee_debut_pmt = annee_debut_pmt,
+            annee_fin_pmt   = annee_fin_pmt,
 
-                # ── Champs calculés ──────────────────────────────────
-                prev_n_plus1_total        = prev_n_plus1_total,
-                prev_n_plus1_dont_dex     = prev_n_plus1_dex,
-                reste_a_realiser_total    = rar_total,
-                reste_a_realiser_dont_dex = rar_dex,
-                cout_initial_total        = cout_total,
-                cout_initial_dont_dex     = cout_dex,
+            # Versionnement
+            parent_id       = None,
+            version         = 1,
+            is_active       = True,
+            version_comment = "Création initiale",
+            statut_workflow = 'soumis',
+            statut_final    = None,
 
-                # ── Prévisions mensuelles et annuelles ───────────────
-                **{
-                    k: v[k]
-                    for k in (
-                        [f'{key}_total'    for key in self.PREVISIONS_KEYS] +
-                        [f'{key}_dont_dex' for key in self.PREVISIONS_KEYS] +
-                        [f'{mois}_total'   for mois in self.MOIS_KEYS]      +
-                        [f'{mois}_dont_dex' for mois in self.MOIS_KEYS]
-                    )
-                }
-            )
-            logger.info(
-                f"✅ BudgetRecord créé : "
-                f"id={record.id} | code_division={record.code_division} | "
-                f"region_direction={region_direction} | rôle={ctx['role']}"
-            )
+            # Réalisation NULL (nouveau projet)
+            realisation_cumul_n_mins1_total    = None,
+            realisation_cumul_n_mins1_dont_dex = None,
+            real_s1_n_total                    = None,
+            real_s1_n_dont_dex                 = None,
+            prev_s2_n_total                    = None,
+            prev_s2_n_dont_dex                 = None,
+            prev_cloture_n_total               = None,
+            prev_cloture_n_dont_dex            = None,
 
-        except Exception as e:
-            logger.error(f"💥 Erreur création BudgetRecord : {e}")
-            logger.error(traceback.format_exc())
-            return Response(
-                {'error': f'Erreur création en base : {e}'},
-                status=500
-            )
+            # Champs calculés
+            prev_n_plus1_total        = prev_n1_t,
+            prev_n_plus1_dont_dex     = prev_n1_d,
+            reste_a_realiser_total    = rar_t,
+            reste_a_realiser_dont_dex = rar_d,
+            cout_initial_total        = cout_t,
+            cout_initial_dont_dex     = cout_d,
 
-        # ── 10. Sérialisation et réponse ──────────────────────────────
-        logger.info("── Étape 10 : Sérialisation")
-        try:
-            serializer = BudgetRecordSerializer(
-                record,
-                context={'request': request}
-            )
-            serialized = serializer.data
-            logger.info(f"✅ Sérialisation OK — {len(serialized)} champs")
-        except Exception as e:
-            logger.error(f"💥 Erreur sérialisation : {e}")
-            logger.error(traceback.format_exc())
-            return Response(
-                {'error': f'Erreur sérialisation : {e}'},
-                status=500
-            )
+            # Prévisions mensuelles + annuelles
+            **{k: v[k] for k in financials_keys}
+        )
 
         logger.info(
-            f"🎉 Projet créé avec succès — "
-            f"rôle={ctx['role']} | id={record.id} | "
-            f"region_direction={region_direction}"
+            f"✅ BudgetRecord id={record.id} | "
+            f"code_division={code_division} | "
+            f"region={region} | direction={direction}"
         )
-        logger.info("=" * 80)
+        return record
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ENDPOINT 1 — STRUCTURE
+# POST /api/budget/nouveau-projet/structure/
+# ══════════════════════════════════════════════════════════════════════════════
+
+class NouveauProjetView(BaseNouveauProjetView):
+    """
+    Crée un nouveau projet pour un responsable_structure.
+
+    JWT requis  : region_id, structure_id
+    Body requis : activite, famille, code_division, libelle, perimetre
+    En base     : region = code_region résolu | direction = None
+    """
+
+    ROLE_REQUIS = 'responsable_structure'
+
+    def post(self, request):
+        logger.info("=" * 60)
+        logger.info("🔵 CRÉATION PROJET [STRUCTURE]")
+        logger.info(f"👤 {request.user} | rôle={getattr(request.user, 'role', '?')}")
+        data = request.data
+
+        # ── 1. Vérification du rôle ───────────────────────────────────
+        role = getattr(request.user, 'role', None)
+        if role != self.ROLE_REQUIS:
+            return Response(
+                {'error': f"Rôle '{role}' non autorisé. Attendu : '{self.ROLE_REQUIS}'"},
+                status=403
+            )
+
+        # ── 2. IDs depuis le token JWT ────────────────────────────────
+        region_id    = getattr(request.user, 'region_id',    None)
+        structure_id = getattr(request.user, 'structure_id', None)
+
+        if not region_id:
+            return Response({'error': "region_id manquant dans le token JWT."}, status=400)
+        if not structure_id:
+            return Response({'error': "structure_id manquant dans le token JWT."}, status=400)
+
+        # ── 3. Périmètre (obligatoire pour structure) ─────────────────
+        perimetre = data.get('perimetre')
+        if not perimetre:
+            return Response(
+                {'error': "'perimetre' est obligatoire pour responsable_structure."},
+                status=400
+            )
+
+        # ── 4. Champs communs ─────────────────────────────────────────
+        try:
+            code_division, libelle, activite, famille = \
+                self._validate_common_fields(data)
+        except ValidationError as e:
+            return Response({'error': e.detail}, status=400)
+
+        # ── 5. Unicité code_division ──────────────────────────────────
+        try:
+            self._check_code_division_unique(code_division)
+        except ValidationError as e:
+            return Response({'error': e.detail}, status=400)
+
+        # ── 6. PMT ────────────────────────────────────────────────────
+        try:
+            annee_debut_pmt, annee_fin_pmt = self._parse_pmt(data)
+        except ValidationError as e:
+            return Response({'error': e.detail}, status=400)
+
+        # ── 7. Résolution code_region via service param ───────────────
+        token       = request.headers.get('Authorization', '')
+        service_url = get_service_param_url()
+        try:
+            code_region, label = self._resolve_code(
+                region_id, 'region', token, service_url
+            )
+        except ValidationError as e:
+            return Response({'error': e.detail}, status=503)
+
+        # ── 8. Champs financiers ──────────────────────────────────────
+        try:
+            v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d = \
+                self._load_financials(data)
+        except ValidationError as e:
+            return Response(
+                {'error': 'Incohérence montants financiers.', 'details': e.detail},
+                status=400
+            )
+
+        # ── 9. Création en base ───────────────────────────────────────
+        try:
+            record = self._create_budget_record(
+                request,
+                code_division   = code_division,
+                libelle         = libelle,
+                activite        = activite,
+                famille         = famille,
+                region          = code_region,   # ← champ region rempli
+                direction       = None,           # ← champ direction vide
+                perm            = perimetre,
+                region_id       = region_id,
+                structure_id    = structure_id,
+                direction_id    = None,
+                departement_id  = None,
+                annee_debut_pmt = annee_debut_pmt,
+                annee_fin_pmt   = annee_fin_pmt,
+                v=v,
+                prev_n1_t=prev_n1_t, prev_n1_d=prev_n1_d,
+                rar_t=rar_t,         rar_d=rar_d,
+                cout_t=cout_t,       cout_d=cout_d,
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response({'error': f'Erreur création en base : {e}'}, status=500)
+
+        # ── 10. Sérialisation ─────────────────────────────────────────
+        try:
+            serialized = BudgetRecordSerializer(
+                record, context={'request': request}
+            ).data
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response({'error': f'Erreur sérialisation : {e}'}, status=500)
+
+        logger.info(f"🎉 STRUCTURE créé — id={record.id} | region={code_region}")
+        logger.info("=" * 60)
 
         return Response(
             {
                 'success': True,
-                'message': (
-                    f"Projet créé avec succès "
-                    f"(version 1, rôle : {ctx['role']})"
-                ),
-                'data': serialized,
+                'message': "Projet créé (version 1 | responsable_structure)",
+                'data':    serialized,
                 'meta': {
-                    'role':             ctx['role'],
-                    'region_direction': region_direction,
-                    'label':            label,
-                    'record_id':        record.id,
-                }
+                    'role':         self.ROLE_REQUIS,
+                    'region_id':    region_id,
+                    'structure_id': structure_id,
+                    'region':       code_region,
+                    'label':        label,
+                    'record_id':    record.id,
+                },
+            },
+            status=201
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ENDPOINT 2 — DÉPARTEMENT
+# POST /api/budget/nouveau-projet/departement/
+# ══════════════════════════════════════════════════════════════════════════════
+
+class NouveauProjetDepartementView(BaseNouveauProjetView):
+    """
+    Crée un nouveau projet pour un responsable_departement.
+
+    JWT requis  : direction_id, departement_id  (region_id optionnel)
+    Body requis : activite, famille, code_division, libelle
+                  (pas de perimetre → perm = None)
+    En base     : region = None | direction = code_direction résolu
+    """
+
+    ROLE_REQUIS = 'responsable_departement'
+
+    def post(self, request):
+        logger.info("=" * 60)
+        logger.info("🔵 CRÉATION PROJET [DÉPARTEMENT]")
+        logger.info(f"👤 {request.user} | rôle={getattr(request.user, 'role', '?')}")
+        data = request.data
+
+        # ── 1. Vérification du rôle ───────────────────────────────────
+        role = getattr(request.user, 'role', None)
+        if role != self.ROLE_REQUIS:
+            return Response(
+                {'error': f"Rôle '{role}' non autorisé. Attendu : '{self.ROLE_REQUIS}'"},
+                status=403
+            )
+
+        # ── 2. IDs depuis le token JWT ────────────────────────────────
+        direction_id   = getattr(request.user, 'direction_id',   None)
+        departement_id = getattr(request.user, 'departement_id', None)
+        region_id      = getattr(request.user, 'region_id',      None)  # optionnel
+
+        if not direction_id:
+            return Response({'error': "direction_id manquant dans le token JWT."}, status=400)
+        if not departement_id:
+            return Response({'error': "departement_id manquant dans le token JWT."}, status=400)
+
+        # ── 3. Champs communs ─────────────────────────────────────────
+        try:
+            code_division, libelle, activite, famille = \
+                self._validate_common_fields(data)
+        except ValidationError as e:
+            return Response({'error': e.detail}, status=400)
+
+        # ── 4. Unicité code_division ──────────────────────────────────
+        try:
+            self._check_code_division_unique(code_division)
+        except ValidationError as e:
+            return Response({'error': e.detail}, status=400)
+
+        # ── 5. PMT ────────────────────────────────────────────────────
+        try:
+            annee_debut_pmt, annee_fin_pmt = self._parse_pmt(data)
+        except ValidationError as e:
+            return Response({'error': e.detail}, status=400)
+
+        # ── 6. Résolution code_direction via service param ────────────
+        token       = request.headers.get('Authorization', '')
+        service_url = get_service_param_url()
+        try:
+            code_direction, label = self._resolve_code(
+                direction_id, 'direction', token, service_url
+            )
+        except ValidationError as e:
+            return Response({'error': e.detail}, status=503)
+
+        # ── 7. Champs financiers ──────────────────────────────────────
+        try:
+            v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d = \
+                self._load_financials(data)
+        except ValidationError as e:
+            return Response(
+                {'error': 'Incohérence montants financiers.', 'details': e.detail},
+                status=400
+            )
+
+        # ── 8. Création en base ───────────────────────────────────────
+        try:
+            record = self._create_budget_record(
+                request,
+                code_division   = code_division,
+                libelle         = libelle,
+                activite        = activite,
+                famille         = famille,
+                region          = None,            # ← champ region vide
+                direction       = code_direction,  # ← champ direction rempli
+                perm            = None,            # pas de périmètre
+                region_id       = region_id,       # optionnel
+                structure_id    = None,
+                direction_id    = direction_id,
+                departement_id  = departement_id,
+                annee_debut_pmt = annee_debut_pmt,
+                annee_fin_pmt   = annee_fin_pmt,
+                v=v,
+                prev_n1_t=prev_n1_t, prev_n1_d=prev_n1_d,
+                rar_t=rar_t,         rar_d=rar_d,
+                cout_t=cout_t,       cout_d=cout_d,
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response({'error': f'Erreur création en base : {e}'}, status=500)
+
+        # ── 9. Sérialisation ──────────────────────────────────────────
+        try:
+            serialized = BudgetRecordSerializer(
+                record, context={'request': request}
+            ).data
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response({'error': f'Erreur sérialisation : {e}'}, status=500)
+
+        logger.info(f"🎉 DÉPARTEMENT créé — id={record.id} | direction={code_direction}")
+        logger.info("=" * 60)
+
+        return Response(
+            {
+                'success': True,
+                'message': "Projet créé (version 1 | responsable_departement)",
+                'data':    serialized,
+                'meta': {
+                    'role':           self.ROLE_REQUIS,
+                    'direction_id':   direction_id,
+                    'departement_id': departement_id,
+                    'region_id':      region_id,
+                    'direction':      code_direction,
+                    'label':          label,
+                    'record_id':      record.id,
+                },
             },
             status=201
         )
@@ -3966,23 +4032,567 @@ from rest_framework.response import Response
 #             'premiere_version': premiere.version,
 #             'historique': BudgetRecordSerializer(qs, many=True).data,
 #         })
-
+##############################################################################################################""
 # ================================================================== #
 #  VUE 2 — Responsable Structure : champs identitaires auto-remplis
 # ================================================================== #
-class ModifierProjetResponsableView(APIView):
-    """
-    GET  /api/budget/responsable/modifier-projet/{code_division}/
-         → retourne la version active avec region/perimetre/famille/activite
-           déjà remplis (lecture seule pour le front)
+# class ModifierProjetResponsableView(APIView):
+#     """
+#     GET  /api/budget/responsable/modifier-projet/{code_division}/
+#          → retourne la version active avec region/perimetre/famille/activite
+#            déjà remplis (lecture seule pour le front)
 
-    POST /api/budget/responsable/modifier-projet/{code_division}/
-         → modification ; region/perimetre/famille/activite sont
-           injectés automatiquement depuis la version active,
-           le responsable ne peut pas les changer
-    """
+#     POST /api/budget/responsable/modifier-projet/{code_division}/
+#          → modification ; region/perimetre/famille/activite sont
+#            injectés automatiquement depuis la version active,
+#            le responsable ne peut pas les changer
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsResponsableStructure]   # responsable structure
+
+#     PREVISIONS_KEYS = [
+#         'prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5'
+#     ]
+#     MOIS_KEYS = [
+#         'janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#         'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre',
+#     ]
+#     LOCK_TIMEOUT  = 10
+#     LOCK_WAIT     = 8
+#     LOCK_INTERVAL = 0.1
+
+#     # Champs que le responsable ne peut PAS modifier — récupérés automatiquement
+#     AUTO_FIELDS = [
+#         ('region',    'region',   'region'),
+#         ('perimetre', 'perm',     'perimetre'),
+#         ('famille',   'famille',  'famille'),
+#         ('activite',  'activite', 'activite'),
+#     ]
+
+#     # ------------------------------------------------------------------ #
+#     # Helpers (identiques)
+#     # ------------------------------------------------------------------ #
+#     @staticmethod
+#     def _to_decimal_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return Decimal(str(val))
+#         except (ValueError, TypeError):
+#             return None
+
+#     @staticmethod
+#     def _safe_sum(values):
+#         filtered = [v for v in values if v is not None]
+#         if not filtered:
+#             return None
+#         return sum(
+#             v if isinstance(v, Decimal) else Decimal(str(v))
+#             for v in filtered
+#         )
+
+#     @staticmethod
+#     def _all_financial_keys(previsions_keys, mois_keys):
+#         keys = []
+#         for k in previsions_keys:
+#             keys += [f'{k}_total', f'{k}_dont_dex']
+#         for m in mois_keys:
+#             keys += [f'{m}_total', f'{m}_dont_dex']
+#         return keys
+
+#     def _parse_financial_fields(self, data, previsions_keys, mois_keys):
+#         v = {}
+#         for k in previsions_keys:
+#             v[f'{k}_total']    = self._to_decimal_or_none(data.get(f'{k}_total'))
+#             v[f'{k}_dont_dex'] = self._to_decimal_or_none(data.get(f'{k}_dont_dex'))
+#         for m in mois_keys:
+#             v[f'{m}_total']    = self._to_decimal_or_none(data.get(f'{m}_total'))
+#             v[f'{m}_dont_dex'] = self._to_decimal_or_none(data.get(f'{m}_dont_dex'))
+#         return v
+
+#     def _acquire_lock(self, code_division):
+#         lock_key = f'budget_lock_{code_division}'
+#         deadline = time.time() + self.LOCK_WAIT
+#         while time.time() < deadline:
+#             if cache.add(lock_key, '1', timeout=self.LOCK_TIMEOUT):
+#                 return True
+#             time.sleep(self.LOCK_INTERVAL)
+#         return False
+
+#     def _release_lock(self, code_division):
+#         cache.delete(f'budget_lock_{code_division}')
+
+#     # ------------------------------------------------------------------ #
+#     # GET — version active + champs auto mis en avant pour le front
+#     # ------------------------------------------------------------------ #
+#     def get(self, request, code_division):
+#         actif = (
+#             BudgetRecord.objects.filter(
+#                 code_division=code_division, is_active=True
+#             ).first()
+#             or BudgetRecord.objects.filter(
+#                 code_division=code_division
+#             ).order_by('-version').first()
+#         )
+#         if not actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+
+#         serializer = BudgetRecordSerializer(actif)
+
+#         # On expose explicitement les champs auto pour que le front
+#         # sache quoi afficher en lecture seule
+#         auto_values = {
+#             data_key: getattr(actif, model_attr)
+#             for _, model_attr, data_key in self.AUTO_FIELDS
+#         }
+
+#         return Response({
+#             'code_division':  code_division,
+#             'champs_auto':    auto_values,   # région, périmètre, famille, activité
+#             'version_active': serializer.data,
+#         })
+
+#     # ------------------------------------------------------------------ #
+#     # POST — modification avec injection automatique des champs auto
+#     # ------------------------------------------------------------------ #
+#     def post(self, request, code_division):
+#         if not BudgetRecord.objects.filter(code_division=code_division).exists():
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable. Utilisez la création.'},
+#                 status=404
+#             )
+
+#         if not self._acquire_lock(code_division):
+#             return Response(
+#                 {'error': 'Une modification est déjà en cours. Réessayez dans quelques secondes.'},
+#                 status=409
+#             )
+#         try:
+#             return self._do_modification(request, code_division)
+#         finally:
+#             self._release_lock(code_division)
+
+#     # ------------------------------------------------------------------ #
+#     # Logique de modification avec champs auto injectés
+#     # ------------------------------------------------------------------ #
+#     def _do_modification(self, request, code_division):
+#         data = request.data.copy()   # copie mutable du QueryDict/dict
+
+#         with transaction.atomic():
+#             old_version = (
+#                 BudgetRecord.objects.filter(
+#                     code_division=code_division, is_active=True
+#                 ).first()
+#                 or BudgetRecord.objects.filter(
+#                     code_division=code_division
+#                 ).order_by('-version').first()
+#             )
+#             if not old_version:
+#                 return Response(
+#                     {'error': f'Projet {code_division} non trouvé'},
+#                     status=404
+#                 )
+
+#             # ── Injection automatique des champs protégés ───────────────
+#             # On écrase silencieusement ce que le front aurait pu envoyer
+#             for _, model_attr, data_key in self.AUTO_FIELDS:
+#                 data[data_key] = getattr(old_version, model_attr)
+
+#             # ── Numéro de version ───────────────────────────────────────
+#             # Le responsable ne peut pas changer le code_division
+#             new_code_division  = code_division
+#             result             = BudgetRecord.objects.filter(
+#                 code_division=new_code_division
+#             ).aggregate(max_version=Max('version'))
+#             new_version_number = (result['max_version'] or 0) + 1
+
+#             if old_version.is_active:
+#                 old_version.is_active = False
+#                 old_version.save(update_fields=['is_active'])
+
+#             new_version = self._create_new_version(
+#                 old_version, data, request,
+#                 new_code_division, new_version_number
+#             )
+
+#         serializer = BudgetRecordSerializer(new_version)
+#         return Response(
+#             {
+#                 'success':          True,
+#                 'message':          f'Projet modifié — Version {old_version.version} → {new_version_number}',
+#                 'ancienne_version': old_version.version,
+#                 'nouvelle_version': new_version_number,
+#                 'data':             serializer.data,
+#             },
+#             status=201,
+#         )
+
+#     # ------------------------------------------------------------------ #
+#     # Création d'une nouvelle version (identique à l'original)
+#     # ------------------------------------------------------------------ #
+#     def _create_new_version(self, old_version, new_data, request, new_code_division, new_version_number):
+#         v = {}
+#         for key in self.PREVISIONS_KEYS:
+#             for suffix in ('_total', '_dont_dex'):
+#                 k    = f'{key}{suffix}'
+#                 v[k] = self._to_decimal_or_none(new_data.get(k)) or getattr(old_version, k)
+#         for mois in self.MOIS_KEYS:
+#             for suffix in ('_total', '_dont_dex'):
+#                 k    = f'{mois}{suffix}'
+#                 v[k] = self._to_decimal_or_none(new_data.get(k)) or getattr(old_version, k)
+
+#         def nd(key):
+#             raw = self._to_decimal_or_none(new_data.get(key))
+#             return raw if raw is not None else getattr(old_version, key)
+
+#         real_cumul_total = nd('realisation_cumul_n_mins1_total')
+#         real_cumul_dex   = nd('realisation_cumul_n_mins1_dont_dex')
+#         real_s1_total    = nd('real_s1_n_total')
+#         real_s1_dex      = nd('real_s1_n_dont_dex')
+#         prev_s2_total    = nd('prev_s2_n_total')
+#         prev_s2_dex      = nd('prev_s2_n_dont_dex')
+
+#         prev_n_plus1_total = self._safe_sum([v[f'{m}_total']    for m in self.MOIS_KEYS])
+#         prev_n_plus1_dex   = self._safe_sum([v[f'{m}_dont_dex'] for m in self.MOIS_KEYS])
+#         rar_total          = self._safe_sum([v[f'{k}_total']    for k in self.PREVISIONS_KEYS])
+#         rar_dex            = self._safe_sum([v[f'{k}_dont_dex'] for k in self.PREVISIONS_KEYS])
+
+#         projet_type = new_data.get('type_projet', old_version.type_projet)
+
+#         if projet_type == 'en_cours' and (real_s1_total is not None or prev_s2_total is not None):
+#             prev_cloture_total = self._safe_sum([real_s1_total, prev_s2_total])
+#             prev_cloture_dex   = self._safe_sum([real_s1_dex,   prev_s2_dex])
+#             cout_total = self._safe_sum([real_cumul_total, prev_cloture_total, prev_n_plus1_total, rar_total])
+#             cout_dex   = self._safe_sum([real_cumul_dex,   prev_cloture_dex,   prev_n_plus1_dex,   rar_dex])
+#         else:
+#             prev_cloture_total = None
+#             prev_cloture_dex   = None
+#             cout_total = self._safe_sum([prev_n_plus1_total, rar_total])
+#             cout_dex   = self._safe_sum([prev_n_plus1_dex,   rar_dex])
+
+#         upload = ExcelUpload.objects.create(
+#             file_name=f'projet_{new_code_division}_v{new_version_number}', status='processed'
+#         )
+#         return BudgetRecord.objects.create(
+#             upload=upload,
+#             # Champs injectés automatiquement (écrasés avant l'appel)
+#             activite=new_data.get('activite',              old_version.activite),
+#             region=new_data.get('region',                  old_version.region),
+#             perm=new_data.get('perimetre',                 old_version.perm),
+#             famille=new_data.get('famille',                old_version.famille),
+#             code_division=new_code_division,
+#             libelle=new_data.get('libelle',                old_version.libelle),
+#             annee_debut_pmt=new_data.get('annee_debut_pmt', old_version.annee_debut_pmt),
+#             annee_fin_pmt=new_data.get('annee_fin_pmt',    old_version.annee_fin_pmt),
+#             region_id=getattr(request.user, 'region_id', None),
+#             structure_id=getattr(request.user, 'structure_id', None),
+#             created_by=request.user.id,
+#             type_projet=projet_type,
+#             description_technique=new_data.get('description_technique', old_version.description_technique),
+#             opportunite_projet=new_data.get('opportunite_projet',       old_version.opportunite_projet),
+#             parent_id=old_version.parent_id or old_version.id,
+#             version=new_version_number,
+#             is_active=True,
+#             version_comment=new_data.get('version_comment', f'Version {new_version_number}'),
+#             realisation_cumul_n_mins1_total=real_cumul_total,
+#             realisation_cumul_n_mins1_dont_dex=real_cumul_dex,
+#             real_s1_n_total=real_s1_total,
+#             real_s1_n_dont_dex=real_s1_dex,
+#             prev_s2_n_total=prev_s2_total,
+#             prev_s2_n_dont_dex=prev_s2_dex,
+#             prev_cloture_n_total=prev_cloture_total,
+#             prev_cloture_n_dont_dex=prev_cloture_dex,
+#             prev_n_plus1_total=prev_n_plus1_total,
+#             prev_n_plus1_dont_dex=prev_n_plus1_dex,
+#             reste_a_realiser_total=rar_total,
+#             reste_a_realiser_dont_dex=rar_dex,
+#             cout_initial_total=cout_total,
+#             cout_initial_dont_dex=cout_dex,
+#             **{k: v[k] for k in self._all_financial_keys(self.PREVISIONS_KEYS, self.MOIS_KEYS)},
+#         )
+# ══════════════════════════════════════════════════════════════════════════════
+# MODIFICATION PROJET — RESPONSABLE STRUCTURE
+# POST /api/budget/responsable/modifier-projet/structure/{code_division}/
+# ══════════════════════════════════════════════════════════════════════════════
+
+# class BaseModifierProjetView(APIView):
+#     """Classe de base pour la modification de projet (responsable)"""
+
+#     authentication_classes = [RemoteJWTAuthentication]
+
+#     PREVISIONS_KEYS = [
+#         'prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5'
+#     ]
+#     MOIS_KEYS = [
+#         'janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#         'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre',
+#     ]
+#     LOCK_TIMEOUT  = 10
+#     LOCK_WAIT     = 8
+#     LOCK_INTERVAL = 0.1
+
+#     # Champs que le responsable ne peut PAS modifier — récupérés automatiquement
+#     # À surcharger dans les sous-classes
+#     AUTO_FIELDS = []  # Liste de tuples (data_key, model_attr, front_key)
+
+#     @staticmethod
+#     def _to_decimal_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return Decimal(str(val))
+#         except (ValueError, TypeError):
+#             return None
+
+#     @staticmethod
+#     def _safe_sum(values):
+#         filtered = [v for v in values if v is not None]
+#         if not filtered:
+#             return None
+#         return sum(
+#             v if isinstance(v, Decimal) else Decimal(str(v))
+#             for v in filtered
+#         )
+
+#     @staticmethod
+#     def _all_financial_keys(previsions_keys, mois_keys):
+#         keys = []
+#         for k in previsions_keys:
+#             keys += [f'{k}_total', f'{k}_dont_dex']
+#         for m in mois_keys:
+#             keys += [f'{m}_total', f'{m}_dont_dex']
+#         return keys
+
+#     def _parse_financial_fields(self, data, previsions_keys, mois_keys):
+#         v = {}
+#         for k in previsions_keys:
+#             v[f'{k}_total']    = self._to_decimal_or_none(data.get(f'{k}_total'))
+#             v[f'{k}_dont_dex'] = self._to_decimal_or_none(data.get(f'{k}_dont_dex'))
+#         for m in mois_keys:
+#             v[f'{m}_total']    = self._to_decimal_or_none(data.get(f'{m}_total'))
+#             v[f'{m}_dont_dex'] = self._to_decimal_or_none(data.get(f'{m}_dont_dex'))
+#         return v
+
+#     def _acquire_lock(self, code_division):
+#         lock_key = f'budget_lock_{code_division}'
+#         deadline = time.time() + self.LOCK_WAIT
+#         while time.time() < deadline:
+#             if cache.add(lock_key, '1', timeout=self.LOCK_TIMEOUT):
+#                 return True
+#             time.sleep(self.LOCK_INTERVAL)
+#         return False
+
+#     def _release_lock(self, code_division):
+#         cache.delete(f'budget_lock_{code_division}')
+
+#     def get(self, request, code_division):
+#         actif = (
+#             BudgetRecord.objects.filter(
+#                 code_division=code_division, is_active=True
+#             ).first()
+#             or BudgetRecord.objects.filter(
+#                 code_division=code_division
+#             ).order_by('-version').first()
+#         )
+#         if not actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+
+#         serializer = BudgetRecordSerializer(actif)
+
+#         auto_values = {}
+#         for data_key, model_attr, front_key in self.AUTO_FIELDS:
+#             auto_values[front_key] = getattr(actif, model_attr)
+
+#         return Response({
+#             'code_division':  code_division,
+#             'champs_auto':    auto_values,
+#             'version_active': serializer.data,
+#         })
+
+#     def post(self, request, code_division):
+#         if not BudgetRecord.objects.filter(code_division=code_division).exists():
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable. Utilisez la création.'},
+#                 status=404
+#             )
+
+#         if not self._acquire_lock(code_division):
+#             return Response(
+#                 {'error': 'Une modification est déjà en cours. Réessayez dans quelques secondes.'},
+#                 status=409
+#             )
+#         try:
+#             return self._do_modification(request, code_division)
+#         finally:
+#             self._release_lock(code_division)
+
+#     def _do_modification(self, request, code_division):
+#         data = request.data.copy()
+
+#         with transaction.atomic():
+#             old_version = (
+#                 BudgetRecord.objects.filter(
+#                     code_division=code_division, is_active=True
+#                 ).first()
+#                 or BudgetRecord.objects.filter(
+#                     code_division=code_division
+#                 ).order_by('-version').first()
+#             )
+#             if not old_version:
+#                 return Response(
+#                     {'error': f'Projet {code_division} non trouvé'},
+#                     status=404
+#                 )
+
+#             # Injection automatique des champs protégés
+#             for data_key, model_attr, front_key in self.AUTO_FIELDS:
+#                 data[front_key] = getattr(old_version, model_attr)
+
+#             new_code_division = code_division
+#             result = BudgetRecord.objects.filter(
+#                 code_division=new_code_division
+#             ).aggregate(max_version=Max('version'))
+#             new_version_number = (result['max_version'] or 0) + 1
+
+#             if old_version.is_active:
+#                 old_version.is_active = False
+#                 old_version.save(update_fields=['is_active'])
+
+#             new_version = self._create_new_version(
+#                 old_version, data, request,
+#                 new_code_division, new_version_number
+#             )
+
+#         serializer = BudgetRecordSerializer(new_version)
+#         return Response(
+#             {
+#                 'success': True,
+#                 'message': f'Projet modifié — Version {old_version.version} → {new_version_number}',
+#                 'ancienne_version': old_version.version,
+#                 'nouvelle_version': new_version_number,
+#                 'data': serializer.data,
+#             },
+#             status=201,
+#         )
+
+#     def _create_new_version(self, old_version, new_data, request, new_code_division, new_version_number):
+#         v = {}
+#         for key in self.PREVISIONS_KEYS:
+#             for suffix in ('_total', '_dont_dex'):
+#                 k = f'{key}{suffix}'
+#                 v[k] = self._to_decimal_or_none(new_data.get(k)) or getattr(old_version, k)
+#         for mois in self.MOIS_KEYS:
+#             for suffix in ('_total', '_dont_dex'):
+#                 k = f'{mois}{suffix}'
+#                 v[k] = self._to_decimal_or_none(new_data.get(k)) or getattr(old_version, k)
+
+#         def nd(key):
+#             raw = self._to_decimal_or_none(new_data.get(key))
+#             return raw if raw is not None else getattr(old_version, key)
+
+#         real_cumul_total = nd('realisation_cumul_n_mins1_total')
+#         real_cumul_dex   = nd('realisation_cumul_n_mins1_dont_dex')
+#         real_s1_total    = nd('real_s1_n_total')
+#         real_s1_dex      = nd('real_s1_n_dont_dex')
+#         prev_s2_total    = nd('prev_s2_n_total')
+#         prev_s2_dex      = nd('prev_s2_n_dont_dex')
+
+#         prev_n_plus1_total = self._safe_sum([v[f'{m}_total'] for m in self.MOIS_KEYS])
+#         prev_n_plus1_dex   = self._safe_sum([v[f'{m}_dont_dex'] for m in self.MOIS_KEYS])
+#         rar_total          = self._safe_sum([v[f'{k}_total'] for k in self.PREVISIONS_KEYS])
+#         rar_dex            = self._safe_sum([v[f'{k}_dont_dex'] for k in self.PREVISIONS_KEYS])
+
+#         projet_type = new_data.get('type_projet', old_version.type_projet)
+
+#         if projet_type == 'en_cours' and (real_s1_total is not None or prev_s2_total is not None):
+#             prev_cloture_total = self._safe_sum([real_s1_total, prev_s2_total])
+#             prev_cloture_dex   = self._safe_sum([real_s1_dex, prev_s2_dex])
+#             cout_total = self._safe_sum([real_cumul_total, prev_cloture_total, prev_n_plus1_total, rar_total])
+#             cout_dex   = self._safe_sum([real_cumul_dex, prev_cloture_dex, prev_n_plus1_dex, rar_dex])
+#         else:
+#             prev_cloture_total = None
+#             prev_cloture_dex   = None
+#             cout_total = self._safe_sum([prev_n_plus1_total, rar_total])
+#             cout_dex   = self._safe_sum([prev_n_plus1_dex, rar_dex])
+
+#         upload = ExcelUpload.objects.create(
+#             file_name=f'projet_{new_code_division}_v{new_version_number}', status='processed'
+#         )
+
+#         # Récupérer les valeurs des champs AUTO_FIELDS depuis old_version
+#         auto_values = {}
+#         for _, model_attr, front_key in self.AUTO_FIELDS:
+#             # Priorité à new_data (injecté), sinon old_version
+#             auto_values[model_attr] = new_data.get(front_key, getattr(old_version, model_attr))
+
+#         # Construction du dictionnaire des arguments
+#         create_kwargs = {
+#             'upload': upload,
+#             'code_division': new_code_division,
+#             'version': new_version_number,
+#             'is_active': True,
+#             'version_comment': new_data.get('version_comment', f'Version {new_version_number}'),
+#             'created_by': request.user.id,
+#             'parent_id': old_version.parent_id or old_version.id,
+
+#             # Champs communs
+#             'libelle': new_data.get('libelle', old_version.libelle),
+#             'description_technique': new_data.get('description_technique', old_version.description_technique),
+#             'opportunite_projet': new_data.get('opportunite_projet', old_version.opportunite_projet),
+#             'type_projet': projet_type,
+#             'annee_debut_pmt': new_data.get('annee_debut_pmt', old_version.annee_debut_pmt),
+#             'annee_fin_pmt': new_data.get('annee_fin_pmt', old_version.annee_fin_pmt),
+
+#             # Champs métier - avec prise en compte des AUTO_FIELDS
+#             'activite': auto_values.get('activite', old_version.activite),
+#             'famille': auto_values.get('famille', old_version.famille),
+#             'region': auto_values.get('region', old_version.region),
+#             'direction': auto_values.get('direction', old_version.direction),
+#             'perm': auto_values.get('perm', old_version.perm),
+
+#             # IDs utilisateur - CRUCIAL : garder les IDs de l'ancienne version
+#             'region_id': old_version.region_id,
+#             'structure_id': old_version.structure_id,
+#             'direction_id': old_version.direction_id,
+#             'departement_id': old_version.departement_id,
+
+#             # Financiers
+#             'realisation_cumul_n_mins1_total': real_cumul_total,
+#             'realisation_cumul_n_mins1_dont_dex': real_cumul_dex,
+#             'real_s1_n_total': real_s1_total,
+#             'real_s1_n_dont_dex': real_s1_dex,
+#             'prev_s2_n_total': prev_s2_total,
+#             'prev_s2_n_dont_dex': prev_s2_dex,
+#             'prev_cloture_n_total': prev_cloture_total,
+#             'prev_cloture_n_dont_dex': prev_cloture_dex,
+#             'prev_n_plus1_total': prev_n_plus1_total,
+#             'prev_n_plus1_dont_dex': prev_n_plus1_dex,
+#             'reste_a_realiser_total': rar_total,
+#             'reste_a_realiser_dont_dex': rar_dex,
+#             'cout_initial_total': cout_total,
+#             'cout_initial_dont_dex': cout_dex,
+#         }
+
+#         # Ajout des prévisions mensuelles et annuelles
+#         for k in self._all_financial_keys(self.PREVISIONS_KEYS, self.MOIS_KEYS):
+#             create_kwargs[k] = v[k]
+
+#         return BudgetRecord.objects.create(**create_kwargs)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BASE MODIFIER PROJET VIEW (version corrigée)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class BaseModifierProjetView(APIView):
+    """Classe de base pour la modification de projet (responsable)"""
+
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsResponsableStructure]   # responsable structure
 
     PREVISIONS_KEYS = [
         'prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5'
@@ -3996,16 +4606,9 @@ class ModifierProjetResponsableView(APIView):
     LOCK_INTERVAL = 0.1
 
     # Champs que le responsable ne peut PAS modifier — récupérés automatiquement
-    AUTO_FIELDS = [
-        ('region',    'region',   'region'),
-        ('perimetre', 'perm',     'perimetre'),
-        ('famille',   'famille',  'famille'),
-        ('activite',  'activite', 'activite'),
-    ]
+    # À surcharger dans les sous-classes
+    AUTO_FIELDS = []  # Liste de tuples (data_key, model_attr, front_key)
 
-    # ------------------------------------------------------------------ #
-    # Helpers (identiques)
-    # ------------------------------------------------------------------ #
     @staticmethod
     def _to_decimal_or_none(val):
         if val in (None, '', 'null', 'None'):
@@ -4056,9 +4659,6 @@ class ModifierProjetResponsableView(APIView):
     def _release_lock(self, code_division):
         cache.delete(f'budget_lock_{code_division}')
 
-    # ------------------------------------------------------------------ #
-    # GET — version active + champs auto mis en avant pour le front
-    # ------------------------------------------------------------------ #
     def get(self, request, code_division):
         actif = (
             BudgetRecord.objects.filter(
@@ -4076,22 +4676,16 @@ class ModifierProjetResponsableView(APIView):
 
         serializer = BudgetRecordSerializer(actif)
 
-        # On expose explicitement les champs auto pour que le front
-        # sache quoi afficher en lecture seule
-        auto_values = {
-            data_key: getattr(actif, model_attr)
-            for _, model_attr, data_key in self.AUTO_FIELDS
-        }
+        auto_values = {}
+        for data_key, model_attr, front_key in self.AUTO_FIELDS:
+            auto_values[front_key] = getattr(actif, model_attr)
 
         return Response({
             'code_division':  code_division,
-            'champs_auto':    auto_values,   # région, périmètre, famille, activité
+            'champs_auto':    auto_values,
             'version_active': serializer.data,
         })
 
-    # ------------------------------------------------------------------ #
-    # POST — modification avec injection automatique des champs auto
-    # ------------------------------------------------------------------ #
     def post(self, request, code_division):
         if not BudgetRecord.objects.filter(code_division=code_division).exists():
             return Response(
@@ -4109,11 +4703,8 @@ class ModifierProjetResponsableView(APIView):
         finally:
             self._release_lock(code_division)
 
-    # ------------------------------------------------------------------ #
-    # Logique de modification avec champs auto injectés
-    # ------------------------------------------------------------------ #
     def _do_modification(self, request, code_division):
-        data = request.data.copy()   # copie mutable du QueryDict/dict
+        data = request.data.copy()
 
         with transaction.atomic():
             old_version = (
@@ -4130,15 +4721,12 @@ class ModifierProjetResponsableView(APIView):
                     status=404
                 )
 
-            # ── Injection automatique des champs protégés ───────────────
-            # On écrase silencieusement ce que le front aurait pu envoyer
-            for _, model_attr, data_key in self.AUTO_FIELDS:
-                data[data_key] = getattr(old_version, model_attr)
+            # Injection automatique des champs protégés
+            for data_key, model_attr, front_key in self.AUTO_FIELDS:
+                data[front_key] = getattr(old_version, model_attr)
 
-            # ── Numéro de version ───────────────────────────────────────
-            # Le responsable ne peut pas changer le code_division
-            new_code_division  = code_division
-            result             = BudgetRecord.objects.filter(
+            new_code_division = code_division
+            result = BudgetRecord.objects.filter(
                 code_division=new_code_division
             ).aggregate(max_version=Max('version'))
             new_version_number = (result['max_version'] or 0) + 1
@@ -4155,27 +4743,24 @@ class ModifierProjetResponsableView(APIView):
         serializer = BudgetRecordSerializer(new_version)
         return Response(
             {
-                'success':          True,
-                'message':          f'Projet modifié — Version {old_version.version} → {new_version_number}',
+                'success': True,
+                'message': f'Projet modifié — Version {old_version.version} → {new_version_number}',
                 'ancienne_version': old_version.version,
                 'nouvelle_version': new_version_number,
-                'data':             serializer.data,
+                'data': serializer.data,
             },
             status=201,
         )
 
-    # ------------------------------------------------------------------ #
-    # Création d'une nouvelle version (identique à l'original)
-    # ------------------------------------------------------------------ #
     def _create_new_version(self, old_version, new_data, request, new_code_division, new_version_number):
         v = {}
         for key in self.PREVISIONS_KEYS:
             for suffix in ('_total', '_dont_dex'):
-                k    = f'{key}{suffix}'
+                k = f'{key}{suffix}'
                 v[k] = self._to_decimal_or_none(new_data.get(k)) or getattr(old_version, k)
         for mois in self.MOIS_KEYS:
             for suffix in ('_total', '_dont_dex'):
-                k    = f'{mois}{suffix}'
+                k = f'{mois}{suffix}'
                 v[k] = self._to_decimal_or_none(new_data.get(k)) or getattr(old_version, k)
 
         def nd(key):
@@ -4189,69 +4774,439 @@ class ModifierProjetResponsableView(APIView):
         prev_s2_total    = nd('prev_s2_n_total')
         prev_s2_dex      = nd('prev_s2_n_dont_dex')
 
-        prev_n_plus1_total = self._safe_sum([v[f'{m}_total']    for m in self.MOIS_KEYS])
+        prev_n_plus1_total = self._safe_sum([v[f'{m}_total'] for m in self.MOIS_KEYS])
         prev_n_plus1_dex   = self._safe_sum([v[f'{m}_dont_dex'] for m in self.MOIS_KEYS])
-        rar_total          = self._safe_sum([v[f'{k}_total']    for k in self.PREVISIONS_KEYS])
+        rar_total          = self._safe_sum([v[f'{k}_total'] for k in self.PREVISIONS_KEYS])
         rar_dex            = self._safe_sum([v[f'{k}_dont_dex'] for k in self.PREVISIONS_KEYS])
 
         projet_type = new_data.get('type_projet', old_version.type_projet)
 
         if projet_type == 'en_cours' and (real_s1_total is not None or prev_s2_total is not None):
             prev_cloture_total = self._safe_sum([real_s1_total, prev_s2_total])
-            prev_cloture_dex   = self._safe_sum([real_s1_dex,   prev_s2_dex])
+            prev_cloture_dex   = self._safe_sum([real_s1_dex, prev_s2_dex])
             cout_total = self._safe_sum([real_cumul_total, prev_cloture_total, prev_n_plus1_total, rar_total])
-            cout_dex   = self._safe_sum([real_cumul_dex,   prev_cloture_dex,   prev_n_plus1_dex,   rar_dex])
+            cout_dex   = self._safe_sum([real_cumul_dex, prev_cloture_dex, prev_n_plus1_dex, rar_dex])
         else:
             prev_cloture_total = None
             prev_cloture_dex   = None
             cout_total = self._safe_sum([prev_n_plus1_total, rar_total])
-            cout_dex   = self._safe_sum([prev_n_plus1_dex,   rar_dex])
+            cout_dex   = self._safe_sum([prev_n_plus1_dex, rar_dex])
 
         upload = ExcelUpload.objects.create(
             file_name=f'projet_{new_code_division}_v{new_version_number}', status='processed'
         )
-        return BudgetRecord.objects.create(
-            upload=upload,
-            # Champs injectés automatiquement (écrasés avant l'appel)
-            activite=new_data.get('activite',              old_version.activite),
-            region=new_data.get('region',                  old_version.region),
-            perm=new_data.get('perimetre',                 old_version.perm),
-            famille=new_data.get('famille',                old_version.famille),
-            code_division=new_code_division,
-            libelle=new_data.get('libelle',                old_version.libelle),
-            annee_debut_pmt=new_data.get('annee_debut_pmt', old_version.annee_debut_pmt),
-            annee_fin_pmt=new_data.get('annee_fin_pmt',    old_version.annee_fin_pmt),
-            region_id=getattr(request.user, 'region_id', None),
-            structure_id=getattr(request.user, 'structure_id', None),
-            created_by=request.user.id,
-            type_projet=projet_type,
-            description_technique=new_data.get('description_technique', old_version.description_technique),
-            opportunite_projet=new_data.get('opportunite_projet',       old_version.opportunite_projet),
-            parent_id=old_version.parent_id or old_version.id,
-            version=new_version_number,
-            is_active=True,
-            version_comment=new_data.get('version_comment', f'Version {new_version_number}'),
-            realisation_cumul_n_mins1_total=real_cumul_total,
-            realisation_cumul_n_mins1_dont_dex=real_cumul_dex,
-            real_s1_n_total=real_s1_total,
-            real_s1_n_dont_dex=real_s1_dex,
-            prev_s2_n_total=prev_s2_total,
-            prev_s2_n_dont_dex=prev_s2_dex,
-            prev_cloture_n_total=prev_cloture_total,
-            prev_cloture_n_dont_dex=prev_cloture_dex,
-            prev_n_plus1_total=prev_n_plus1_total,
-            prev_n_plus1_dont_dex=prev_n_plus1_dex,
-            reste_a_realiser_total=rar_total,
-            reste_a_realiser_dont_dex=rar_dex,
-            cout_initial_total=cout_total,
-            cout_initial_dont_dex=cout_dex,
-            **{k: v[k] for k in self._all_financial_keys(self.PREVISIONS_KEYS, self.MOIS_KEYS)},
-        )
 
+        # Récupérer les valeurs des champs AUTO_FIELDS depuis old_version
+        auto_values = {}
+        for _, model_attr, front_key in self.AUTO_FIELDS:
+            # Priorité à new_data (injecté dans _do_modification), sinon old_version
+            if front_key in new_data and new_data.get(front_key) is not None:
+                auto_values[model_attr] = new_data.get(front_key)
+            else:
+                auto_values[model_attr] = getattr(old_version, model_attr)
+
+        # Construction du dictionnaire des arguments
+        create_kwargs = {
+            'upload': upload,
+            'code_division': new_code_division,
+            'version': new_version_number,
+            'is_active': True,
+            'version_comment': new_data.get('version_comment', f'Version {new_version_number}'),
+            'created_by': request.user.id,
+            'parent_id': old_version.id,  # ← Pointer vers la version qu'on remplace
+
+            # Champs communs
+            'libelle': new_data.get('libelle', old_version.libelle),
+            'description_technique': new_data.get('description_technique', old_version.description_technique),
+            'opportunite_projet': new_data.get('opportunite_projet', old_version.opportunite_projet),
+            'type_projet': projet_type,
+            'annee_debut_pmt': new_data.get('annee_debut_pmt', old_version.annee_debut_pmt),
+            'annee_fin_pmt': new_data.get('annee_fin_pmt', old_version.annee_fin_pmt),
+
+            # Champs métier - avec prise en compte des AUTO_FIELDS
+            'activite': auto_values.get('activite', old_version.activite),
+            'famille': auto_values.get('famille', old_version.famille),
+            'region': auto_values.get('region', old_version.region),
+            'direction': auto_values.get('direction', old_version.direction),
+            'perm': auto_values.get('perm', old_version.perm),
+
+            # IDs utilisateur - TOUJOURS ceux de old_version (la version modifiée)
+            'region_id': old_version.region_id,
+            'structure_id': old_version.structure_id,
+            'direction_id': old_version.direction_id,
+            'departement_id': old_version.departement_id,
+
+            # Financiers
+            'realisation_cumul_n_mins1_total': real_cumul_total,
+            'realisation_cumul_n_mins1_dont_dex': real_cumul_dex,
+            'real_s1_n_total': real_s1_total,
+            'real_s1_n_dont_dex': real_s1_dex,
+            'prev_s2_n_total': prev_s2_total,
+            'prev_s2_n_dont_dex': prev_s2_dex,
+            'prev_cloture_n_total': prev_cloture_total,
+            'prev_cloture_n_dont_dex': prev_cloture_dex,
+            'prev_n_plus1_total': prev_n_plus1_total,
+            'prev_n_plus1_dont_dex': prev_n_plus1_dex,
+            'reste_a_realiser_total': rar_total,
+            'reste_a_realiser_dont_dex': rar_dex,
+            'cout_initial_total': cout_total,
+            'cout_initial_dont_dex': cout_dex,
+        }
+
+        # Ajout des prévisions mensuelles et annuelles
+        for k in self._all_financial_keys(self.PREVISIONS_KEYS, self.MOIS_KEYS):
+            create_kwargs[k] = v[k]
+
+        return BudgetRecord.objects.create(**create_kwargs)
+class ModifierProjetStructureView(BaseModifierProjetView):
+    """
+    GET  /api/budget/responsable/modifier-projet/structure/{code_division}/
+    POST /api/budget/responsable/modifier-projet/structure/{code_division}/
+    
+    Permet à un responsable_structure de modifier un projet.
+    Les champs région, périmètre, famille, activité sont automatiquement
+    injectés depuis la version active (non modifiables).
+    """
+    permission_classes = [IsResponsableStructure]
+
+    AUTO_FIELDS = [
+        ('region',    'region',   'region'),
+        ('perimetre', 'perm',     'perimetre'),
+        ('famille',   'famille',  'famille'),
+        ('activite',  'activite', 'activite'),
+    ]
+
+
+class ModifierProjetDepartementView(BaseModifierProjetView):
+    """
+    GET  /api/budget/responsable/modifier-projet/departement/{code_division}/
+    POST /api/budget/responsable/modifier-projet/departement/{code_division}/
+    
+    Permet à un responsable_departement de modifier un projet.
+    Les champs direction, famille, activité sont automatiquement
+    injectés depuis la version active (non modifiables).
+    Note : le périmètre (perm) n'existe pas pour les départements.
+    """
+    permission_classes = [IsResponsableDepartement]
+
+    AUTO_FIELDS = [
+        ('direction', 'direction', 'direction'),
+        ('famille',   'famille',   'famille'),
+        ('activite',  'activite',  'activite'),
+    ]
+
+############################################################################################################
 # ================================================================== #
 #  PATCH — Admin : modification simple (1 ou plusieurs champs)
 #  Pas de nouvelle version — mise à jour directe de la version active
 # ================================================================== #
+# class PatchProjetAdminView(APIView):
+#     """
+#     PATCH /api/budget/admin/patch-projet/{code_division}/
+
+#     Permet à l'admin de modifier un ou plusieurs champs directement
+#     sur la version active, sans créer de nouvelle version.
+
+#     Exemple body :
+#         { "libelle": "Nouveau libellé" }
+#         { "region": "Nord", "famille": "F2" }
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAdmin]
+
+#     PATCHABLE_FIELDS = {
+#         # Identitaires
+#         'region', 'perimetre', 'famille', 'activite',
+#         'libelle', 'type_projet', 'code_division',
+#         'annee_debut_pmt', 'annee_fin_pmt',
+#         'description_technique', 'opportunite_projet',
+#         'version_comment',
+#         # Financiers — prévisions
+#         'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+#         'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+#         'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+#         'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+#         # Financiers — mois
+#         'janvier_total',   'janvier_dont_dex',
+#         'fevrier_total',   'fevrier_dont_dex',
+#         'mars_total',      'mars_dont_dex',
+#         'avril_total',     'avril_dont_dex',
+#         'mai_total',       'mai_dont_dex',
+#         'juin_total',      'juin_dont_dex',
+#         'juillet_total',   'juillet_dont_dex',
+#         'aout_total',      'aout_dont_dex',
+#         'septembre_total', 'septembre_dont_dex',
+#         'octobre_total',   'octobre_dont_dex',
+#         'novembre_total',  'novembre_dont_dex',
+#         'decembre_total',  'decembre_dont_dex',
+#         # Réalisations
+#         'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+#         'real_s1_n_total',  'real_s1_n_dont_dex',
+#         'prev_s2_n_total',  'prev_s2_n_dont_dex',
+#     }
+
+#     READONLY_FIELDS = {
+#         'id', 'version', 'is_active', 'parent_id',
+#         'created_by', 'region_id', 'structure_id', 'upload',
+#         'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+#         'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+#         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+#         'cout_initial_total', 'cout_initial_dont_dex',
+#     }
+
+#     DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+#     @staticmethod
+#     def _to_decimal_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return Decimal(str(val))
+#         except (ValueError, TypeError):
+#             return None
+
+#     def patch(self, request, code_division):
+#         data = request.data
+
+#         if not data:
+#             return Response(
+#                 {'error': 'Aucun champ fourni.'},
+#                 status=400
+#             )
+
+#         # ── Récupérer la version active ─────────────────────────────────
+#         actif = (
+#             BudgetRecord.objects.filter(
+#                 code_division=code_division, is_active=True
+#             ).first()
+#             or BudgetRecord.objects.filter(
+#                 code_division=code_division
+#             ).order_by('-version').first()
+#         )
+#         if not actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+
+#         # ── Vérifier les champs envoyés ─────────────────────────────────
+#         unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+#         readonly_sent  = set(data.keys()) & self.READONLY_FIELDS
+
+#         if readonly_sent:
+#             return Response(
+#                 {
+#                     'error': 'Champs système non modifiables via ce endpoint.',
+#                     'champs': list(readonly_sent),
+#                 },
+#                 status=400
+#             )
+
+#         if unknown_fields:
+#             return Response(
+#                 {
+#                     'error': 'Champs inconnus.',
+#                     'champs': list(unknown_fields),
+#                 },
+#                 status=400
+#             )
+
+#         # ── Appliquer les modifications ─────────────────────────────────
+#         updated_fields = []
+
+#         for field, value in data.items():
+#             if field not in self.PATCHABLE_FIELDS:
+#                 continue
+
+#             if field in self.DECIMAL_FIELDS:
+#                 value = self._to_decimal_or_none(value)
+
+#             # Mapping spécial : 'perimetre' → 'perm' sur le modèle
+#             model_field = 'perm' if field == 'perimetre' else field
+
+#             setattr(actif, model_field, value)
+#             updated_fields.append(model_field)
+
+#         if not updated_fields:
+#             return Response(
+#                 {'error': 'Aucun champ valide à mettre à jour.'},
+#                 status=400
+#             )
+
+#         # ✅ FIX : actif.save() est maintenant APRÈS le return guard, pas avant
+#         actif.save(update_fields=updated_fields)
+
+#         serializer = BudgetRecordSerializer(
+#             actif,
+#             context={'request': request}
+#         )
+
+#         return Response(
+#             {
+#                 'success': True,
+#                 'message': f'{len(updated_fields)} champ(s) mis à jour sur la version active.',
+#                 'version': actif.version,
+#                 'champs_modifies': updated_fields,
+#                 'data': serializer.data,
+#             },
+#             status=200,
+#         )
+class PatchProjetAdminView(APIView):
+    """
+    PATCH /api/budget/admin/patch-projet/{code_division}/
+
+    Permet à l'admin de modifier un ou plusieurs champs directement
+    sur la version active, sans créer de nouvelle version.
+
+    Exemple body :
+        { "libelle": "Nouveau libellé" }
+        { "region": "Nord", "direction": "DR01", "famille": "F2" }
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAdmin]
+
+    PATCHABLE_FIELDS = {
+        # Identitaires
+        'region', 'direction', 'perimetre', 'famille', 'activite',
+        'libelle', 'type_projet', 'code_division',
+        'annee_debut_pmt', 'annee_fin_pmt',
+        'description_technique', 'opportunite_projet',
+        'version_comment',
+        # Financiers — prévisions
+        'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+        'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+        'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+        'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+        # Financiers — mois
+        'janvier_total',   'janvier_dont_dex',
+        'fevrier_total',   'fevrier_dont_dex',
+        'mars_total',      'mars_dont_dex',
+        'avril_total',     'avril_dont_dex',
+        'mai_total',       'mai_dont_dex',
+        'juin_total',      'juin_dont_dex',
+        'juillet_total',   'juillet_dont_dex',
+        'aout_total',      'aout_dont_dex',
+        'septembre_total', 'septembre_dont_dex',
+        'octobre_total',   'octobre_dont_dex',
+        'novembre_total',  'novembre_dont_dex',
+        'decembre_total',  'decembre_dont_dex',
+        # Réalisations
+        'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+        'real_s1_n_total',  'real_s1_n_dont_dex',
+        'prev_s2_n_total',  'prev_s2_n_dont_dex',
+    }
+
+    READONLY_FIELDS = {
+        'id', 'version', 'is_active', 'parent_id',
+        'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+        'upload',
+        'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+        'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+        'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+        'cout_initial_total', 'cout_initial_dont_dex',
+    }
+
+    DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+    @staticmethod
+    def _to_decimal_or_none(val):
+        if val in (None, '', 'null', 'None'):
+            return None
+        try:
+            return Decimal(str(val))
+        except (ValueError, TypeError):
+            return None
+
+    def patch(self, request, code_division):
+        data = request.data
+
+        if not data:
+            return Response(
+                {'error': 'Aucun champ fourni.'},
+                status=400
+            )
+
+        # Récupérer la version active
+        actif = (
+            BudgetRecord.objects.filter(
+                code_division=code_division, is_active=True
+            ).first()
+            or BudgetRecord.objects.filter(
+                code_division=code_division
+            ).order_by('-version').first()
+        )
+        if not actif:
+            return Response(
+                {'error': f'Projet {code_division} introuvable.'},
+                status=404
+            )
+
+        # Vérifier les champs envoyés
+        unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+        readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+        if readonly_sent:
+            return Response(
+                {
+                    'error': 'Champs système non modifiables via ce endpoint.',
+                    'champs': list(readonly_sent),
+                },
+                status=400
+            )
+
+        if unknown_fields:
+            return Response(
+                {
+                    'error': 'Champs inconnus.',
+                    'champs': list(unknown_fields),
+                },
+                status=400
+            )
+
+        # Appliquer les modifications
+        updated_fields = []
+
+        for field, value in data.items():
+            if field not in self.PATCHABLE_FIELDS:
+                continue
+
+            if field in self.DECIMAL_FIELDS:
+                value = self._to_decimal_or_none(value)
+
+            # Mapping spécial : 'perimetre' → 'perm' sur le modèle
+            if field == 'perimetre':
+                model_field = 'perm'
+            else:
+                model_field = field
+
+            setattr(actif, model_field, value)
+            updated_fields.append(model_field)
+
+        if not updated_fields:
+            return Response(
+                {'error': 'Aucun champ valide à mettre à jour.'},
+                status=400
+            )
+
+        actif.save(update_fields=updated_fields)
+
+        serializer = BudgetRecordSerializer(
+            actif,
+            context={'request': request}
+        )
+
+        return Response(
+            {
+                'success': True,
+                'message': f'{len(updated_fields)} champ(s) mis à jour sur la version active.',
+                'version': actif.version,
+                'champs_modifies': updated_fields,
+                'data': serializer.data,
+            },
+            status=200,
+        )
+
+
 # class PatchProjetAdminView(APIView):
 #     """
 #     PATCH /api/budget/admin/patch-projet/{code_division}/
@@ -4407,157 +5362,7 @@ class ModifierProjetResponsableView(APIView):
 #             },
 #             status=200,
 #         )
-class PatchProjetAdminView(APIView):
-    """
-    PATCH /api/budget/admin/patch-projet/{code_division}/
 
-    Permet à l'admin de modifier un ou plusieurs champs directement
-    sur la version active, sans créer de nouvelle version.
-
-    Exemple body :
-        { "libelle": "Nouveau libellé" }
-        { "region": "Nord", "famille": "F2" }
-    """
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAdmin]
-
-    PATCHABLE_FIELDS = {
-        # Identitaires
-        'region', 'perimetre', 'famille', 'activite',
-        'libelle', 'type_projet', 'code_division',
-        'annee_debut_pmt', 'annee_fin_pmt',
-        'description_technique', 'opportunite_projet',
-        'version_comment',
-        # Financiers — prévisions
-        'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
-        'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
-        'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
-        'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
-        # Financiers — mois
-        'janvier_total',   'janvier_dont_dex',
-        'fevrier_total',   'fevrier_dont_dex',
-        'mars_total',      'mars_dont_dex',
-        'avril_total',     'avril_dont_dex',
-        'mai_total',       'mai_dont_dex',
-        'juin_total',      'juin_dont_dex',
-        'juillet_total',   'juillet_dont_dex',
-        'aout_total',      'aout_dont_dex',
-        'septembre_total', 'septembre_dont_dex',
-        'octobre_total',   'octobre_dont_dex',
-        'novembre_total',  'novembre_dont_dex',
-        'decembre_total',  'decembre_dont_dex',
-        # Réalisations
-        'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
-        'real_s1_n_total',  'real_s1_n_dont_dex',
-        'prev_s2_n_total',  'prev_s2_n_dont_dex',
-    }
-
-    READONLY_FIELDS = {
-        'id', 'version', 'is_active', 'parent_id',
-        'created_by', 'region_id', 'structure_id', 'upload',
-        'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
-        'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
-        'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
-        'cout_initial_total', 'cout_initial_dont_dex',
-    }
-
-    DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
-
-    @staticmethod
-    def _to_decimal_or_none(val):
-        if val in (None, '', 'null', 'None'):
-            return None
-        try:
-            return Decimal(str(val))
-        except (ValueError, TypeError):
-            return None
-
-    def patch(self, request, code_division):
-        data = request.data
-
-        if not data:
-            return Response(
-                {'error': 'Aucun champ fourni.'},
-                status=400
-            )
-
-        # ── Récupérer la version active ─────────────────────────────────
-        actif = (
-            BudgetRecord.objects.filter(
-                code_division=code_division, is_active=True
-            ).first()
-            or BudgetRecord.objects.filter(
-                code_division=code_division
-            ).order_by('-version').first()
-        )
-        if not actif:
-            return Response(
-                {'error': f'Projet {code_division} introuvable.'},
-                status=404
-            )
-
-        # ── Vérifier les champs envoyés ─────────────────────────────────
-        unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
-        readonly_sent  = set(data.keys()) & self.READONLY_FIELDS
-
-        if readonly_sent:
-            return Response(
-                {
-                    'error': 'Champs système non modifiables via ce endpoint.',
-                    'champs': list(readonly_sent),
-                },
-                status=400
-            )
-
-        if unknown_fields:
-            return Response(
-                {
-                    'error': 'Champs inconnus.',
-                    'champs': list(unknown_fields),
-                },
-                status=400
-            )
-
-        # ── Appliquer les modifications ─────────────────────────────────
-        updated_fields = []
-
-        for field, value in data.items():
-            if field not in self.PATCHABLE_FIELDS:
-                continue
-
-            if field in self.DECIMAL_FIELDS:
-                value = self._to_decimal_or_none(value)
-
-            # Mapping spécial : 'perimetre' → 'perm' sur le modèle
-            model_field = 'perm' if field == 'perimetre' else field
-
-            setattr(actif, model_field, value)
-            updated_fields.append(model_field)
-
-        if not updated_fields:
-            return Response(
-                {'error': 'Aucun champ valide à mettre à jour.'},
-                status=400
-            )
-
-        # ✅ FIX : actif.save() est maintenant APRÈS le return guard, pas avant
-        actif.save(update_fields=updated_fields)
-
-        serializer = BudgetRecordSerializer(
-            actif,
-            context={'request': request}
-        )
-
-        return Response(
-            {
-                'success': True,
-                'message': f'{len(updated_fields)} champ(s) mis à jour sur la version active.',
-                'version': actif.version,
-                'champs_modifies': updated_fields,
-                'data': serializer.data,
-            },
-            status=200,
-        )
         # actif.save(update_fields=updated_fields)
 
         # return Response(
@@ -7734,6 +8539,76 @@ class HistoriqueProjetView(APIView):
             'premiere_version': premiere.version,
             'historique':       BudgetRecordSerializer(qs, many=True).data,
         })
+
+
+class ProjetAvecVersionPrecedenteView(APIView):
+    """
+    GET /api/budget/projet/{code_division}/with-previous/
+    
+    Récupère le projet actif et sa version précédente (version N-1)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, code_division):
+        # Récupérer la version active
+        projet_actif = BudgetRecord.objects.filter(
+            code_division=code_division, 
+            is_active=True
+        ).first()
+        
+        if not projet_actif:
+            return Response(
+                {'error': f'Projet {code_division} introuvable.'},
+                status=404
+            )
+        
+        # 🔥 CORRECTION : Récupérer la version précédente par le numéro de version
+        # Au lieu d'utiliser parent_id, on cherche la version avec le numéro (version_actuelle - 1)
+        version_precedente = BudgetRecord.objects.filter(
+            code_division=code_division,
+            version=projet_actif.version - 1  # Version N-1
+        ).first()
+        
+        # Si pas trouvée, essayer de la trouver via parent_id (fallback)
+        if not version_precedente and projet_actif.parent_id:
+            version_precedente = BudgetRecord.objects.filter(
+                id=projet_actif.parent_id
+            ).first()
+        
+        # Sérialiser
+        serializer_actif = BudgetRecordSerializer(
+            projet_actif, 
+            context={'request': request}
+        )
+        
+        serializer_precedent = None
+        if version_precedente:
+            serializer_precedent = BudgetRecordSerializer(
+                version_precedente, 
+                context={'request': request}
+            )
+        
+        # Retourner la réponse
+        response_data = {
+            'success': True,
+            'code_division': code_division,
+            'projet_actuel': {
+                'version': projet_actif.version,
+                'data': serializer_actif.data
+            }
+        }
+        
+        if serializer_precedent:
+            response_data['version_precedente'] = {
+                'version': version_precedente.version,
+                'data': serializer_precedent.data
+            }
+        else:
+            response_data['version_precedente'] = None
+            response_data['message'] = 'Ce projet est la version initiale (aucune version précédente)'
+        
+        return Response(response_data, status=200)
 
 # # ================================================================== #
 # # EXPORT EXCEL - PROJETS VALIDÉS PAR DIVISIONNAIRE
