@@ -1689,13 +1689,193 @@ from io import BytesIO
 from datetime import datetime
 import requests
 
+# class BudgetRecordPDFView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def _get_region_name(self, code_region, token):
+#         """Récupère le nom de la région depuis le service param"""
+#         if not code_region or code_region in ['', '-', 'None']:
+#             return '-'
+        
+#         service_url = get_service_param_url()
+        
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(
+#                 f"{service_url}/params/regions/{code_region}", 
+#                 headers=headers, 
+#                 timeout=5
+#             )
+            
+#             if response.status_code == 200:
+#                 data = response.json().get('data', {})
+#                 return data.get('nom_region', code_region)
+#         except Exception as e:
+#             print(f"Erreur récupération région {code_region}: {e}")
+        
+#         return code_region
+
+#     def _get_famille_name(self, code_famille, token):
+#         """Récupère le nom de la famille depuis le service param"""
+#         if not code_famille or code_famille in ['', '-', 'None']:
+#             return '-'
+        
+#         service_url = get_service_param_url()
+        
+#         try:
+#             headers = {'Authorization': f'Bearer {token}'} if token else {}
+#             response = requests.get(
+#                 f"{service_url}/params/familles/by-code/{code_famille}", 
+#                 headers=headers, 
+#                 timeout=5
+#             )
+            
+#             if response.status_code == 200:
+#                 data = response.json().get('data', {})
+#                 return data.get('nom_famille', code_famille)
+#         except Exception as e:
+#             print(f"Erreur récupération famille {code_famille}: {e}")
+        
+#         return code_famille
+
+#     def get(self, request, pk):
+#         record = get_object_or_404(BudgetRecord, pk=pk)
+
+#         # Récupérer le token
+#         auth_header = request.headers.get('Authorization', '')
+#         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+
+#         # Récupérer les noms depuis le backend
+#         activite = ACTIVITE_MAPPING.get(record.activite, record.activite or '-')
+#         region = self._get_region_name(record.region, token)
+#         famille = self._get_famille_name(record.famille, token)
+
+#         # Récupérer l'année de début PMT
+#         annee_debut = record.annee_debut_pmt
+        
+#         # Si l'année n'est pas définie, utiliser l'année courante + 1 comme fallback
+#         current_year = datetime.now().year
+#         if not annee_debut:
+#             annee_debut = current_year + 1
+            
+#         # N = année de début PMT - 1
+#         N = annee_debut - 1
+#         N_plus_1 = N + 1
+#         N_plus_2 = N + 2
+#         N_plus_3 = N + 3
+#         N_plus_4 = N + 4
+#         N_plus_5 = N + 5
+        
+#         # Les années de la période PMT
+#         annee_fin = record.annee_fin_pmt if record.annee_fin_pmt else N_plus_5
+
+#         buffer = BytesIO()
+#         doc = SimpleDocTemplate(buffer, pagesize=A4)
+#         styles = getSampleStyleSheet()
+#         elements = []
+
+#         elements.append(Paragraph("RAPPORT BUDGET", styles['Title']))
+#         elements.append(Spacer(1, 10))
+
+#         info_data = [
+#             ["Activité", activite],
+#             ["Région", region],
+#             ["Famille", famille],
+#             ["Libellé", record.libelle or '-'],
+#             ["Période PMT", f"{annee_debut} - {annee_fin}"]
+#         ]
+
+#         info_table = Table(info_data, colWidths=[120, 350])
+#         info_table.setStyle(TableStyle([
+#             ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+#             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+#             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+#         ]))
+#         elements.append(info_table)
+#         elements.append(Spacer(1, 15))
+
+#         def v(val):
+#             return val if val is not None else 0
+
+#         main_data = [
+#             ["Désignation", "Total", "Dont DEX"],
+#             [f"Coût Global Initial PMT {annee_debut}/{annee_fin}", v(record.cout_initial_total), v(record.cout_initial_dont_dex)],
+#             [f"Réalisations Cumulées à fin {N} au coût réel", v(record.realisation_cumul_n_mins1_total), v(record.realisation_cumul_n_mins1_dont_dex)],
+#             [f"Prévisions de Clôture {N}", v(record.prev_cloture_n_total), v(record.prev_cloture_n_dont_dex)],
+#             [f"Prévisions {N_plus_1}", v(record.prev_n_plus1_total), v(record.prev_n_plus1_dont_dex)],
+#             [f"Reste à Réaliser {N_plus_2}/{annee_fin}", v(record.reste_a_realiser_total), v(record.reste_a_realiser_dont_dex)],
+#             [f"Prévisions {N_plus_2}", v(record.prev_n_plus2_total), v(record.prev_n_plus2_dont_dex)],
+#             [f"Prévisions {N_plus_3}", v(record.prev_n_plus3_total), v(record.prev_n_plus3_dont_dex)],
+#             [f"Prévisions {N_plus_4}", v(record.prev_n_plus4_total), v(record.prev_n_plus4_dont_dex)],
+#             [f"Prévisions {N_plus_5}", v(record.prev_n_plus5_total), v(record.prev_n_plus5_dont_dex)],
+#         ]
+
+#         main_table = Table(main_data, colWidths=[280, 100, 100])
+#         main_table.setStyle(TableStyle([
+#             ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+#             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+#             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+#             ('BACKGROUND', (0, 1), (-1, 1), colors.whitesmoke),
+#             ('BACKGROUND', (0, 3), (-1, 3), colors.whitesmoke),
+#             ('BACKGROUND', (0, 5), (-1, 5), colors.whitesmoke),
+#             ('BACKGROUND', (0, 7), (-1, 7), colors.whitesmoke),
+#             ('BACKGROUND', (0, 9), (-1, 9), colors.whitesmoke),
+#             ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+#             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+#             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+#         ]))
+
+#         elements.append(Paragraph("<b>Données budgétaires</b>", styles['Heading2']))
+#         elements.append(main_table)
+#         elements.append(Spacer(1, 15))
+
+#         mensuel_data = [
+#             ["Mois", f"Prévisions {N_plus_1} - Total", f"Prévisions {N_plus_1} - Dont DEX"],
+#             ["Janvier", v(record.janvier_total), v(record.janvier_dont_dex)],
+#             ["Février", v(record.fevrier_total), v(record.fevrier_dont_dex)],
+#             ["Mars", v(record.mars_total), v(record.mars_dont_dex)],
+#             ["Avril", v(record.avril_total), v(record.avril_dont_dex)],
+#             ["Mai", v(record.mai_total), v(record.mai_dont_dex)],
+#             ["Juin", v(record.juin_total), v(record.juin_dont_dex)],
+#             ["Juillet", v(record.juillet_total), v(record.juillet_dont_dex)],
+#             ["Août", v(record.aout_total), v(record.aout_dont_dex)],
+#             ["Septembre", v(record.septembre_total), v(record.septembre_dont_dex)],
+#             ["Octobre", v(record.octobre_total), v(record.octobre_dont_dex)],
+#             ["Novembre", v(record.novembre_total), v(record.novembre_dont_dex)],
+#             ["Décembre", v(record.decembre_total), v(record.decembre_dont_dex)],
+#         ]
+
+#         mensuel_table = Table(mensuel_data, colWidths=[180, 150, 150])
+#         mensuel_table.setStyle(TableStyle([
+#             ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+#             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+#             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+#             ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+#             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+#             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+#         ]))
+
+#         elements.append(Paragraph(f"<b>Répartition mensuelle — Prévisions {N_plus_2}</b>", styles['Heading2']))
+#         elements.append(mensuel_table)
+
+#         doc.build(elements)
+#         buffer.seek(0)
+
+#         return HttpResponse(
+#             buffer,
+#             content_type='application/pdf',
+#             headers={
+#                 'Content-Disposition': f'attachment; filename="budget_{record.id}.pdf"'
+#             },
+#         )
 class BudgetRecordPDFView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def _get_region_name(self, code_region, token):
         """Récupère le nom de la région depuis le service param"""
-        if not code_region or code_region in ['', '-', 'None']:
+        if not code_region or code_region in ['', '-', 'None', 'null']:
             return '-'
         
         service_url = get_service_param_url()
@@ -1716,9 +1896,9 @@ class BudgetRecordPDFView(APIView):
         
         return code_region
 
-    def _get_famille_name(self, code_famille, token):
-        """Récupère le nom de la famille depuis le service param"""
-        if not code_famille or code_famille in ['', '-', 'None']:
+    def _get_direction_name(self, code_direction, token):
+        """Récupère le nom de la direction depuis le service param"""
+        if not code_direction or code_direction in ['', '-', 'None', 'null']:
             return '-'
         
         service_url = get_service_param_url()
@@ -1726,10 +1906,35 @@ class BudgetRecordPDFView(APIView):
         try:
             headers = {'Authorization': f'Bearer {token}'} if token else {}
             response = requests.get(
-                f"{service_url}/params/familles/by-code/{code_famille}", 
+                f"{service_url}/params/directions/code/{code_direction}", 
                 headers=headers, 
                 timeout=5
             )
+            
+            if response.status_code == 200:
+                data = response.json().get('data', {})
+                return data.get('nom_direction', code_direction)
+        except Exception as e:
+            print(f"Erreur récupération direction {code_direction}: {e}")
+        
+        return code_direction
+
+    def _get_famille_name(self, code_famille, token, record):
+        """Récupère le nom de la famille selon le type de projet"""
+        if not code_famille or code_famille in ['', '-', 'None', 'null']:
+            return '-'
+        
+        service_url = get_service_param_url()
+        
+        try:
+            headers = {'Authorization': f'Bearer {token}'} if token else {}
+            
+            if record.direction and not record.region:
+                url = f"{service_url}/params/familles-direction/code/{code_famille}"
+            else:
+                url = f"{service_url}/params/familles/by-code/{code_famille}"
+            
+            response = requests.get(url, headers=headers, timeout=5)
             
             if response.status_code == 200:
                 data = response.json().get('data', {})
@@ -1740,124 +1945,192 @@ class BudgetRecordPDFView(APIView):
         return code_famille
 
     def get(self, request, pk):
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from io import BytesIO
+        from datetime import datetime
+        
         record = get_object_or_404(BudgetRecord, pk=pk)
 
-        # Récupérer le token
         auth_header = request.headers.get('Authorization', '')
         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
 
-        # Récupérer les noms depuis le backend
-        activite = ACTIVITE_MAPPING.get(record.activite, record.activite or '-')
-        region = self._get_region_name(record.region, token)
-        famille = self._get_famille_name(record.famille, token)
-
-        # Récupérer l'année de début PMT
-        annee_debut = record.annee_debut_pmt
+        is_structure = record.region and not record.direction
+        is_departement = record.direction and not record.region
         
-        # Si l'année n'est pas définie, utiliser l'année courante + 1 comme fallback
+        activite = ACTIVITE_MAPPING.get(record.activite, record.activite or '-')
+        
+        if is_structure:
+            region_nom = self._get_region_name(record.region, token)
+            entite_label = "Région"
+            entite_nom = region_nom
+            entite_code = record.region
+        elif is_departement:
+            direction_nom = self._get_direction_name(record.direction, token)
+            entite_label = "Direction"
+            entite_nom = direction_nom
+            entite_code = record.direction
+        else:
+            entite_label = "Entité"
+            entite_nom = "-"
+            entite_code = "-"
+        
+        famille = self._get_famille_name(record.famille, token, record)
+
+        annee_debut = record.annee_debut_pmt
         current_year = datetime.now().year
         if not annee_debut:
             annee_debut = current_year + 1
             
-        # N = année de début PMT - 1
         N = annee_debut - 1
         N_plus_1 = N + 1
         N_plus_2 = N + 2
         N_plus_3 = N + 3
         N_plus_4 = N + 4
         N_plus_5 = N + 5
-        
-        # Les années de la période PMT
         annee_fin = record.annee_fin_pmt if record.annee_fin_pmt else N_plus_5
 
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), 
+                                rightMargin=40, leftMargin=40, 
+                                topMargin=40, bottomMargin=40)
         styles = getSampleStyleSheet()
         elements = []
 
-        elements.append(Paragraph("RAPPORT BUDGET", styles['Title']))
-        elements.append(Spacer(1, 10))
+        # Style personnalisé
+        title_style = styles['Title']
+        title_style.fontSize = 18
+        title_style.alignment = 1
+        
+        heading_style = styles['Heading2']
+        heading_style.fontSize = 12
+        heading_style.textColor = colors.HexColor('#2E3B4E')
+        
+        normal_style = styles['Normal']
+        normal_style.fontSize = 9
 
+        elements.append(Paragraph("RAPPORT BUDGET", title_style))
+        elements.append(Spacer(1, 15))
+
+        # Tableau d'informations - style épuré
         info_data = [
             ["Activité", activite],
-            ["Région", region],
+            [entite_label, f"{entite_nom}" if entite_nom != '-' else '-'],
             ["Famille", famille],
             ["Libellé", record.libelle or '-'],
-            ["Période PMT", f"{annee_debut} - {annee_fin}"]
+            ["Type de projet", "Structure" if is_structure else "Département" if is_departement else "-"],
+            ["Période PMT", f"{annee_debut} - {annee_fin}"],
         ]
 
-        info_table = Table(info_data, colWidths=[120, 350])
+        info_table = Table(info_data, colWidths=[5*cm, 12*cm])
         info_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
         ]))
         elements.append(info_table)
-        elements.append(Spacer(1, 15))
+        elements.append(Spacer(1, 20))
 
         def v(val):
             return val if val is not None else 0
 
+        def fmt(val):
+            return f"{v(val):,.2f}"
+
+        # Tableau principal - style minimal
         main_data = [
-            ["Désignation", "Total", "Dont DEX"],
-            [f"Coût Global Initial PMT {annee_debut}/{annee_fin}", v(record.cout_initial_total), v(record.cout_initial_dont_dex)],
-            [f"Réalisations Cumulées à fin {N} au coût réel", v(record.realisation_cumul_n_mins1_total), v(record.realisation_cumul_n_mins1_dont_dex)],
-            [f"Prévisions de Clôture {N}", v(record.prev_cloture_n_total), v(record.prev_cloture_n_dont_dex)],
-            [f"Prévisions {N_plus_1}", v(record.prev_n_plus1_total), v(record.prev_n_plus1_dont_dex)],
-            [f"Reste à Réaliser {N_plus_2}/{annee_fin}", v(record.reste_a_realiser_total), v(record.reste_a_realiser_dont_dex)],
-            [f"Prévisions {N_plus_2}", v(record.prev_n_plus2_total), v(record.prev_n_plus2_dont_dex)],
-            [f"Prévisions {N_plus_3}", v(record.prev_n_plus3_total), v(record.prev_n_plus3_dont_dex)],
-            [f"Prévisions {N_plus_4}", v(record.prev_n_plus4_total), v(record.prev_n_plus4_dont_dex)],
-            [f"Prévisions {N_plus_5}", v(record.prev_n_plus5_total), v(record.prev_n_plus5_dont_dex)],
+            ["Désignation", "Total (DA)", "Dont DEV (DA)"],
+            [f"Coût Global Initial PMT {annee_debut}/{annee_fin}", fmt(record.cout_initial_total), fmt(record.cout_initial_dont_dex)],
+            [f"Réalisations Cumulées à fin {N}", fmt(record.realisation_cumul_n_mins1_total), fmt(record.realisation_cumul_n_mins1_dont_dex)],
+            [f"Prévisions de Clôture {N}", fmt(record.prev_cloture_n_total), fmt(record.prev_cloture_n_dont_dex)],
+            [f"Prévisions {N_plus_1}", fmt(record.prev_n_plus1_total), fmt(record.prev_n_plus1_dont_dex)],
+            [f"Reste à Réaliser {N_plus_2}/{annee_fin}", fmt(record.reste_a_realiser_total), fmt(record.reste_a_realiser_dont_dex)],
+            [f"Prévisions {N_plus_2}", fmt(record.prev_n_plus2_total), fmt(record.prev_n_plus2_dont_dex)],
+            [f"Prévisions {N_plus_3}", fmt(record.prev_n_plus3_total), fmt(record.prev_n_plus3_dont_dex)],
+            [f"Prévisions {N_plus_4}", fmt(record.prev_n_plus4_total), fmt(record.prev_n_plus4_dont_dex)],
+            [f"Prévisions {N_plus_5}", fmt(record.prev_n_plus5_total), fmt(record.prev_n_plus5_dont_dex)],
         ]
 
-        main_table = Table(main_data, colWidths=[280, 100, 100])
+        main_table = Table(main_data, colWidths=[11*cm, 5*cm, 5*cm])
         main_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BACKGROUND', (0, 1), (-1, 1), colors.whitesmoke),
-            ('BACKGROUND', (0, 3), (-1, 3), colors.whitesmoke),
-            ('BACKGROUND', (0, 5), (-1, 5), colors.whitesmoke),
-            ('BACKGROUND', (0, 7), (-1, 7), colors.whitesmoke),
-            ('BACKGROUND', (0, 9), (-1, 9), colors.whitesmoke),
-            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
 
-        elements.append(Paragraph("<b>Données budgétaires</b>", styles['Heading2']))
+        elements.append(Paragraph("Données budgétaires", heading_style))
+        elements.append(Spacer(1, 8))
         elements.append(main_table)
-        elements.append(Spacer(1, 15))
+        elements.append(Spacer(1, 20))
 
-        mensuel_data = [
-            ["Mois", f"Prévisions {N_plus_2} - Total", f"Prévisions {N_plus_2} - Dont DEX"],
-            ["Janvier", v(record.janvier_total), v(record.janvier_dont_dex)],
-            ["Février", v(record.fevrier_total), v(record.fevrier_dont_dex)],
-            ["Mars", v(record.mars_total), v(record.mars_dont_dex)],
-            ["Avril", v(record.avril_total), v(record.avril_dont_dex)],
-            ["Mai", v(record.mai_total), v(record.mai_dont_dex)],
-            ["Juin", v(record.juin_total), v(record.juin_dont_dex)],
-            ["Juillet", v(record.juillet_total), v(record.juillet_dont_dex)],
-            ["Août", v(record.aout_total), v(record.aout_dont_dex)],
-            ["Septembre", v(record.septembre_total), v(record.septembre_dont_dex)],
-            ["Octobre", v(record.octobre_total), v(record.octobre_dont_dex)],
-            ["Novembre", v(record.novembre_total), v(record.novembre_dont_dex)],
-            ["Décembre", v(record.decembre_total), v(record.decembre_dont_dex)],
+        # Tableau mensuel
+        mois_data = [
+            ["Mois", f"Prévisions {N_plus_1} - Total (DA)", f"Prévisions {N_plus_1} - Dont DEV (DA)"],
+            ["Janvier", fmt(record.janvier_total), fmt(record.janvier_dont_dex)],
+            ["Février", fmt(record.fevrier_total), fmt(record.fevrier_dont_dex)],
+            ["Mars", fmt(record.mars_total), fmt(record.mars_dont_dex)],
+            ["Avril", fmt(record.avril_total), fmt(record.avril_dont_dex)],
+            ["Mai", fmt(record.mai_total), fmt(record.mai_dont_dex)],
+            ["Juin", fmt(record.juin_total), fmt(record.juin_dont_dex)],
+            ["Juillet", fmt(record.juillet_total), fmt(record.juillet_dont_dex)],
+            ["Août", fmt(record.aout_total), fmt(record.aout_dont_dex)],
+            ["Septembre", fmt(record.septembre_total), fmt(record.septembre_dont_dex)],
+            ["Octobre", fmt(record.octobre_total), fmt(record.octobre_dont_dex)],
+            ["Novembre", fmt(record.novembre_total), fmt(record.novembre_dont_dex)],
+            ["Décembre", fmt(record.decembre_total), fmt(record.decembre_dont_dex)],
         ]
 
-        mensuel_table = Table(mensuel_data, colWidths=[180, 150, 150])
+        mensuel_table = Table(mois_data, colWidths=[5*cm, 7*cm, 7*cm])
         mensuel_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
         ]))
 
-        elements.append(Paragraph(f"<b>Répartition mensuelle — Prévisions {N_plus_2}</b>", styles['Heading2']))
+        elements.append(Paragraph(f" Prévisions {N_plus_1}", heading_style))
+        elements.append(Spacer(1, 8))
         elements.append(mensuel_table)
+
+        # Récapitulatif
+        total_mensuel = sum([v(record.janvier_total), v(record.fevrier_total), v(record.mars_total),
+                             v(record.avril_total), v(record.mai_total), v(record.juin_total),
+                             v(record.juillet_total), v(record.aout_total), v(record.septembre_total),
+                             v(record.octobre_total), v(record.novembre_total), v(record.decembre_total)])
+        
+        recap_data = [
+            [f"  TOTAL Prévisions {N_plus_1}", f"{total_mensuel:,.2f} DA"],
+        ]
+        
+        recap_table = Table(recap_data, colWidths=[8*cm, 9*cm])
+        recap_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        
+        elements.append(Spacer(1, 20))
+        elements.append(recap_table)
 
         doc.build(elements)
         buffer.seek(0)
@@ -1866,7 +2139,7 @@ class BudgetRecordPDFView(APIView):
             buffer,
             content_type='application/pdf',
             headers={
-                'Content-Disposition': f'attachment; filename="budget_{record.id}.pdf"'
+                'Content-Disposition': f'attachment; filename="budget_{record.code_division}.pdf"'
             },
         )
 # ─────────────────────────────────────────
@@ -1874,152 +2147,152 @@ class BudgetRecordPDFView(APIView):
 # ─────────────────────────────────────────
 
 
-class VerificationCalculsView(APIView):
-    authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsAgent]
-    """
-    GET /verification/?upload_id=1
-    Vérifie la cohérence des calculs pour chaque record
-    """
+# class VerificationCalculsView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAgent]
+#     """
+#     GET /verification/?upload_id=1
+#     Vérifie la cohérence des calculs pour chaque record
+#     """
 
-    def get(self, request):
-        print("[DEBUG] === Début VerificationCalculsView ===")
-        qs = BudgetRecord.objects.all()
+#     def get(self, request):
+#         print("[DEBUG] === Début VerificationCalculsView ===")
+#         qs = BudgetRecord.objects.all()
 
-        uid = request.query_params.get('upload_id')
-        print(f"[DEBUG] upload_id param: {uid}")
-        if uid:
-            qs = qs.filter(upload_id=uid)
-            print(f"[DEBUG] Filtered by upload_id={uid}, count={qs.count()}")
+#         uid = request.query_params.get('upload_id')
+#         print(f"[DEBUG] upload_id param: {uid}")
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+#             print(f"[DEBUG] Filtered by upload_id={uid}, count={qs.count()}")
 
-        qs = clean_queryset(qs)
+#         qs = clean_queryset(qs)
 
-        errors   = []
-        warnings = []
-        total    = qs.count()
-        ok_count = 0
-        print(f"[DEBUG] Total records after clean_queryset: {total}")
+#         errors   = []
+#         warnings = []
+#         total    = qs.count()
+#         ok_count = 0
+#         print(f"[DEBUG] Total records after clean_queryset: {total}")
 
-        TOLERANCE = 1
+#         TOLERANCE = 1
 
-        def val(x):
-            return float(x or 0)
+#         def val(x):
+#             return float(x or 0)
 
-        def check(record, label, gauche, droite):
-            diff = abs(gauche - droite)
-            if diff > TOLERANCE:
-                print(f"[DEBUG] Check failed - Record ID: {record.id}, Label: {label}, Diff: {diff}")
-                return {
-                    'record_id':  record.id,
-                    'libelle':    record.libelle or '-',
-                    'region':     REGION_MAPPING.get(record.region, record.region or '-'),
-                    'famille':    get_famille_nom(record.famille or '-'),
-                    'activite':   ACTIVITE_MAPPING.get(record.activite, record.activite or '-'),
-                    'regle':      label,
-                    'gauche':     round(gauche, 2),
-                    'droite':     round(droite, 2),
-                    'difference': round(diff, 2),
-                }
-            return None
+#         def check(record, label, gauche, droite):
+#             diff = abs(gauche - droite)
+#             if diff > TOLERANCE:
+#                 print(f"[DEBUG] Check failed - Record ID: {record.id}, Label: {label}, Diff: {diff}")
+#                 return {
+#                     'record_id':  record.id,
+#                     'libelle':    record.libelle or '-',
+#                     'region':     REGION_MAPPING.get(record.region, record.region or '-'),
+#                     'famille':    get_famille_nom(record.famille or '-'),
+#                     'activite':   ACTIVITE_MAPPING.get(record.activite, record.activite or '-'),
+#                     'regle':      label,
+#                     'gauche':     round(gauche, 2),
+#                     'droite':     round(droite, 2),
+#                     'difference': round(diff, 2),
+#                 }
+#             return None
 
-        for idx, record in enumerate(qs):
-            print(f"[DEBUG] --- Processing record {idx+1}/{total} (ID: {record.id}) ---")
-            record_errors = []
+#         for idx, record in enumerate(qs):
+#             print(f"[DEBUG] --- Processing record {idx+1}/{total} (ID: {record.id}) ---")
+#             record_errors = []
 
-            # Check 1
-            gauche1 = val(record.real_s1_n_total) + val(record.prev_s2_n_total)
-            droite1 = val(record.prev_cloture_n_total)
-            print(f"[DEBUG] Record {record.id} - Check1: gauche={gauche1}, droite={droite1}")
-            e = check(record, "Réal.S1 (total) + Prév.S2 (total) = Prév.Clôture N (total)", gauche1, droite1)
-            if e: 
-                record_errors.append(e)
-                print(f"[DEBUG] Record {record.id} - Check1 FAILED")
+#             # Check 1
+#             gauche1 = val(record.real_s1_n_total) + val(record.prev_s2_n_total)
+#             droite1 = val(record.prev_cloture_n_total)
+#             print(f"[DEBUG] Record {record.id} - Check1: gauche={gauche1}, droite={droite1}")
+#             e = check(record, "Réal.S1 (total) + Prév.S2 (total) = Prév.Clôture N (total)", gauche1, droite1)
+#             if e: 
+#                 record_errors.append(e)
+#                 print(f"[DEBUG] Record {record.id} - Check1 FAILED")
 
-            # Check 2
-            gauche2 = val(record.real_s1_n_dont_dex) + val(record.prev_s2_n_dont_dex)
-            droite2 = val(record.prev_cloture_n_dont_dex)
-            print(f"[DEBUG] Record {record.id} - Check2: gauche={gauche2}, droite={droite2}")
-            e = check(record, "Réal.S1 (DEX) + Prév.S2 (DEX) = Prév.Clôture N (DEX)", gauche2, droite2)
-            if e: 
-                record_errors.append(e)
-                print(f"[DEBUG] Record {record.id} - Check2 FAILED")
+#             # Check 2
+#             gauche2 = val(record.real_s1_n_dont_dex) + val(record.prev_s2_n_dont_dex)
+#             droite2 = val(record.prev_cloture_n_dont_dex)
+#             print(f"[DEBUG] Record {record.id} - Check2: gauche={gauche2}, droite={droite2}")
+#             e = check(record, "Réal.S1 (DEX) + Prév.S2 (DEX) = Prév.Clôture N (DEX)", gauche2, droite2)
+#             if e: 
+#                 record_errors.append(e)
+#                 print(f"[DEBUG] Record {record.id} - Check2 FAILED")
 
-            # Check 3
-            gauche3 = (val(record.prev_n_plus2_total) + val(record.prev_n_plus3_total)
-                      + val(record.prev_n_plus4_total) + val(record.prev_n_plus5_total))
-            droite3 = val(record.reste_a_realiser_total)
-            print(f"[DEBUG] Record {record.id} - Check3: gauche={gauche3}, droite={droite3}")
-            e = check(record, "Reste à Réaliser (total) = Prév.N+2 + N+3 + N+4 + N+5 (total)", gauche3, droite3)
-            if e: 
-                record_errors.append(e)
-                print(f"[DEBUG] Record {record.id} - Check3 FAILED")
+#             # Check 3
+#             gauche3 = (val(record.prev_n_plus2_total) + val(record.prev_n_plus3_total)
+#                       + val(record.prev_n_plus4_total) + val(record.prev_n_plus5_total))
+#             droite3 = val(record.reste_a_realiser_total)
+#             print(f"[DEBUG] Record {record.id} - Check3: gauche={gauche3}, droite={droite3}")
+#             e = check(record, "Reste à Réaliser (total) = Prév.N+2 + N+3 + N+4 + N+5 (total)", gauche3, droite3)
+#             if e: 
+#                 record_errors.append(e)
+#                 print(f"[DEBUG] Record {record.id} - Check3 FAILED")
 
-            # Check 4
-            gauche4 = (val(record.prev_n_plus2_dont_dex) + val(record.prev_n_plus3_dont_dex)
-                      + val(record.prev_n_plus4_dont_dex) + val(record.prev_n_plus5_dont_dex))
-            droite4 = val(record.reste_a_realiser_dont_dex)
-            print(f"[DEBUG] Record {record.id} - Check4: gauche={gauche4}, droite={droite4}")
-            e = check(record, "Reste à Réaliser (DEX) = Prév.N+2 + N+3 + N+4 + N+5 (DEX)", gauche4, droite4)
-            if e: 
-                record_errors.append(e)
-                print(f"[DEBUG] Record {record.id} - Check4 FAILED")
+#             # Check 4
+#             gauche4 = (val(record.prev_n_plus2_dont_dex) + val(record.prev_n_plus3_dont_dex)
+#                       + val(record.prev_n_plus4_dont_dex) + val(record.prev_n_plus5_dont_dex))
+#             droite4 = val(record.reste_a_realiser_dont_dex)
+#             print(f"[DEBUG] Record {record.id} - Check4: gauche={gauche4}, droite={droite4}")
+#             e = check(record, "Reste à Réaliser (DEX) = Prév.N+2 + N+3 + N+4 + N+5 (DEX)", gauche4, droite4)
+#             if e: 
+#                 record_errors.append(e)
+#                 print(f"[DEBUG] Record {record.id} - Check4 FAILED")
 
-            # Check 5
-            somme_mois = (
-                val(record.janvier_total)   + val(record.fevrier_total)  +
-                val(record.mars_total)      + val(record.avril_total)    +
-                val(record.mai_total)       + val(record.juin_total)     +
-                val(record.juillet_total)   + val(record.aout_total)     +
-                val(record.septembre_total) + val(record.octobre_total)  +
-                val(record.novembre_total)  + val(record.decembre_total)
-            )
-            print(f"[DEBUG] Record {record.id} - Check5: somme_mois={somme_mois}, prev_n_plus1={val(record.prev_n_plus1_total)}")
-            e = check(record, "Prév.N+1 (total) = Somme des 12 mois (total)", somme_mois, val(record.prev_n_plus1_total))
-            if e: 
-                record_errors.append(e)
-                print(f"[DEBUG] Record {record.id} - Check5 FAILED")
+#             # Check 5
+#             somme_mois = (
+#                 val(record.janvier_total)   + val(record.fevrier_total)  +
+#                 val(record.mars_total)      + val(record.avril_total)    +
+#                 val(record.mai_total)       + val(record.juin_total)     +
+#                 val(record.juillet_total)   + val(record.aout_total)     +
+#                 val(record.septembre_total) + val(record.octobre_total)  +
+#                 val(record.novembre_total)  + val(record.decembre_total)
+#             )
+#             print(f"[DEBUG] Record {record.id} - Check5: somme_mois={somme_mois}, prev_n_plus1={val(record.prev_n_plus1_total)}")
+#             e = check(record, "Prév.N+1 (total) = Somme des 12 mois (total)", somme_mois, val(record.prev_n_plus1_total))
+#             if e: 
+#                 record_errors.append(e)
+#                 print(f"[DEBUG] Record {record.id} - Check5 FAILED")
 
-            # Check 6
-            gauche6 = (val(record.realisation_cumul_n_mins1_total) + val(record.prev_cloture_n_total)
-                      + val(record.prev_n_plus1_total) + val(record.reste_a_realiser_total))
-            droite6 = val(record.cout_initial_total)
-            print(f"[DEBUG] Record {record.id} - Check6: gauche={gauche6}, droite={droite6}")
-            e = check(record, "Coût Global (total) = Réal.Cumul N-1 + Prév.Clôture N + Prév.N+1 + Reste à Réaliser (total)", gauche6, droite6)
-            if e: 
-                record_errors.append(e)
-                print(f"[DEBUG] Record {record.id} - Check6 FAILED")
+#             # Check 6
+#             gauche6 = (val(record.realisation_cumul_n_mins1_total) + val(record.prev_cloture_n_total)
+#                       + val(record.prev_n_plus1_total) + val(record.reste_a_realiser_total))
+#             droite6 = val(record.cout_initial_total)
+#             print(f"[DEBUG] Record {record.id} - Check6: gauche={gauche6}, droite={droite6}")
+#             e = check(record, "Coût Global (total) = Réal.Cumul N-1 + Prév.Clôture N + Prév.N+1 + Reste à Réaliser (total)", gauche6, droite6)
+#             if e: 
+#                 record_errors.append(e)
+#                 print(f"[DEBUG] Record {record.id} - Check6 FAILED")
 
-            # Check 7
-            gauche7 = (val(record.realisation_cumul_n_mins1_dont_dex) + val(record.prev_cloture_n_dont_dex)
-                      + val(record.prev_n_plus1_dont_dex) + val(record.reste_a_realiser_dont_dex))
-            droite7 = val(record.cout_initial_dont_dex)
-            print(f"[DEBUG] Record {record.id} - Check7: gauche={gauche7}, droite={droite7}")
-            e = check(record, "Coût Global (DEX) = Réal.Cumul N-1 + Prév.Clôture N + Prév.N+1 + Reste à Réaliser (DEX)", gauche7, droite7)
-            if e: 
-                record_errors.append(e)
-                print(f"[DEBUG] Record {record.id} - Check7 FAILED")
+#             # Check 7
+#             gauche7 = (val(record.realisation_cumul_n_mins1_dont_dex) + val(record.prev_cloture_n_dont_dex)
+#                       + val(record.prev_n_plus1_dont_dex) + val(record.reste_a_realiser_dont_dex))
+#             droite7 = val(record.cout_initial_dont_dex)
+#             print(f"[DEBUG] Record {record.id} - Check7: gauche={gauche7}, droite={droite7}")
+#             e = check(record, "Coût Global (DEX) = Réal.Cumul N-1 + Prév.Clôture N + Prév.N+1 + Reste à Réaliser (DEX)", gauche7, droite7)
+#             if e: 
+#                 record_errors.append(e)
+#                 print(f"[DEBUG] Record {record.id} - Check7 FAILED")
 
-            if record_errors:
-                errors.extend(record_errors)
-                print(f"[DEBUG] Record {record.id} has {len(record_errors)} error(s)")
-            else:
-                ok_count += 1
-                print(f"[DEBUG] Record {record.id} OK")
+#             if record_errors:
+#                 errors.extend(record_errors)
+#                 print(f"[DEBUG] Record {record.id} has {len(record_errors)} error(s)")
+#             else:
+#                 ok_count += 1
+#                 print(f"[DEBUG] Record {record.id} OK")
 
-        print(f"[DEBUG] === Verification Summary: total={total}, ok={ok_count}, errors={len(errors)} ===")
+#         print(f"[DEBUG] === Verification Summary: total={total}, ok={ok_count}, errors={len(errors)} ===")
         
-        response_data = {
-            'resume': {
-                'total_records':  total,
-                'records_ok':     ok_count,
-                'records_errors': total - ok_count,
-                'total_erreurs':  len(errors),
-            },
-            'erreurs': errors,
-        }
+#         response_data = {
+#             'resume': {
+#                 'total_records':  total,
+#                 'records_ok':     ok_count,
+#                 'records_errors': total - ok_count,
+#                 'total_erreurs':  len(errors),
+#             },
+#             'erreurs': errors,
+#         }
         
-        print(f"[DEBUG] Response prepared, sending {len(errors)} errors")
-        return Response(response_data)
+#         print(f"[DEBUG] Response prepared, sending {len(errors)} errors")
+#         return Response(response_data)
 
 
 # ─────────────────────────────────────────
@@ -6806,7 +7079,111 @@ class ValiderDivisionnaireView(APIView):
             'message': message,
             'statut_final': record.statut_final,
         })
+class ValiderTousProjetsDivisionnaireView(APIView):
+    """
+    GET  /recap/budget/valider/divisionnaire/tous/
+         → Retourne tous les projets 'approuve_directeur' de l'année prochaine
 
+    POST /recap/budget/valider/divisionnaire/tous/
+         → action: 'valide' | 'rejete' | 'annule'
+         → Change le statut de TOUS les projets 'approuve_directeur' en masse
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes     = [IsDivisionnaire]
+
+    def get(self, request):
+        next_year = datetime.now().year + 1
+
+        projets = BudgetRecord.objects.filter(
+            statut_workflow='approuve_directeur',
+            annee_debut_pmt=next_year,
+        )
+
+        if not projets.exists():
+            return Response({
+                'success': True,
+                'count': 0,
+                'projets': [],
+                'total': {},
+                'message': f'Aucun projet à valider pour {next_year}',
+            })
+
+        total = projets.aggregate(**build_aggregation())
+        serializer = BudgetRecordSerializer(projets, many=True, context={'request': request})
+
+        return Response({
+            'success': True,
+            'count': projets.count(),
+            'annee': next_year,
+            'projets': serializer.data,
+            'total': total,
+        })
+
+    def post(self, request):
+        next_year = datetime.now().year + 1
+        action = request.data.get('action')
+        commentaire = request.data.get('commentaire', '')
+
+        if action not in ('valider', 'rejeter', 'annuler'):
+            return Response(
+                {'error': "action doit être 'valider', 'rejeter' ou 'annuler'"},
+                status=400
+            )
+
+        projets = BudgetRecord.objects.filter(
+            statut_workflow='approuve_directeur',
+            annee_debut_pmt=next_year,
+        )
+
+        if not projets.exists():
+            return Response({
+                'error': f'Aucun projet avec statut_workflow=approuve_directeur pour {next_year}',
+            }, status=404)
+
+        count = projets.count()
+        now = timezone.now()
+        nom = request.user.nom_complet
+
+        if action == 'valider':
+            projets.update(
+                statut_final='valide_divisionnaire',
+                statut_workflow=None,
+                valide_par_divisionnaire=nom,
+                date_validation_divisionnaire=now,
+                commentaire_divisionnaire=commentaire,
+            )
+            message = f'{count} projet(s) validés par le divisionnaire ✅'
+
+        elif action == 'rejeter':
+            projets.update(
+                statut_final='rejete_divisionnaire',
+                statut_workflow=None,
+                rejete_par_divisionnaire=nom,
+                date_rejet_divisionnaire=now,
+                motif_rejet_divisionnaire=commentaire,
+                rejete_par=nom,
+                date_rejet=now,
+                motif_rejet=commentaire,
+            )
+            message = f'{count} projet(s) rejetés par le divisionnaire ❌'
+
+        else:  # annule
+            projets.update(
+                statut_final='annule_divisionnaire',
+                statut_workflow=None,
+                annule_par_divisionnaire=nom,
+                date_annulation_divisionnaire=now,
+                motif_annulation_divisionnaire=commentaire,
+            )
+            message = f'{count} projet(s) annulés par le divisionnaire 🚫'
+
+        return Response({
+            'success': True,
+            'message': message,
+            'action': action,
+            'count': count,
+            'annee': next_year,
+        })
 # ─────────────────────────────────────────
 # LISTES DES PROJETS PAR STATUT ET RÔLE
 # ─────────────────────────────────────────
@@ -11299,194 +11676,1373 @@ from .remote_auth import RemoteJWTAuthentication
 from .mappings import ACTIVITE_MAPPING
 
 
+# class ExportProjetsValidesDivisionnaireView(APIView):
+#     """
+#     GET /recap/budget/export/valides-divisionnaire/
+    
+#     Exporte les projets validés par le divisionnaire 
+#     avec filtre optionnel par année (?annee=2024)
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+    
+#     def get(self, request):
+#         # Récupérer l'année depuis les paramètres GET
+#         annee_param = request.query_params.get('annee')
+        
+#         if annee_param:
+#             annee_cible = int(annee_param)
+#         else:
+#             annee_cible = datetime.now().year + 1
+        
+#         print(f"[DEBUG] Export - Année cible: {annee_cible}")
+        
+#         # Récupérer les projets (sans filtre is_active)
+#         qs = BudgetRecord.objects.filter(
+#             statut_final='valide_divisionnaire',
+#             annee_debut_pmt=annee_cible
+#         ).order_by('region', 'code_division')
+        
+#         print(f"[DEBUG] Projets trouvés: {qs.count()}")
+        
+#         # Afficher les détails des projets trouvés
+#         for record in qs:
+#             print(f"[DEBUG] Projet: {record.code_division} - is_active: {record.is_active}")
+        
+#         # Créer le classeur Excel
+#         wb = openpyxl.Workbook()
+#         wb.remove(wb.active)
+        
+#         ws = wb.create_sheet("invest 2015-2019 Vers Stag")
+        
+#         self._write_template_header(ws, annee_cible)
+#         self._write_template_data_rows(ws, qs)
+#         self._apply_template_column_widths(ws)
+        
+#         ws_recap = wb.create_sheet("Récapitulatif")
+#         self._write_recap_sheet(ws_recap, qs, annee_cible)
+        
+#         filename = f"projets_valides_divisionnaire_{annee_cible}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+#         response = HttpResponse(
+#             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+#         )
+#         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+#         wb.save(response)
+#         return response
+    
+#     def _write_template_header(self, ws, annee_cible):
+#         """Écrit les en-têtes exactement comme dans le template recap.xls"""
+        
+#         header_font = Font(bold=True, size=11)
+#         title_font = Font(bold=True, size=14)
+#         subheader_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+        
+#         # ═══════════════════════════════════════════════════════════════════
+#         # LIGNES 1 à 6: Titres
+#         # ═══════════════════════════════════════════════════════════════════
+        
+#         ws.merge_cells('A1:F1')
+#         ws['A1'] = "SONATRACH - ACTIVITE AMONT - DIVISION PRODUCTION"
+#         ws['A1'].font = title_font
+#         ws['A1'].alignment = Alignment(horizontal='center')
+        
+#         ws.merge_cells('A2:F2')
+#         ws['A2'] = "PLAN ANNUEL 2015 ET PMT 2015/2019"
+#         ws['A2'].alignment = Alignment(horizontal='center')
+        
+#         ws.merge_cells('A3:F3')
+#         ws['A3'] = "ECHEANCIER DETAILLE PAR PROJETS"
+#         ws['A3'].alignment = Alignment(horizontal='center')
+        
+#         ws.merge_cells('A4:F4')
+#         ws['A4'] = "EXPLICATION DES VARIATIONS DES COÛTS"
+#         ws['A4'].alignment = Alignment(horizontal='center')
+        
+#         ws.merge_cells('A5:F5')
+#         ws['A5'] = "DEGLOBALISATION DE LA PREVISION ANNUELLE 2015"
+#         ws['A5'].alignment = Alignment(horizontal='center')
+        
+#         ws.merge_cells('A6:F6')
+#         ws['A6'] = "Unité : Millier DA"
+#         ws['A6'].font = Font(bold=True)
+#         ws['A6'].alignment = Alignment(horizontal='center')
+        
+#         # ═══════════════════════════════════════════════════════════════════
+#         # LIGNE 7: En-têtes principaux (colonnes séparées A,B,C,D,E,F)
+#         # ═══════════════════════════════════════════════════════════════════
+        
+#         header_fusions = [
+#             ('A', 'A'),    # Activité 
+#             ('B', 'B'),    # Région
+#             ('C', 'C'),    # PERIMETRE
+#             ('D', 'D'),    # Famille
+#             ('E', 'E'),    # N°:Cpte Analy.
+#             ('F', 'F'),    # Libellés
+#             ('G', 'H'),    # Coût Global Initial PMT 2015/2019
+#             ('I', 'J'),    # Réalisations Cumulées à fin 2013 au coût réel
+#             ('K', 'L'),    # Réal. 1er Semestre
+#             ('M', 'N'),    # Prév. 2è Semestre
+#             ('O', 'P'),    # Prévisions de clôture 2014
+#             ('Q', 'R'),    # Prévisions 2015
+#             ('S', 'T'),    # Reste à Réaliser 2016/2019
+#             ('U', 'V'),    # Prévisions 2016
+#             ('W', 'X'),    # Prévisions 2017
+#             ('Y', 'Z'),    # Prévisions 2018
+#             ('AA', 'AB'),  # Prévisions 2019
+#             ('AC', 'AD'),  # Janvier
+#             ('AE', 'AF'),  # Février
+#             ('AG', 'AH'),  # Mars
+#             ('AI', 'AJ'),  # Avril
+#             ('AK', 'AL'),  # Mai
+#             ('AM', 'AN'),  # Juin
+#             ('AO', 'AP'),  # Juillet
+#             ('AQ', 'AR'),  # Août
+#             ('AS', 'AT'),  # Septembre
+#             ('AU', 'AV'),  # Octobre
+#             ('AW', 'AX'),  # Novembre
+#             ('AY', 'AZ'),  # Décembre
+#         ]
+        
+#         header_texts = [
+#             "Activité",
+#             "Région",
+#             "PERIMETRE",
+#             "Famille",
+#             "N°:Cpte Analy.",
+#             "Libellés",
+#             "Coût Global Initial PMT 2015/2019",
+#             "Réalisations Cumulées à fin 2013 au coût réel",
+#             "Réal. 1er Semestre",
+#             "Prév. 2è Semestre",
+#             "Prévisions de clôture 2014",
+#             "Prévisions 2015",
+#             "Reste à Réaliser 2016/2019",
+#             "Prévisions 2016",
+#             "Prévisions 2017",
+#             "Prévisions 2018",
+#             "Prévisions 2019",
+#             "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+#             "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+#         ]
+        
+#         row_num = 7
+#         for idx, (start_col, end_col) in enumerate(header_fusions):
+#             if start_col != end_col:
+#                 ws.merge_cells(f'{start_col}{row_num}:{end_col}{row_num}')
+#             cell = ws[f'{start_col}{row_num}']
+#             cell.value = header_texts[idx] if idx < len(header_texts) else ""
+#             cell.font = header_font
+#             cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        
+#         # ═══════════════════════════════════════════════════════════════════
+#         # LIGNE 8: Sous-en-têtes "Total" / "dont Dev."
+#         # ═══════════════════════════════════════════════════════════════════
+        
+#         row_num = 8
+        
+#         # Colonnes A à F: simples (pas de fusion, juste une ligne)
+#         for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+#             ws[f'{col}{row_num}'] = ""
+        
+#         # Colonnes avec Total / dont Dev. (G à AB)
+#         dex_columns = [
+#             ('G', 'H'), ('I', 'J'), ('K', 'L'), ('M', 'N'), ('O', 'P'),
+#             ('Q', 'R'), ('S', 'T'), ('U', 'V'), ('W', 'X'), ('Y', 'Z'),
+#             ('AA', 'AB')
+#         ]
+        
+#         for start_col, end_col in dex_columns:
+#             ws[f'{start_col}{row_num}'] = "Total"
+#             ws[f'{end_col}{row_num}'] = "dont Dev."
+#             ws[f'{start_col}{row_num}'].font = Font(bold=True, size=10)
+#             ws[f'{end_col}{row_num}'].font = Font(bold=True, size=10)
+#             ws[f'{start_col}{row_num}'].alignment = Alignment(horizontal='center')
+#             ws[f'{end_col}{row_num}'].alignment = Alignment(horizontal='center')
+#             ws[f'{start_col}{row_num}'].fill = subheader_fill
+#             ws[f'{end_col}{row_num}'].fill = subheader_fill
+        
+#         # Colonnes des mois (AC à AZ)
+#         mois_pairs = [
+#             ('AC', 'AD'), ('AE', 'AF'), ('AG', 'AH'), ('AI', 'AJ'),
+#             ('AK', 'AL'), ('AM', 'AN'), ('AO', 'AP'), ('AQ', 'AR'),
+#             ('AS', 'AT'), ('AU', 'AV'), ('AW', 'AX'), ('AY', 'AZ')
+#         ]
+        
+#         for start_col, end_col in mois_pairs:
+#             ws[f'{start_col}{row_num}'] = "Total"
+#             ws[f'{end_col}{row_num}'] = "dont Dev."
+#             ws[f'{start_col}{row_num}'].font = Font(bold=True, size=9)
+#             ws[f'{end_col}{row_num}'].font = Font(bold=True, size=9)
+#             ws[f'{start_col}{row_num}'].alignment = Alignment(horizontal='center')
+#             ws[f'{end_col}{row_num}'].alignment = Alignment(horizontal='center')
+#             ws[f'{start_col}{row_num}'].fill = subheader_fill
+#             ws[f'{end_col}{row_num}'].fill = subheader_fill
+        
+#         # ═══════════════════════════════════════════════════════════════════
+#         # LIGNE 9: Sous-en-têtes "Prévisions" pour les mois
+#         # ═══════════════════════════════════════════════════════════════════
+        
+#         row_num = 9
+#         for start_col, end_col in mois_pairs:
+#             ws[f'{start_col}{row_num}'] = "Prévisions"
+#             ws[f'{end_col}{row_num}'] = ""
+#             ws[f'{start_col}{row_num}'].font = Font(size=8)
+#             ws[f'{start_col}{row_num}'].alignment = Alignment(horizontal='center')
+        
+#         # Ajuster les hauteurs
+#         for r in range(1, 10):
+#             ws.row_dimensions[r].height = 30
+#         ws.row_dimensions[7].height = 40
+    
+#     def _write_template_data_rows(self, ws, qs):
+#         """Écrit les données"""
+        
+#         row_num = 10
+#         thin_border = Border(
+#             left=Side(style='thin'),
+#             right=Side(style='thin'),
+#             top=Side(style='thin'),
+#             bottom=Side(style='thin')
+#         )
+        
+#         for record in qs:
+#             # Identifiants (colonnes A-F) - une valeur par colonne
+#             activite = record.activite or ''
+#             region = record.region or ''
+#             perimetre = record.perm or ''
+#             famille = record.famille or ''
+#             code_analytique = record.code_division or ''
+#             libelle = record.libelle or ''
+            
+#             # Données financières (colonnes G à AB)
+#             cout_total = self._format_number(record.cout_initial_total)
+#             cout_dex = self._format_number(record.cout_initial_dont_dex)
+#             realisation_total = self._format_number(record.realisation_cumul_n_mins1_total)
+#             realisation_dex = self._format_number(record.realisation_cumul_n_mins1_dont_dex)
+#             real_s1_total = self._format_number(record.real_s1_n_total)
+#             real_s1_dex = self._format_number(record.real_s1_n_dont_dex)
+#             prev_s2_total = self._format_number(record.prev_s2_n_total)
+#             prev_s2_dex = self._format_number(record.prev_s2_n_dont_dex)
+#             prev_cloture_total = self._format_number(record.prev_cloture_n_total)
+#             prev_cloture_dex = self._format_number(record.prev_cloture_n_dont_dex)
+#             prev_n1_total = self._format_number(record.prev_n_plus1_total)
+#             prev_n1_dex = self._format_number(record.prev_n_plus1_dont_dex)
+#             rar_total = self._format_number(record.reste_a_realiser_total)
+#             rar_dex = self._format_number(record.reste_a_realiser_dont_dex)
+#             prev_n2_total = self._format_number(record.prev_n_plus2_total)
+#             prev_n2_dex = self._format_number(record.prev_n_plus2_dont_dex)
+#             prev_n3_total = self._format_number(record.prev_n_plus3_total)
+#             prev_n3_dex = self._format_number(record.prev_n_plus3_dont_dex)
+#             prev_n4_total = self._format_number(record.prev_n_plus4_total)
+#             prev_n4_dex = self._format_number(record.prev_n_plus4_dont_dex)
+#             prev_n5_total = self._format_number(record.prev_n_plus5_total)
+#             prev_n5_dex = self._format_number(record.prev_n_plus5_dont_dex)
+            
+#             # Données mensuelles (colonnes AC à AZ)
+#             mois_data = []
+#             for mois in ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#                         'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']:
+#                 total = getattr(record, f'{mois}_total', None)
+#                 dex = getattr(record, f'{mois}_dont_dex', None)
+#                 mois_data.append((self._format_number(total), self._format_number(dex)))
+            
+#             # Construction de la ligne complète (colonnes A à AZ)
+#             row_data = [
+#                 # A-F: Identifiants (une colonne par valeur)
+#                 activite,      # A
+#                 region,        # B
+#                 perimetre,     # C
+#                 famille,       # D
+#                 code_analytique, # E
+#                 libelle,       # F
+                
+#                 # G-H: Coût Global Initial
+#                 cout_total, cout_dex,
+                
+#                 # I-J: Réalisations Cumulées
+#                 realisation_total, realisation_dex,
+                
+#                 # K-L: Réal. 1er Semestre
+#                 real_s1_total, real_s1_dex,
+                
+#                 # M-N: Prév. 2è Semestre
+#                 prev_s2_total, prev_s2_dex,
+                
+#                 # O-P: Prévisions de clôture 2014
+#                 prev_cloture_total, prev_cloture_dex,
+                
+#                 # Q-R: Prévisions 2015
+#                 prev_n1_total, prev_n1_dex,
+                
+#                 # S-T: Reste à Réaliser
+#                 rar_total, rar_dex,
+                
+#                 # U-V: Prévisions 2016
+#                 prev_n2_total, prev_n2_dex,
+                
+#                 # W-X: Prévisions 2017
+#                 prev_n3_total, prev_n3_dex,
+                
+#                 # Y-Z: Prévisions 2018
+#                 prev_n4_total, prev_n4_dex,
+                
+#                 # AA-AB: Prévisions 2019
+#                 prev_n5_total, prev_n5_dex,
+#             ]
+            
+#             # Ajouter les 12 mois (AC à AZ)
+#             for mois_total, mois_dex in mois_data:
+#                 row_data.append(mois_total)
+#                 row_data.append(mois_dex)
+            
+#             # Écrire la ligne
+#             for col_idx, value in enumerate(row_data, start=1):
+#                 col_letter = get_column_letter(col_idx)
+#                 cell = ws[f'{col_letter}{row_num}']
+#                 cell.value = value
+#                 cell.border = thin_border
+                
+#                 if col_idx <= 6:
+#                     cell.alignment = Alignment(horizontal='left', vertical='center')
+#                 else:
+#                     cell.alignment = Alignment(horizontal='right', vertical='center')
+#                     if value and isinstance(value, (int, float)):
+#                         cell.number_format = '#,##0.00'
+            
+#             row_num += 1
+    
+#     def _write_recap_sheet(self, ws, qs, annee_cible):
+#         """Écrit la feuille récapitulative"""
+        
+#         ws['A1'] = f"RÉCAPITULATIF - PROJETS VALIDÉS PAR LE DIVISIONNAIRE"
+#         ws['A1'].font = Font(bold=True, size=14)
+#         ws.merge_cells('A1:H1')
+        
+#         ws['A3'] = f"PMT: {annee_cible} - {annee_cible+4}"
+#         ws['A4'] = f"Date d'export: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+#         ws['A5'] = f"Nombre de projets: {qs.count()}"
+        
+#         headers = ['Activité', 'Région', 'Périmètre', 'Famille', 
+#                    'Code Division', 'Libellé', 'Coût Total', 'Dont DEX']
+        
+#         for col_idx, header in enumerate(headers, start=1):
+#             cell = ws.cell(row=7, column=col_idx, value=header)
+#             cell.font = Font(bold=True, color="FFFFFF")
+#             cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+#             cell.alignment = Alignment(horizontal='center')
+        
+#         row_num = 8
+#         total_general = 0
+        
+#         for record in qs:
+#             cout_total = float(record.cout_initial_total or 0)
+#             total_general += cout_total
+            
+#             ws.cell(row=row_num, column=1, value=record.activite or '')
+#             ws.cell(row=row_num, column=2, value=record.region or '')
+#             ws.cell(row=row_num, column=3, value=record.perm or '')
+#             ws.cell(row=row_num, column=4, value=record.famille or '')
+#             ws.cell(row=row_num, column=5, value=record.code_division or '')
+#             ws.cell(row=row_num, column=6, value=record.libelle or '')
+            
+#             cell_total = ws.cell(row=row_num, column=7, value=cout_total)
+#             cell_total.number_format = '#,##0.00'
+#             cell_dex = ws.cell(row=row_num, column=8, value=float(record.cout_initial_dont_dex or 0))
+#             cell_dex.number_format = '#,##0.00'
+            
+#             row_num += 1
+        
+#         ws.cell(row=row_num, column=6, value="TOTAL:")
+#         ws.cell(row=row_num, column=6).font = Font(bold=True)
+#         cell_total = ws.cell(row=row_num, column=7, value=total_general)
+#         cell_total.font = Font(bold=True)
+#         cell_total.number_format = '#,##0.00'
+        
+#         for col in range(1, 9):
+#             ws.column_dimensions[get_column_letter(col)].width = 20
+    
+#     def _apply_template_column_widths(self, ws):
+#         """Applique les largeurs de colonnes"""
+#         column_widths = {
+#             'A': 12,   # Activité
+#             'B': 15,   # Région
+#             'C': 25,   # PERIMETRE
+#             'D': 12,   # Famille
+#             'E': 18,   # N°:Cpte Analy.
+#             'F': 45,   # Libellés
+#             'G': 15, 'H': 15, 'I': 15, 'J': 15, 'K': 15, 'L': 15,
+#             'M': 15, 'N': 15, 'O': 15, 'P': 15, 'Q': 15, 'R': 15,
+#             'S': 15, 'T': 15, 'U': 15, 'V': 15, 'W': 15, 'X': 15,
+#             'Y': 15, 'Z': 15, 'AA': 15, 'AB': 15,
+#         }
+        
+#         for i in range(29, 53):
+#             col_letter = get_column_letter(i)
+#             column_widths[col_letter] = 12
+        
+#         for col_letter, width in column_widths.items():
+#             try:
+#                 ws.column_dimensions[col_letter].width = width
+#             except:
+#                 pass
+    
+#     def _format_number(self, value):
+#         if value is None:
+#             return 0
+#         try:
+#             return float(value)
+#         except (ValueError, TypeError):
+#             return 0
+
+
+#///////////////////////////////////////////////////////////////////
+# class ExportProjetsValidesDivisionnaireView(APIView):
+#     """
+#     GET /recap/budget/export/valides-divisionnaire/
+    
+#     Exporte les projets validés par le divisionnaire
+#     """
+
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         # Récupérer l'année
+#         annee_cible = datetime.now().year + 1
+
+#         # Récupérer les projets
+#         qs = BudgetRecord.objects.filter(
+#             statut_final='valide_divisionnaire',
+#             annee_debut_pmt=annee_cible
+#         ).order_by('code_division')
+
+#         # Créer le classeur Excel
+#         wb = openpyxl.Workbook()
+#         ws = wb.active
+#         ws.title = "INVEST"
+
+#         # Style pour les en-têtes
+#         header_font = Font(bold=True, size=11, color="FFFFFF")
+#         header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+#         header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        
+#         # Style pour les sous-en-têtes
+#         subheader_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+#         subheader_font = Font(bold=True, size=10)
+        
+#         # Style pour les bordures
+#         thin_border = Border(
+#             left=Side(style='thin'),
+#             right=Side(style='thin'),
+#             top=Side(style='thin'),
+#             bottom=Side(style='thin')
+#         )
+
+#         # ==========================================================
+#         # LIGNE 1: Titre principal
+#         # ==========================================================
+#         ws.merge_cells('A1:AZ1')
+#         ws['A1'] = "SONATRACH - ACTIVITE AMONT - DIVISION PRODUCTION"
+#         ws['A1'].font = Font(bold=True, size=16)
+#         ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+#         ws.row_dimensions[1].height = 30
+
+#         # ==========================================================
+#         # LIGNE 2: Période
+#         # ==========================================================
+#         ws.merge_cells('A2:AZ2')
+#         ws['A2'] = f"PLAN ANNUEL {annee_cible} ET PMT {annee_cible}/{annee_cible+4}"
+#         ws['A2'].font = Font(bold=True, size=14)
+#         ws['A2'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[2].height = 25
+
+#         # ==========================================================
+#         # LIGNE 3: ECHEANCIER
+#         # ==========================================================
+#         ws.merge_cells('A3:AZ3')
+#         ws['A3'] = "ECHEANCIER DETAILLE PAR PROJETS"
+#         ws['A3'].font = Font(bold=True, size=12)
+#         ws['A3'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[3].height = 25
+
+#         # ==========================================================
+#         # LIGNE 4: EXPLICATION
+#         # ==========================================================
+#         ws.merge_cells('A4:AZ4')
+#         ws['A4'] = "EXPLICATION DES VARIATIONS DES COÛTS"
+#         ws['A4'].font = Font(bold=True, size=12)
+#         ws['A4'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[4].height = 25
+
+#         # ==========================================================
+#         # LIGNE 5: DEGLOBALISATION
+#         # ==========================================================
+#         ws.merge_cells('A5:AZ5')
+#         ws['A5'] = "DEGLOBALISATION DE LA PREVISION ANNUELLE"
+#         ws['A5'].font = Font(bold=True, size=12)
+#         ws['A5'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[5].height = 25
+
+#         # ==========================================================
+#         # LIGNE 6: Unité
+#         # ==========================================================
+#         ws.merge_cells('A6:AZ6')
+#         ws['A6'] = "Unité : Millier DA"
+#         ws['A6'].font = Font(bold=True, size=11)
+#         ws['A6'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[6].height = 20
+
+#         # ==========================================================
+#         # LIGNE 7: En-têtes principaux (colonnes fusionnées)
+#         # ==========================================================
+        
+#         headers_config = [
+#             # (colonne_debut, colonne_fin, texte, largeur)
+#             ('A', 'A', "Activité", 15),
+#             ('B', 'B', "Région", 15),
+#             ('C', 'C', "PERIMETRE", 20),
+#             ('D', 'D', "Famille", 15),
+#             ('E', 'E', "N°:Cpte Analy.", 18),
+#             ('F', 'F', "Libellés", 40),
+#             ('G', 'H', "Coût Global Initial PMT", 18),
+#             ('I', 'J', "Réalisations Cumulées à fin 2013", 18),
+#             ('K', 'L', "Réal. 1er Semestre", 15),
+#             ('M', 'N', "Prév. 2è Semestre", 15),
+#             ('O', 'P', "Prévisions de clôture 2014", 18),
+#             ('Q', 'R', "Prévisions 2015", 15),
+#             ('S', 'T', "Reste à Réaliser 2016/2019", 18),
+#             ('U', 'V', "Prévisions 2016", 15),
+#             ('W', 'X', "Prévisions 2017", 15),
+#             ('Y', 'Z', "Prévisions 2018", 15),
+#             ('AA', 'AB', "Prévisions 2019", 15),
+#             ('AC', 'AD', "Janvier", 12),
+#             ('AE', 'AF', "Février", 12),
+#             ('AG', 'AH', "Mars", 12),
+#             ('AI', 'AJ', "Avril", 12),
+#             ('AK', 'AL', "Mai", 12),
+#             ('AM', 'AN', "Juin", 12),
+#             ('AO', 'AP', "Juillet", 12),
+#             ('AQ', 'AR', "Août", 12),
+#             ('AS', 'AT', "Septembre", 12),
+#             ('AU', 'AV', "Octobre", 12),
+#             ('AW', 'AX', "Novembre", 12),
+#             ('AY', 'AZ', "Décembre", 12),
+#         ]
+
+#         row_num = 7
+#         for start_col, end_col, text, width in headers_config:
+#             if start_col != end_col:
+#                 ws.merge_cells(f'{start_col}{row_num}:{end_col}{row_num}')
+#             cell = ws[f'{start_col}{row_num}']
+#             cell.value = text
+#             cell.font = header_font
+#             cell.fill = header_fill
+#             cell.alignment = header_alignment
+#             cell.border = thin_border
+#             ws.column_dimensions[start_col].width = width
+
+#         ws.row_dimensions[7].height = 50
+
+#         # ==========================================================
+#         # LIGNE 8: Sous-en-têtes "Total" / "dont Dev."
+#         # ==========================================================
+#         row_num = 8
+        
+#         # Colonnes A à F (vides)
+#         for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+#             cell = ws[f'{col}{row_num}']
+#             cell.value = ""
+#             cell.border = thin_border
+        
+#         # Paires de colonnes avec Total / dont DEX
+#         dex_pairs = [
+#             ('G', 'H'), ('I', 'J'), ('K', 'L'), ('M', 'N'), ('O', 'P'),
+#             ('Q', 'R'), ('S', 'T'), ('U', 'V'), ('W', 'X'), ('Y', 'Z'),
+#             ('AA', 'AB'), ('AC', 'AD'), ('AE', 'AF'), ('AG', 'AH'), ('AI', 'AJ'),
+#             ('AK', 'AL'), ('AM', 'AN'), ('AO', 'AP'), ('AQ', 'AR'), ('AS', 'AT'),
+#             ('AU', 'AV'), ('AW', 'AX'), ('AY', 'AZ')
+#         ]
+        
+#         for start_col, end_col in dex_pairs:
+#             cell_total = ws[f'{start_col}{row_num}']
+#             cell_total.value = "Total"
+#             cell_total.font = subheader_font
+#             cell_total.fill = subheader_fill
+#             cell_total.alignment = Alignment(horizontal='center')
+#             cell_total.border = thin_border
+            
+#             cell_dex = ws[f'{end_col}{row_num}']
+#             cell_dex.value = "dont Dev."
+#             cell_dex.font = subheader_font
+#             cell_dex.fill = subheader_fill
+#             cell_dex.alignment = Alignment(horizontal='center')
+#             cell_dex.border = thin_border
+
+#         ws.row_dimensions[8].height = 25
+
+#         # ==========================================================
+#         # LIGNE 9: Sous-en-têtes "Prévisions" pour les mois
+#         # ==========================================================
+#         row_num = 9
+        
+#         # Colonnes A à AB (vides ou continuation)
+#         for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+#             cell = ws[f'{col}{row_num}']
+#             cell.value = ""
+#             cell.border = thin_border
+        
+#         # Pour les colonnes G à AB (laisser vides)
+#         for col_letter in ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+#                           'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+#                           'AA', 'AB']:
+#             cell = ws[f'{col_letter}{row_num}']
+#             cell.value = ""
+#             cell.border = thin_border
+        
+#         # Pour les mois (AC à AZ)
+#         mois_pairs = [
+#             ('AC', 'AD'), ('AE', 'AF'), ('AG', 'AH'), ('AI', 'AJ'),
+#             ('AK', 'AL'), ('AM', 'AN'), ('AO', 'AP'), ('AQ', 'AR'),
+#             ('AS', 'AT'), ('AU', 'AV'), ('AW', 'AX'), ('AY', 'AZ')
+#         ]
+        
+#         for start_col, end_col in mois_pairs:
+#             cell = ws[f'{start_col}{row_num}']
+#             cell.value = "Prévisions"
+#             cell.font = Font(size=8)
+#             cell.alignment = Alignment(horizontal='center')
+#             cell.border = thin_border
+            
+#             cell = ws[f'{end_col}{row_num}']
+#             cell.value = ""
+#             cell.border = thin_border
+
+#         ws.row_dimensions[9].height = 20
+
+#         # ==========================================================
+#         # LIGNES 10+: Données
+#         # ==========================================================
+        
+#         start_row = 10
+#         token = request.headers.get('Authorization', '')
+#         service_url = get_service_param_url()
+        
+#         for idx, record in enumerate(qs):
+#             row_num = start_row + idx
+            
+#             # Récupérer le code direction/région
+#             direction_region_code = self._get_direction_region_code(record)
+#             perimetre = record.perm or direction_region_code or ''
+            
+#             # Données de base
+#             data_row = [
+#                 record.activite or '',
+#                 direction_region_code or '',
+#                 perimetre,
+#                 record.famille or '',
+#                 record.code_division or '',
+#                 record.libelle or '',
+#             ]
+            
+#             # Données financières
+#             financial_fields = [
+#                 ('cout_initial_total', 'cout_initial_dont_dex'),
+#                 ('realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex'),
+#                 ('real_s1_n_total', 'real_s1_n_dont_dex'),
+#                 ('prev_s2_n_total', 'prev_s2_n_dont_dex'),
+#                 ('prev_cloture_n_total', 'prev_cloture_n_dont_dex'),
+#                 ('prev_n_plus1_total', 'prev_n_plus1_dont_dex'),
+#                 ('reste_a_realiser_total', 'reste_a_realiser_dont_dex'),
+#                 ('prev_n_plus2_total', 'prev_n_plus2_dont_dex'),
+#                 ('prev_n_plus3_total', 'prev_n_plus3_dont_dex'),
+#                 ('prev_n_plus4_total', 'prev_n_plus4_dont_dex'),
+#                 ('prev_n_plus5_total', 'prev_n_plus5_dont_dex'),
+#             ]
+            
+#             for total_field, dex_field in financial_fields:
+#                 total_val = self._format_number(getattr(record, total_field, None))
+#                 dex_val = self._format_number(getattr(record, dex_field, None))
+#                 data_row.extend([total_val, dex_val])
+            
+#             # Données mensuelles
+#             for mois in ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#                         'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']:
+#                 total_val = self._format_number(getattr(record, f'{mois}_total', None))
+#                 dex_val = self._format_number(getattr(record, f'{mois}_dont_dex', None))
+#                 data_row.extend([total_val, dex_val])
+            
+#             # Écrire la ligne
+#             for col_idx, value in enumerate(data_row, start=1):
+#                 col_letter = get_column_letter(col_idx)
+#                 cell = ws[f'{col_letter}{row_num}']
+#                 cell.value = value
+#                 cell.border = thin_border
+                
+#                 if col_idx <= 6:
+#                     cell.alignment = Alignment(horizontal='left', vertical='center')
+#                 else:
+#                     cell.alignment = Alignment(horizontal='right', vertical='center')
+#                     if isinstance(value, (int, float)) and value != 0:
+#                         cell.number_format = '#,##0.00'
+        
+#         # Sauvegarde
+#         filename = f"projets_valides_divisionnaire_{annee_cible}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+#         response = HttpResponse(
+#             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+#         )
+#         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+#         wb.save(response)
+#         return response
+    
+#     def _get_direction_region_code(self, record):
+#         """Retourne le code direction ou code région"""
+#         if record.direction and not record.region:
+#             return record.direction
+#         elif record.region and not record.direction:
+#             return record.region
+#         return None
+    
+#     def _format_number(self, value):
+#         if value is None:
+#             return 0
+#         try:
+#             return float(value)
+#         except (ValueError, TypeError):
+#             return 0
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+from django.http import HttpResponse
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from datetime import datetime
+import logging
+import requests
+from django.db.models import Q
+from .models import BudgetRecord
+from .serializers import BudgetRecordSerializer
+from .permissions import IsDivisionnaire
+
+logger = logging.getLogger(__name__)
+
+
+# class ExportProjetsValidesDivisionnaireView(APIView):
+#     """
+#     GET /recap/budget/export/valides-divisionnaire/
+    
+#     Exporte les projets validés par le divisionnaire
+#     """
+
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         print("=" * 80)
+#         print("[DEBUG] === EXPORT EXCEL DIVISIONNAIRE ===")
+#         print(f"[DEBUG] User: {request.user}")
+#         print(f"[DEBUG] User role: {getattr(request.user, 'role', 'unknown')}")
+        
+#         # Récupérer l'année
+#         annee_cible = datetime.now().year + 1
+#         annee_param = request.query_params.get('annee')
+#         if annee_param:
+#             annee_cible = int(annee_param)
+        
+#         print(f"[DEBUG] Année cible: {annee_cible}")
+        
+#         # Récupérer tous les projets validés par divisionnaire
+#         all_projets = BudgetRecord.objects.filter(
+#             statut_final='valide_divisionnaire'
+#         )
+#         print(f"[DEBUG] Total projets valides divisionnaire: {all_projets.count()}")
+        
+#         # Filtrer par année
+#         qs = BudgetRecord.objects.filter(
+#             statut_final='valide_divisionnaire',
+#             annee_debut_pmt=annee_cible
+#         ).order_by('code_division')
+        
+#         print(f"[DEBUG] Projets pour l'année {annee_cible}: {qs.count()}")
+        
+#         # 🔥 DEBUG: Afficher les détails des projets trouvés
+#         print("\n[DEBUG] Détail des projets trouvés:")
+#         for idx, p in enumerate(qs[:10]):
+#             print(f"  Projet {idx+1}:")
+#             print(f"    - ID: {p.id}")
+#             print(f"    - code_division: {p.code_division}")
+#             print(f"    - libelle: {p.libelle}")
+#             print(f"    - region: '{p.region}' (type: {type(p.region).__name__})")
+#             print(f"    - direction: '{p.direction}' (type: {type(p.direction).__name__})")
+#             print(f"    - region_id: {p.region_id}")
+#             print(f"    - direction_id: {p.direction_id}")
+#             print(f"    - perm: {p.perm}")
+#             print(f"    - activite: {p.activite}")
+#             print(f"    - famille: {p.famille}")
+            
+#         print("=" * 80)
+        
+#         if qs.count() == 0:
+#             return Response({
+#                 'success': False,
+#                 'message': f'Aucun projet validé par le divisionnaire pour l\'année {annee_cible}'
+#             }, status=404)
+
+#         # Sérialiser les données
+#         print("\n[DEBUG] Sérialisation des données...")
+#         serializer = BudgetRecordSerializer(qs, many=True, context={'request': request})
+#         serialized_data = serializer.data
+#         print(f"[DEBUG] Données sérialisées: {len(serialized_data)} projets")
+        
+#         # 🔥 DEBUG: Afficher les données sérialisées
+#         print("\n[DEBUG] Données sérialisées (3 premiers):")
+#         for idx, item in enumerate(serialized_data[:3]):
+#             print(f"  Projet {idx+1}: {item.get('code_division')}")
+#             print(f"    - region: {item.get('region')}")
+#             print(f"    - direction: {item.get('direction')}")
+#             print(f"    - direction_region_code: {item.get('direction_region_code', 'NON_TROUVÉ')}")
+#             print(f"    - direction_region_nom: {item.get('direction_region_nom', 'NON_TROUVÉ')}")
+#             print(f"    - perm: {item.get('perm')}")
+#             print(f"    - activite: {item.get('activite')}")
+#             print(f"    - famille: {item.get('famille')}")
+        
+#         # Créer le classeur Excel
+#         print("\n[DEBUG] Création du fichier Excel...")
+#         wb = openpyxl.Workbook()
+#         ws = wb.active
+#         ws.title = "INVEST"
+
+#         # Styles
+#         header_font = Font(bold=True, size=11, color="FFFFFF")
+#         header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+#         header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        
+#         subheader_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+#         subheader_font = Font(bold=True, size=10)
+        
+#         thin_border = Border(
+#             left=Side(style='thin'),
+#             right=Side(style='thin'),
+#             top=Side(style='thin'),
+#             bottom=Side(style='thin')
+#         )
+
+#         # ==========================================================
+#         # LIGNE 1: Titre principal
+#         # ==========================================================
+#         ws.merge_cells('A1:AZ1')
+#         ws['A1'] = "SONATRACH - ACTIVITE AMONT - DIVISION PRODUCTION"
+#         ws['A1'].font = Font(bold=True, size=16)
+#         ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+#         ws.row_dimensions[1].height = 30
+
+#         # ==========================================================
+#         # LIGNE 2: Période
+#         # ==========================================================
+#         ws.merge_cells('A2:AZ2')
+#         ws['A2'] = f"PLAN ANNUEL {annee_cible} ET PMT {annee_cible}/{annee_cible+4}"
+#         ws['A2'].font = Font(bold=True, size=14)
+#         ws['A2'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[2].height = 25
+
+#         # ==========================================================
+#         # LIGNE 3: ECHEANCIER
+#         # ==========================================================
+#         ws.merge_cells('A3:AZ3')
+#         ws['A3'] = "ECHEANCIER DETAILLE PAR PROJETS"
+#         ws['A3'].font = Font(bold=True, size=12)
+#         ws['A3'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[3].height = 25
+
+#         # ==========================================================
+#         # LIGNE 4: EXPLICATION
+#         # ==========================================================
+#         ws.merge_cells('A4:AZ4')
+#         ws['A4'] = "EXPLICATION DES VARIATIONS DES COÛTS"
+#         ws['A4'].font = Font(bold=True, size=12)
+#         ws['A4'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[4].height = 25
+
+#         # ==========================================================
+#         # LIGNE 5: DEGLOBALISATION
+#         # ==========================================================
+#         ws.merge_cells('A5:AZ5')
+#         ws['A5'] = "DEGLOBALISATION DE LA PREVISION ANNUELLE"
+#         ws['A5'].font = Font(bold=True, size=12)
+#         ws['A5'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[5].height = 25
+
+#         # ==========================================================
+#         # LIGNE 6: Unité
+#         # ==========================================================
+#         ws.merge_cells('A6:AZ6')
+#         ws['A6'] = "Unité : Millier DA"
+#         ws['A6'].font = Font(bold=True, size=11)
+#         ws['A6'].alignment = Alignment(horizontal='center')
+#         ws.row_dimensions[6].height = 20
+
+#         # ==========================================================
+#         # LIGNE 7: En-têtes principaux
+#         # ==========================================================
+        
+#         headers_config = [
+#             ('A', 'A', "Activité", 15),
+#             ('B', 'B', "Région/Direction", 18),
+#             ('C', 'C', "PERIMETRE", 20),
+#             ('D', 'D', "Famille", 15),
+#             ('E', 'E', "N°:Cpte Analy.", 18),
+#             ('F', 'F', "Libellés", 40),
+#             ('G', 'H', "Coût Global Initial PMT", 18),
+#             ('I', 'J', "Réalisations Cumulées à fin 2013", 18),
+#             ('K', 'L', "Réal. 1er Semestre", 15),
+#             ('M', 'N', "Prév. 2è Semestre", 15),
+#             ('O', 'P', "Prévisions de clôture 2014", 18),
+#             ('Q', 'R', "Prévisions 2015", 15),
+#             ('S', 'T', "Reste à Réaliser 2016/2019", 18),
+#             ('U', 'V', "Prévisions 2016", 15),
+#             ('W', 'X', "Prévisions 2017", 15),
+#             ('Y', 'Z', "Prévisions 2018", 15),
+#             ('AA', 'AB', "Prévisions 2019", 15),
+#             ('AC', 'AD', "Janvier", 12),
+#             ('AE', 'AF', "Février", 12),
+#             ('AG', 'AH', "Mars", 12),
+#             ('AI', 'AJ', "Avril", 12),
+#             ('AK', 'AL', "Mai", 12),
+#             ('AM', 'AN', "Juin", 12),
+#             ('AO', 'AP', "Juillet", 12),
+#             ('AQ', 'AR', "Août", 12),
+#             ('AS', 'AT', "Septembre", 12),
+#             ('AU', 'AV', "Octobre", 12),
+#             ('AW', 'AX', "Novembre", 12),
+#             ('AY', 'AZ', "Décembre", 12),
+#         ]
+
+#         row_num = 7
+#         for start_col, end_col, text, width in headers_config:
+#             if start_col != end_col:
+#                 ws.merge_cells(f'{start_col}{row_num}:{end_col}{row_num}')
+#             cell = ws[f'{start_col}{row_num}']
+#             cell.value = text
+#             cell.font = header_font
+#             cell.fill = header_fill
+#             cell.alignment = header_alignment
+#             cell.border = thin_border
+#             ws.column_dimensions[start_col].width = width
+
+#         ws.row_dimensions[7].height = 50
+
+#         # ==========================================================
+#         # LIGNE 8: Sous-en-têtes "Total" / "dont Dev."
+#         # ==========================================================
+#         row_num = 8
+        
+#         for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+#             cell = ws[f'{col}{row_num}']
+#             cell.value = ""
+#             cell.border = thin_border
+        
+#         dex_pairs = [
+#             ('G', 'H'), ('I', 'J'), ('K', 'L'), ('M', 'N'), ('O', 'P'),
+#             ('Q', 'R'), ('S', 'T'), ('U', 'V'), ('W', 'X'), ('Y', 'Z'),
+#             ('AA', 'AB'), ('AC', 'AD'), ('AE', 'AF'), ('AG', 'AH'), ('AI', 'AJ'),
+#             ('AK', 'AL'), ('AM', 'AN'), ('AO', 'AP'), ('AQ', 'AR'), ('AS', 'AT'),
+#             ('AU', 'AV'), ('AW', 'AX'), ('AY', 'AZ')
+#         ]
+        
+#         for start_col, end_col in dex_pairs:
+#             cell_total = ws[f'{start_col}{row_num}']
+#             cell_total.value = "Total"
+#             cell_total.font = subheader_font
+#             cell_total.fill = subheader_fill
+#             cell_total.alignment = Alignment(horizontal='center')
+#             cell_total.border = thin_border
+            
+#             cell_dex = ws[f'{end_col}{row_num}']
+#             cell_dex.value = "dont Dev."
+#             cell_dex.font = subheader_font
+#             cell_dex.fill = subheader_fill
+#             cell_dex.alignment = Alignment(horizontal='center')
+#             cell_dex.border = thin_border
+
+#         ws.row_dimensions[8].height = 25
+
+#         # ==========================================================
+#         # LIGNE 9: Sous-en-têtes "Prévisions" pour les mois
+#         # ==========================================================
+#         row_num = 9
+        
+#         for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+#             cell = ws[f'{col}{row_num}']
+#             cell.value = ""
+#             cell.border = thin_border
+        
+#         for col_letter in ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+#                           'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+#                           'AA', 'AB']:
+#             cell = ws[f'{col_letter}{row_num}']
+#             cell.value = ""
+#             cell.border = thin_border
+        
+#         mois_pairs = [
+#             ('AC', 'AD'), ('AE', 'AF'), ('AG', 'AH'), ('AI', 'AJ'),
+#             ('AK', 'AL'), ('AM', 'AN'), ('AO', 'AP'), ('AQ', 'AR'),
+#             ('AS', 'AT'), ('AU', 'AV'), ('AW', 'AX'), ('AY', 'AZ')
+#         ]
+        
+#         for start_col, end_col in mois_pairs:
+#             cell = ws[f'{start_col}{row_num}']
+#             cell.value = "Prévisions"
+#             cell.font = Font(size=8)
+#             cell.alignment = Alignment(horizontal='center')
+#             cell.border = thin_border
+            
+#             cell = ws[f'{end_col}{row_num}']
+#             cell.value = ""
+#             cell.border = thin_border
+
+#         ws.row_dimensions[9].height = 20
+
+#         # ==========================================================
+#         # LIGNES 10+: Données
+#         # ==========================================================
+        
+#         start_row = 10
+#         projets_avec_code = 0
+#         projets_sans_code = 0
+        
+#         for idx, record_data in enumerate(serialized_data):
+#             row_num = start_row + idx
+            
+#             # 🔥 Récupérer direction_region_code
+#             direction_region_code = record_data.get('direction_region_code', '')
+            
+#             # Log pour voir ce qui se passe
+#             if not direction_region_code:
+#                 projets_sans_code += 1
+#                 code_div = record_data.get('code_division', 'unknown')
+#                 print(f"[DEBUG] Projet {code_div} - direction_region_code vide")
+#                 print(f"    region: {record_data.get('region')}")
+#                 print(f"    direction: {record_data.get('direction')}")
+#             else:
+#                 projets_avec_code += 1
+            
+#             # Fallback: essayer region ou direction directement
+#             if not direction_region_code:
+#                 if record_data.get('direction'):
+#                     direction_region_code = record_data.get('direction')
+#                 elif record_data.get('region'):
+#                     direction_region_code = record_data.get('region')
+            
+#             # PERIMETRE: perm ou direction_region_code
+#             perimetre = record_data.get('perm') or direction_region_code or ''
+            
+#             # Données de base
+#             data_row = [
+#                 record_data.get('activite', ''),
+#                 direction_region_code if direction_region_code else '',
+#                 perimetre,
+#                 record_data.get('famille', ''),
+#                 record_data.get('code_division', ''),
+#                 record_data.get('libelle', ''),
+#             ]
+            
+#             # Données financières
+#             financial_fields = [
+#                 ('cout_initial_total', 'cout_initial_dont_dex'),
+#                 ('realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex'),
+#                 ('real_s1_n_total', 'real_s1_n_dont_dex'),
+#                 ('prev_s2_n_total', 'prev_s2_n_dont_dex'),
+#                 ('prev_cloture_n_total', 'prev_cloture_n_dont_dex'),
+#                 ('prev_n_plus1_total', 'prev_n_plus1_dont_dex'),
+#                 ('reste_a_realiser_total', 'reste_a_realiser_dont_dex'),
+#                 ('prev_n_plus2_total', 'prev_n_plus2_dont_dex'),
+#                 ('prev_n_plus3_total', 'prev_n_plus3_dont_dex'),
+#                 ('prev_n_plus4_total', 'prev_n_plus4_dont_dex'),
+#                 ('prev_n_plus5_total', 'prev_n_plus5_dont_dex'),
+#             ]
+            
+#             for total_field, dex_field in financial_fields:
+#                 total_val = self._format_number(record_data.get(total_field))
+#                 dex_val = self._format_number(record_data.get(dex_field))
+#                 data_row.extend([total_val, dex_val])
+            
+#             # Données mensuelles
+#             for mois in ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#                         'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']:
+#                 total_val = self._format_number(record_data.get(f'{mois}_total'))
+#                 dex_val = self._format_number(record_data.get(f'{mois}_dont_dex'))
+#                 data_row.extend([total_val, dex_val])
+            
+#             # Écrire la ligne
+#             for col_idx, value in enumerate(data_row, start=1):
+#                 col_letter = get_column_letter(col_idx)
+#                 cell = ws[f'{col_letter}{row_num}']
+#                 cell.value = value
+#                 cell.border = thin_border
+                
+#                 if col_idx <= 6:
+#                     cell.alignment = Alignment(horizontal='left', vertical='center')
+#                 else:
+#                     cell.alignment = Alignment(horizontal='right', vertical='center')
+#                     if isinstance(value, (int, float)) and value != 0:
+#                         cell.number_format = '#,##0.00'
+        
+#         print("\n" + "=" * 80)
+#         print("[DEBUG] RÉSUMÉ DE L'EXPORT:")
+#         print(f"  - Total projets: {len(serialized_data)}")
+#         print(f"  - Projets avec code région/direction: {projets_avec_code}")
+#         print(f"  - Projets SANS code: {projets_sans_code}")
+#         print("=" * 80)
+        
+#         # Sauvegarde
+#         filename = f"projets_valides_divisionnaire_{annee_cible}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+#         response = HttpResponse(
+#             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+#         )
+#         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+#         wb.save(response)
+        
+#         print(f"[DEBUG] Fichier généré: {filename}")
+#         print("=" * 80)
+        
+#         return response
+    
+#     def _format_number(self, value):
+#         if value is None:
+#             return 0
+#         try:
+#             return float(value)
+#         except (ValueError, TypeError):
+#             return 0
 class ExportProjetsValidesDivisionnaireView(APIView):
     """
     GET /recap/budget/export/valides-divisionnaire/
     
-    Exporte les projets validés par le divisionnaire 
-    avec filtre optionnel par année (?annee=2024)
+    Exporte les projets validés par le divisionnaire
     """
+
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
-        # Récupérer l'année depuis les paramètres GET
-        annee_param = request.query_params.get('annee')
+        print("=" * 80)
+        print("[DEBUG] === EXPORT EXCEL DIVISIONNAIRE ===")
         
+        # Récupérer l'année de base
+        annee_param = request.query_params.get('annee')
         if annee_param:
             annee_cible = int(annee_param)
         else:
             annee_cible = datetime.now().year + 1
         
-        print(f"[DEBUG] Export - Année cible: {annee_cible}")
+        # Calculer N-1 (année précédente)
+        annee_precedente = annee_cible - 1
+        annee_precedente_2 = annee_cible - 2
         
-        # Récupérer les projets (sans filtre is_active)
+        print(f"[DEBUG] Année cible (N): {annee_cible}")
+        print(f"[DEBUG] Année précédente (N-1): {annee_precedente}")
+        
+        # Récupérer les projets
         qs = BudgetRecord.objects.filter(
             statut_final='valide_divisionnaire',
             annee_debut_pmt=annee_cible
-        ).order_by('region', 'code_division')
+        ).order_by('code_division')
         
         print(f"[DEBUG] Projets trouvés: {qs.count()}")
         
-        # Afficher les détails des projets trouvés
-        for record in qs:
-            print(f"[DEBUG] Projet: {record.code_division} - is_active: {record.is_active}")
+        if qs.count() == 0:
+            return Response({
+                'success': False,
+                'message': f'Aucun projet validé par le divisionnaire pour l\'année {annee_cible}'
+            }, status=404)
+
+        # Sérialiser les données
+        serializer = BudgetRecordSerializer(qs, many=True, context={'request': request})
+        serialized_data = serializer.data
         
         # Créer le classeur Excel
         wb = openpyxl.Workbook()
-        wb.remove(wb.active)
+        ws = wb.active
+        ws.title = "INVEST"
+
+        # Styles
+        header_font = Font(bold=True, size=11, color="FFFFFF")
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         
-        ws = wb.create_sheet("invest 2015-2019 Vers Stag")
-        
-        self._write_template_header(ws, annee_cible)
-        self._write_template_data_rows(ws, qs)
-        self._apply_template_column_widths(ws)
-        
-        ws_recap = wb.create_sheet("Récapitulatif")
-        self._write_recap_sheet(ws_recap, qs, annee_cible)
-        
-        filename = f"projets_valides_divisionnaire_{annee_cible}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
-        wb.save(response)
-        return response
-    
-    def _write_template_header(self, ws, annee_cible):
-        """Écrit les en-têtes exactement comme dans le template recap.xls"""
-        
-        header_font = Font(bold=True, size=11)
-        title_font = Font(bold=True, size=14)
         subheader_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+        subheader_font = Font(bold=True, size=10)
         
-        # ═══════════════════════════════════════════════════════════════════
-        # LIGNES 1 à 6: Titres
-        # ═══════════════════════════════════════════════════════════════════
-        
-        ws.merge_cells('A1:F1')
-        ws['A1'] = "SONATRACH - ACTIVITE AMONT - DIVISION PRODUCTION"
-        ws['A1'].font = title_font
-        ws['A1'].alignment = Alignment(horizontal='center')
-        
-        ws.merge_cells('A2:F2')
-        ws['A2'] = "PLAN ANNUEL 2015 ET PMT 2015/2019"
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # ==========================================================
+        # LIGNE 1: Titre principal
+        # ==========================================================
+        ws.merge_cells('A1:AZ1')
+        ws['A1'] = "SONATRACH - DIVISION PRODUCTION"
+        ws['A1'].font = Font(bold=True, size=16)
+        ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 30
+
+        # ==========================================================
+        # LIGNE 2: Période (avec années dynamiques)
+        # ==========================================================
+        ws.merge_cells('A2:AZ2')
+        ws['A2'] = f"PMT {annee_cible}/{annee_cible+4}"
+        ws['A2'].font = Font(bold=True, size=14)
         ws['A2'].alignment = Alignment(horizontal='center')
-        
-        ws.merge_cells('A3:F3')
-        ws['A3'] = "ECHEANCIER DETAILLE PAR PROJETS"
-        ws['A3'].alignment = Alignment(horizontal='center')
-        
-        ws.merge_cells('A4:F4')
-        ws['A4'] = "EXPLICATION DES VARIATIONS DES COÛTS"
-        ws['A4'].alignment = Alignment(horizontal='center')
-        
-        ws.merge_cells('A5:F5')
-        ws['A5'] = "DEGLOBALISATION DE LA PREVISION ANNUELLE 2015"
-        ws['A5'].alignment = Alignment(horizontal='center')
-        
-        ws.merge_cells('A6:F6')
+        ws.row_dimensions[2].height = 25
+
+        # # ==========================================================
+        # # LIGNE 3: ECHEANCIER
+        # # ==========================================================
+        # ws.merge_cells('A3:AZ3')
+        # ws['A3'] = "ECHEANCIER DETAILLE PAR PROJETS"
+        # ws['A3'].font = Font(bold=True, size=12)
+        # ws['A3'].alignment = Alignment(horizontal='center')
+        # ws.row_dimensions[3].height = 25
+
+        # # ==========================================================
+        # # LIGNE 4: EXPLICATION
+        # # ==========================================================
+        # ws.merge_cells('A4:AZ4')
+        # ws['A4'] = "EXPLICATION DES VARIATIONS DES COÛTS"
+        # ws['A4'].font = Font(bold=True, size=12)
+        # ws['A4'].alignment = Alignment(horizontal='center')
+        # ws.row_dimensions[4].height = 25
+
+        # # ==========================================================
+        # # LIGNE 5: DEGLOBALISATION
+        # # ==========================================================
+        # ws.merge_cells('A5:AZ5')
+        # ws['A5'] = "DEGLOBALISATION DE LA PREVISION ANNUELLE"
+        # ws['A5'].font = Font(bold=True, size=12)
+        # ws['A5'].alignment = Alignment(horizontal='center')
+        # ws.row_dimensions[5].height = 25
+
+        # ==========================================================
+        # LIGNE 6: Unité
+        # ==========================================================
+        ws.merge_cells('A6:AZ6')
         ws['A6'] = "Unité : Millier DA"
-        ws['A6'].font = Font(bold=True)
+        ws['A6'].font = Font(bold=True, size=11)
         ws['A6'].alignment = Alignment(horizontal='center')
+        ws.row_dimensions[6].height = 20
+
+        # ==========================================================
+        # LIGNE 7: En-têtes principaux avec années dynamiques
+        # ==========================================================
         
-        # ═══════════════════════════════════════════════════════════════════
-        # LIGNE 7: En-têtes principaux (colonnes séparées A,B,C,D,E,F)
-        # ═══════════════════════════════════════════════════════════════════
-        
-        header_fusions = [
-            ('A', 'A'),    # Activité 
-            ('B', 'B'),    # Région
-            ('C', 'C'),    # PERIMETRE
-            ('D', 'D'),    # Famille
-            ('E', 'E'),    # N°:Cpte Analy.
-            ('F', 'F'),    # Libellés
-            ('G', 'H'),    # Coût Global Initial PMT 2015/2019
-            ('I', 'J'),    # Réalisations Cumulées à fin 2013 au coût réel
-            ('K', 'L'),    # Réal. 1er Semestre
-            ('M', 'N'),    # Prév. 2è Semestre
-            ('O', 'P'),    # Prévisions de clôture 2014
-            ('Q', 'R'),    # Prévisions 2015
-            ('S', 'T'),    # Reste à Réaliser 2016/2019
-            ('U', 'V'),    # Prévisions 2016
-            ('W', 'X'),    # Prévisions 2017
-            ('Y', 'Z'),    # Prévisions 2018
-            ('AA', 'AB'),  # Prévisions 2019
-            ('AC', 'AD'),  # Janvier
-            ('AE', 'AF'),  # Février
-            ('AG', 'AH'),  # Mars
-            ('AI', 'AJ'),  # Avril
-            ('AK', 'AL'),  # Mai
-            ('AM', 'AN'),  # Juin
-            ('AO', 'AP'),  # Juillet
-            ('AQ', 'AR'),  # Août
-            ('AS', 'AT'),  # Septembre
-            ('AU', 'AV'),  # Octobre
-            ('AW', 'AX'),  # Novembre
-            ('AY', 'AZ'),  # Décembre
+        headers_config = [
+            ('A', 'A', "Activité", 15),
+            ('B', 'B', "Région/Direction", 18),
+            ('C', 'C', "PERIMETRE", 20),
+            ('D', 'D', "Famille", 15),
+            ('E', 'E', "N°:Cpte Analy.", 18),
+            ('F', 'F', "Libellés", 40),
+            ('G', 'H', f"Coût Global Initial PMT {annee_cible}/{annee_cible+4}", 18),
+            ('I', 'J', f"Réalisations Cumulées à fin {annee_precedente_2}", 18),
+            ('K', 'L', f"Réal. 1er Semestre {annee_precedente}", 15),
+            ('M', 'N', f"Prév. 2è Semestre {annee_precedente}", 15),
+            ('O', 'P', f"Prévisions de clôture {annee_precedente}", 18),
+            ('Q', 'R', f"Prévisions {annee_cible}", 15),
+            ('S', 'T', f"Reste à Réaliser {annee_cible+1}/{annee_cible+4}", 18),
+            ('U', 'V', f"Prévisions {annee_cible+1}", 15),
+            ('W', 'X', f"Prévisions {annee_cible+2}", 15),
+            ('Y', 'Z', f"Prévisions {annee_cible+3}", 15),
+            ('AA', 'AB', f"Prévisions {annee_cible+4}", 15),
+            ('AC', 'AD', "Janvier", 12),
+            ('AE', 'AF', "Février", 12),
+            ('AG', 'AH', "Mars", 12),
+            ('AI', 'AJ', "Avril", 12),
+            ('AK', 'AL', "Mai", 12),
+            ('AM', 'AN', "Juin", 12),
+            ('AO', 'AP', "Juillet", 12),
+            ('AQ', 'AR', "Août", 12),
+            ('AS', 'AT', "Septembre", 12),
+            ('AU', 'AV', "Octobre", 12),
+            ('AW', 'AX', "Novembre", 12),
+            ('AY', 'AZ', "Décembre", 12),
         ]
-        
-        header_texts = [
-            "Activité",
-            "Région",
-            "PERIMETRE",
-            "Famille",
-            "N°:Cpte Analy.",
-            "Libellés",
-            "Coût Global Initial PMT 2015/2019",
-            "Réalisations Cumulées à fin 2013 au coût réel",
-            "Réal. 1er Semestre",
-            "Prév. 2è Semestre",
-            "Prévisions de clôture 2014",
-            "Prévisions 2015",
-            "Reste à Réaliser 2016/2019",
-            "Prévisions 2016",
-            "Prévisions 2017",
-            "Prévisions 2018",
-            "Prévisions 2019",
-            "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-            "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
-        ]
-        
+
         row_num = 7
-        for idx, (start_col, end_col) in enumerate(header_fusions):
+        for start_col, end_col, text, width in headers_config:
             if start_col != end_col:
                 ws.merge_cells(f'{start_col}{row_num}:{end_col}{row_num}')
             cell = ws[f'{start_col}{row_num}']
-            cell.value = header_texts[idx] if idx < len(header_texts) else ""
+            cell.value = text
             cell.font = header_font
-            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        
-        # ═══════════════════════════════════════════════════════════════════
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+            ws.column_dimensions[start_col].width = width
+
+        ws.row_dimensions[7].height = 50
+
+        # ==========================================================
         # LIGNE 8: Sous-en-têtes "Total" / "dont Dev."
-        # ═══════════════════════════════════════════════════════════════════
-        
+        # ==========================================================
         row_num = 8
         
-        # Colonnes A à F: simples (pas de fusion, juste une ligne)
         for col in ['A', 'B', 'C', 'D', 'E', 'F']:
-            ws[f'{col}{row_num}'] = ""
+            cell = ws[f'{col}{row_num}']
+            cell.value = ""
+            cell.border = thin_border
         
-        # Colonnes avec Total / dont Dev. (G à AB)
-        dex_columns = [
+        dex_pairs = [
             ('G', 'H'), ('I', 'J'), ('K', 'L'), ('M', 'N'), ('O', 'P'),
             ('Q', 'R'), ('S', 'T'), ('U', 'V'), ('W', 'X'), ('Y', 'Z'),
-            ('AA', 'AB')
+            ('AA', 'AB'), ('AC', 'AD'), ('AE', 'AF'), ('AG', 'AH'), ('AI', 'AJ'),
+            ('AK', 'AL'), ('AM', 'AN'), ('AO', 'AP'), ('AQ', 'AR'), ('AS', 'AT'),
+            ('AU', 'AV'), ('AW', 'AX'), ('AY', 'AZ')
         ]
         
-        for start_col, end_col in dex_columns:
-            ws[f'{start_col}{row_num}'] = "Total"
-            ws[f'{end_col}{row_num}'] = "dont Dev."
-            ws[f'{start_col}{row_num}'].font = Font(bold=True, size=10)
-            ws[f'{end_col}{row_num}'].font = Font(bold=True, size=10)
-            ws[f'{start_col}{row_num}'].alignment = Alignment(horizontal='center')
-            ws[f'{end_col}{row_num}'].alignment = Alignment(horizontal='center')
-            ws[f'{start_col}{row_num}'].fill = subheader_fill
-            ws[f'{end_col}{row_num}'].fill = subheader_fill
+        for start_col, end_col in dex_pairs:
+            cell_total = ws[f'{start_col}{row_num}']
+            cell_total.value = "Total"
+            cell_total.font = subheader_font
+            cell_total.fill = subheader_fill
+            cell_total.alignment = Alignment(horizontal='center')
+            cell_total.border = thin_border
+            
+            cell_dex = ws[f'{end_col}{row_num}']
+            cell_dex.value = "dont Dev."
+            cell_dex.font = subheader_font
+            cell_dex.fill = subheader_fill
+            cell_dex.alignment = Alignment(horizontal='center')
+            cell_dex.border = thin_border
+
+        ws.row_dimensions[8].height = 25
+
+        # ==========================================================
+        # LIGNE 9: Sous-en-têtes "Prévisions" pour les mois
+        # ==========================================================
+        row_num = 9
         
-        # Colonnes des mois (AC à AZ)
+        for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+            cell = ws[f'{col}{row_num}']
+            cell.value = ""
+            cell.border = thin_border
+        
+        for col_letter in ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+                          'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+                          'AA', 'AB']:
+            cell = ws[f'{col_letter}{row_num}']
+            cell.value = ""
+            cell.border = thin_border
+        
         mois_pairs = [
             ('AC', 'AD'), ('AE', 'AF'), ('AG', 'AH'), ('AI', 'AJ'),
             ('AK', 'AL'), ('AM', 'AN'), ('AO', 'AP'), ('AQ', 'AR'),
@@ -11494,134 +13050,90 @@ class ExportProjetsValidesDivisionnaireView(APIView):
         ]
         
         for start_col, end_col in mois_pairs:
-            ws[f'{start_col}{row_num}'] = "Total"
-            ws[f'{end_col}{row_num}'] = "dont Dev."
-            ws[f'{start_col}{row_num}'].font = Font(bold=True, size=9)
-            ws[f'{end_col}{row_num}'].font = Font(bold=True, size=9)
-            ws[f'{start_col}{row_num}'].alignment = Alignment(horizontal='center')
-            ws[f'{end_col}{row_num}'].alignment = Alignment(horizontal='center')
-            ws[f'{start_col}{row_num}'].fill = subheader_fill
-            ws[f'{end_col}{row_num}'].fill = subheader_fill
-        
-        # ═══════════════════════════════════════════════════════════════════
-        # LIGNE 9: Sous-en-têtes "Prévisions" pour les mois
-        # ═══════════════════════════════════════════════════════════════════
-        
-        row_num = 9
-        for start_col, end_col in mois_pairs:
-            ws[f'{start_col}{row_num}'] = "Prévisions"
-            ws[f'{end_col}{row_num}'] = ""
-            ws[f'{start_col}{row_num}'].font = Font(size=8)
-            ws[f'{start_col}{row_num}'].alignment = Alignment(horizontal='center')
-        
-        # Ajuster les hauteurs
-        for r in range(1, 10):
-            ws.row_dimensions[r].height = 30
-        ws.row_dimensions[7].height = 40
-    
-    def _write_template_data_rows(self, ws, qs):
-        """Écrit les données"""
-        
-        row_num = 10
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-        
-        for record in qs:
-            # Identifiants (colonnes A-F) - une valeur par colonne
-            activite = record.activite or ''
-            region = record.region or ''
-            perimetre = record.perm or ''
-            famille = record.famille or ''
-            code_analytique = record.code_division or ''
-            libelle = record.libelle or ''
+            cell = ws[f'{start_col}{row_num}']
+            cell.value = "Prévisions"
+            cell.font = Font(size=8)
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
             
-            # Données financières (colonnes G à AB)
-            cout_total = self._format_number(record.cout_initial_total)
-            cout_dex = self._format_number(record.cout_initial_dont_dex)
-            realisation_total = self._format_number(record.realisation_cumul_n_mins1_total)
-            realisation_dex = self._format_number(record.realisation_cumul_n_mins1_dont_dex)
-            real_s1_total = self._format_number(record.real_s1_n_total)
-            real_s1_dex = self._format_number(record.real_s1_n_dont_dex)
-            prev_s2_total = self._format_number(record.prev_s2_n_total)
-            prev_s2_dex = self._format_number(record.prev_s2_n_dont_dex)
-            prev_cloture_total = self._format_number(record.prev_cloture_n_total)
-            prev_cloture_dex = self._format_number(record.prev_cloture_n_dont_dex)
-            prev_n1_total = self._format_number(record.prev_n_plus1_total)
-            prev_n1_dex = self._format_number(record.prev_n_plus1_dont_dex)
-            rar_total = self._format_number(record.reste_a_realiser_total)
-            rar_dex = self._format_number(record.reste_a_realiser_dont_dex)
-            prev_n2_total = self._format_number(record.prev_n_plus2_total)
-            prev_n2_dex = self._format_number(record.prev_n_plus2_dont_dex)
-            prev_n3_total = self._format_number(record.prev_n_plus3_total)
-            prev_n3_dex = self._format_number(record.prev_n_plus3_dont_dex)
-            prev_n4_total = self._format_number(record.prev_n_plus4_total)
-            prev_n4_dex = self._format_number(record.prev_n_plus4_dont_dex)
-            prev_n5_total = self._format_number(record.prev_n_plus5_total)
-            prev_n5_dex = self._format_number(record.prev_n_plus5_dont_dex)
+            cell = ws[f'{end_col}{row_num}']
+            cell.value = ""
+            cell.border = thin_border
+
+        ws.row_dimensions[9].height = 20
+
+        # ==========================================================
+        # LIGNES 10+: Données
+        # ==========================================================
+        
+        start_row = 10
+        
+        for idx, record_data in enumerate(serialized_data):
+            row_num = start_row + idx
             
-            # Données mensuelles (colonnes AC à AZ)
-            mois_data = []
-            for mois in ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
-                        'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']:
-                total = getattr(record, f'{mois}_total', None)
-                dex = getattr(record, f'{mois}_dont_dex', None)
-                mois_data.append((self._format_number(total), self._format_number(dex)))
+            # Récupérer direction_region_code
+            direction_region_code = record_data.get('direction_region_code', '')
             
-            # Construction de la ligne complète (colonnes A à AZ)
-            row_data = [
-                # A-F: Identifiants (une colonne par valeur)
-                activite,      # A
-                region,        # B
-                perimetre,     # C
-                famille,       # D
-                code_analytique, # E
-                libelle,       # F
-                
-                # G-H: Coût Global Initial
-                cout_total, cout_dex,
-                
-                # I-J: Réalisations Cumulées
-                realisation_total, realisation_dex,
-                
-                # K-L: Réal. 1er Semestre
-                real_s1_total, real_s1_dex,
-                
-                # M-N: Prév. 2è Semestre
-                prev_s2_total, prev_s2_dex,
-                
-                # O-P: Prévisions de clôture 2014
-                prev_cloture_total, prev_cloture_dex,
-                
-                # Q-R: Prévisions 2015
-                prev_n1_total, prev_n1_dex,
-                
-                # S-T: Reste à Réaliser
-                rar_total, rar_dex,
-                
-                # U-V: Prévisions 2016
-                prev_n2_total, prev_n2_dex,
-                
-                # W-X: Prévisions 2017
-                prev_n3_total, prev_n3_dex,
-                
-                # Y-Z: Prévisions 2018
-                prev_n4_total, prev_n4_dex,
-                
-                # AA-AB: Prévisions 2019
-                prev_n5_total, prev_n5_dex,
+            if not direction_region_code:
+                if record_data.get('direction'):
+                    direction_region_code = record_data.get('direction')
+                elif record_data.get('region'):
+                    direction_region_code = record_data.get('region')
+            
+            # PERIMETRE: perm ou direction_region_code
+            perimetre = record_data.get('perm') or direction_region_code or ''
+            
+            # Données de base
+            data_row = [
+                record_data.get('activite', ''),
+                direction_region_code if direction_region_code else '',
+                perimetre,
+                record_data.get('famille', ''),
+                record_data.get('code_division', ''),
+                record_data.get('libelle', ''),
             ]
             
-            # Ajouter les 12 mois (AC à AZ)
-            for mois_total, mois_dex in mois_data:
-                row_data.append(mois_total)
-                row_data.append(mois_dex)
+            # Mapping des champs financiers avec leurs colonnes
+            # Ordre: (colonne_total, colonne_dex, champ_total, champ_dex)
+            financial_mapping = [
+                # G-H: Coût Global Initial PMT
+                (record_data.get('cout_initial_total'), record_data.get('cout_initial_dont_dex')),
+                # I-J: Réalisations Cumulées à fin N-1
+                (record_data.get('realisation_cumul_n_mins1_total'), record_data.get('realisation_cumul_n_mins1_dont_dex')),
+                # K-L: Réal. 1er Semestre N
+                (record_data.get('real_s1_n_total'), record_data.get('real_s1_n_dont_dex')),
+                # M-N: Prév. 2è Semestre N
+                (record_data.get('prev_s2_n_total'), record_data.get('prev_s2_n_dont_dex')),
+                # O-P: Prévisions de clôture N-1
+                (record_data.get('prev_cloture_n_total'), record_data.get('prev_cloture_n_dont_dex')),
+                # Q-R: Prévisions N
+                (record_data.get('prev_n_plus1_total'), record_data.get('prev_n_plus1_dont_dex')),
+                # S-T: Reste à Réaliser N+1 à N+4
+                (record_data.get('reste_a_realiser_total'), record_data.get('reste_a_realiser_dont_dex')),
+                # U-V: Prévisions N+1
+                (record_data.get('prev_n_plus2_total'), record_data.get('prev_n_plus2_dont_dex')),
+                # W-X: Prévisions N+2
+                (record_data.get('prev_n_plus3_total'), record_data.get('prev_n_plus3_dont_dex')),
+                # Y-Z: Prévisions N+3
+                (record_data.get('prev_n_plus4_total'), record_data.get('prev_n_plus4_dont_dex')),
+                # AA-AB: Prévisions N+4
+                (record_data.get('prev_n_plus5_total'), record_data.get('prev_n_plus5_dont_dex')),
+            ]
+            
+            # Ajouter les paires Total/DEX
+            for total_val, dex_val in financial_mapping:
+                data_row.append(self._format_number(total_val))
+                data_row.append(self._format_number(dex_val))
+            
+            # Données mensuelles
+            for mois in ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+                        'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre']:
+                total_val = self._format_number(record_data.get(f'{mois}_total'))
+                dex_val = self._format_number(record_data.get(f'{mois}_dont_dex'))
+                data_row.extend([total_val, dex_val])
             
             # Écrire la ligne
-            for col_idx, value in enumerate(row_data, start=1):
+            for col_idx, value in enumerate(data_row, start=1):
                 col_letter = get_column_letter(col_idx)
                 cell = ws[f'{col_letter}{row_num}']
                 cell.value = value
@@ -11631,85 +13143,20 @@ class ExportProjetsValidesDivisionnaireView(APIView):
                     cell.alignment = Alignment(horizontal='left', vertical='center')
                 else:
                     cell.alignment = Alignment(horizontal='right', vertical='center')
-                    if value and isinstance(value, (int, float)):
+                    if isinstance(value, (int, float)) and value != 0:
                         cell.number_format = '#,##0.00'
-            
-            row_num += 1
-    
-    def _write_recap_sheet(self, ws, qs, annee_cible):
-        """Écrit la feuille récapitulative"""
         
-        ws['A1'] = f"RÉCAPITULATIF - PROJETS VALIDÉS PAR LE DIVISIONNAIRE"
-        ws['A1'].font = Font(bold=True, size=14)
-        ws.merge_cells('A1:H1')
+        # Sauvegarde
+        filename = f"projets_valides_divisionnaire_{annee_cible}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         
-        ws['A3'] = f"PMT: {annee_cible} - {annee_cible+4}"
-        ws['A4'] = f"Date d'export: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
-        ws['A5'] = f"Nombre de projets: {qs.count()}"
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         
-        headers = ['Activité', 'Région', 'Périmètre', 'Famille', 
-                   'Code Division', 'Libellé', 'Coût Total', 'Dont DEX']
+        wb.save(response)
         
-        for col_idx, header in enumerate(headers, start=1):
-            cell = ws.cell(row=7, column=col_idx, value=header)
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-            cell.alignment = Alignment(horizontal='center')
-        
-        row_num = 8
-        total_general = 0
-        
-        for record in qs:
-            cout_total = float(record.cout_initial_total or 0)
-            total_general += cout_total
-            
-            ws.cell(row=row_num, column=1, value=record.activite or '')
-            ws.cell(row=row_num, column=2, value=record.region or '')
-            ws.cell(row=row_num, column=3, value=record.perm or '')
-            ws.cell(row=row_num, column=4, value=record.famille or '')
-            ws.cell(row=row_num, column=5, value=record.code_division or '')
-            ws.cell(row=row_num, column=6, value=record.libelle or '')
-            
-            cell_total = ws.cell(row=row_num, column=7, value=cout_total)
-            cell_total.number_format = '#,##0.00'
-            cell_dex = ws.cell(row=row_num, column=8, value=float(record.cout_initial_dont_dex or 0))
-            cell_dex.number_format = '#,##0.00'
-            
-            row_num += 1
-        
-        ws.cell(row=row_num, column=6, value="TOTAL:")
-        ws.cell(row=row_num, column=6).font = Font(bold=True)
-        cell_total = ws.cell(row=row_num, column=7, value=total_general)
-        cell_total.font = Font(bold=True)
-        cell_total.number_format = '#,##0.00'
-        
-        for col in range(1, 9):
-            ws.column_dimensions[get_column_letter(col)].width = 20
-    
-    def _apply_template_column_widths(self, ws):
-        """Applique les largeurs de colonnes"""
-        column_widths = {
-            'A': 12,   # Activité
-            'B': 15,   # Région
-            'C': 25,   # PERIMETRE
-            'D': 12,   # Famille
-            'E': 18,   # N°:Cpte Analy.
-            'F': 45,   # Libellés
-            'G': 15, 'H': 15, 'I': 15, 'J': 15, 'K': 15, 'L': 15,
-            'M': 15, 'N': 15, 'O': 15, 'P': 15, 'Q': 15, 'R': 15,
-            'S': 15, 'T': 15, 'U': 15, 'V': 15, 'W': 15, 'X': 15,
-            'Y': 15, 'Z': 15, 'AA': 15, 'AB': 15,
-        }
-        
-        for i in range(29, 53):
-            col_letter = get_column_letter(i)
-            column_widths[col_letter] = 12
-        
-        for col_letter, width in column_widths.items():
-            try:
-                ws.column_dimensions[col_letter].width = width
-            except:
-                pass
+        return response
     
     def _format_number(self, value):
         if value is None:

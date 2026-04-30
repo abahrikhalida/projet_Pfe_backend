@@ -17,7 +17,7 @@ urlpatterns = [
     path('famille-par-activite/', RecapFamilleParActiviteView.as_view()),#valider
     path('export/pdf/<int:pk>/', BudgetRecordPDFView.as_view(), name='budget-pdf'),#valider
     path('region-famille/', RecapRegionFamilleView.as_view(), name='recap-region-famille'),#valider
-    path('verification/', VerificationCalculsView.as_view(), name='verification-calculs'),
+    # path('verification/', VerificationCalculsView.as_view(), name='verification-calculs'),
 
     # creation projet:(nv , ancien)
     path('budget/nouveau-projet/', NouveauProjetView.as_view(), name='create-budget-manuel'),#valider
@@ -46,7 +46,7 @@ urlpatterns = [
     path('budget/valider/chef/<int:record_id>/',ValiderChefView.as_view()),
     path('budget/valider/directeur/<int:record_id>/',ValiderDirecteurView.as_view()),
     path('budget/valider/divisionnaire/<int:record_id>/',ValiderDivisionnaireView.as_view()),
-    # path('budget/valider/divisionnaire/total/',ValiderTousProjetsDivisionnaireView.as_view(),name='valider-tous-divisionnaire'),
+    path('budget/valider/divisionnaire/total/',ValiderTousProjetsDivisionnaireView.as_view(),name='valider-tous-divisionnaire'),
 
     # Listes par rôle
     #http://localhost:8083/recap/budget/projets/responsable/?statut_workflow=soumis
