@@ -326,6 +326,8 @@ class BudgetRecord(models.Model):
         ('annule_divisionnaire', 'Annulé Divisionnaire'),
         ('valide_directeur_region', 'Validé Directeur Région'),
         ('rejete_directeur_region', 'Rejeté Directeur Région'),
+        ('valide_directeur_direction', 'Validé Directeur Direction'),
+        ('rejete_directeur_direction', 'Rejeté Directeur Direction'),
     ]
     
     statut_workflow = models.CharField(
@@ -378,7 +380,15 @@ class BudgetRecord(models.Model):
     # ================================================================
     # CHAMPS DE VALIDATION RENOMMÉS CORRECTEMENT
     # ================================================================
+
+     # DIRECTEUR DIRECTION - valide ou rejette
+    valide_par_directeur_direction = models.CharField(max_length=255, blank=True, null=True)
+    date_validation_directeur_direction = models.DateTimeField(blank=True, null=True)
+    commentaire_directeur_direction = models.TextField(blank=True, null=True)
     
+    rejete_par_directeur_direction = models.CharField(max_length=255, blank=True, null=True)
+    date_rejet_directeur_direction = models.DateTimeField(blank=True, null=True)
+    motif_rejet_directeur_direction = models.TextField(blank=True, null=True)
     
     # DIRECTEUR RÉGION - valide ou rejette
     valide_par_directeur_region = models.CharField(max_length=255, blank=True, null=True)
