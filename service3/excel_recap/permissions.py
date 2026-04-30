@@ -57,7 +57,8 @@ class IsUser(BasePermission):
     def has_permission(self, request, view):
         return get_role(request.user) in (
             'admin',
-            'responsable_structure'
+            'responsable_structure',
+            'responsable_departement',
         )
 class IsResponsableStructure(BasePermission):
     def has_permission(self, request, view):

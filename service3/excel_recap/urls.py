@@ -42,14 +42,17 @@ urlpatterns = [
     # procedure  validation par role:
     # path('budget/soumettre/<int:record_id>/',SoumettreProjetView.as_view()),
     path('budget/valider/directeur-region/<int:record_id>/',ValiderDirecteurRegionView.as_view()),
+    path('budget/valider/directeur-direction/<int:record_id>/',ValiderDirecteurDirectionView.as_view()),
     path('budget/valider/chef/<int:record_id>/',ValiderChefView.as_view()),
     path('budget/valider/directeur/<int:record_id>/',ValiderDirecteurView.as_view()),
     path('budget/valider/divisionnaire/<int:record_id>/',ValiderDivisionnaireView.as_view()),
-    path('budget/valider/divisionnaire/total/',ValiderTousProjetsDivisionnaireView.as_view(),name='valider-tous-divisionnaire'),
+    # path('budget/valider/divisionnaire/total/',ValiderTousProjetsDivisionnaireView.as_view(),name='valider-tous-divisionnaire'),
 
     # Listes par rôle
-    #http://localhost:8083/recap/budget/projets/responsable/?statut=soumis
+    #http://localhost:8083/recap/budget/projets/responsable/?statut_workflow=soumis
     path('budget/projets/responsable/',ListeProjetsResponsableView.as_view()),#valider
+    #http://localhost:8083/recap/budget/projets/responsable-departement/?statut_workflow=soumis
+    path('budget/projets/responsable-departement/', ListeProjetsResponsableDepartementView.as_view(), name='responsable-departement-projets'),
 
     #http://localhost:8083/recap/budget/projets/directeur-region/?statut=soumis
     # path('budget/projets/directeur-region/',ListeProjetsDirecteurRegionView.as_view()),#valider
@@ -63,6 +66,7 @@ urlpatterns = [
     #valider
 
     # gets pour directeur region:
+    # Directeur region - Projets STRUCTURE
     path('budget/directeur-region/soumis/', ListeProjetsSoumisDRView.as_view(), name='dr-soumis'),
     path('budget/directeur-region/valides/', ListeProjetsValidesDRView.as_view(), name='dr-valides'),
     path('budget/directeur-region/rejetes/', ListeProjetsRejetesDRView.as_view(), name='dr-rejetes'),
@@ -76,14 +80,33 @@ urlpatterns = [
     # path('budget/directeur-region/historique/', ListeProjetsHistoriqueDRView.as_view(), name='dr-historique'),
     # path('budget/directeur-region/brouillon/', ListeProjetsBrouillonDRView.as_view(), name='dr-brouillon'),
     # path('budget/directeur-region/reserve-chef/', ListeProjetsReserveChefDRView.as_view(), name='dr-reserve-chef'),
-   
+
+
+
+    #gets pour directeur direction:
+    # Directeur Direction - Projets DÉPARTEMENT
+    path('budget/directeur-direction/soumis/',ListeProjetsSoumisDDView.as_view(),name='dd-soumis'),
+    path('budget/directeur-direction/valides/',ListeProjetsValidesDDView.as_view(),name='dd-valides'),
+    path('budget/directeur-direction/rejetes/',ListeProjetsRejetesDDView.as_view(),name='dd-rejetes'),
+    path('budget/directeur-direction/reserve-directeur/',ListeProjetsReserveDirecteurDDView.as_view(),name='dd-reserve-directeur'),
+    path('budget/directeur-direction/tous/',ListeProjetsTousDDView.as_view(),name='dd-tous'),
+    path('budget/directeur-direction/valide-divisionnaire/',ListeProjetsValideDivisionnaireDDView.as_view(),name='dd-valide-divisionnaire'),
+    path('budget/directeur-direction/rejete-divisionnaire/',ListeProjetsRejeteDivisionnaireDDView.as_view(), name='dd-rejete-divisionnaire'),
+    path('budget/directeur-direction/annule-divisionnaire/',ListeProjetsAnnuleDivisionnaireDDView.as_view(), name='dd-annule-divisionnaire'),
+    path('budget/directeur-direction/revoir/', ListeProjetsRevoirDDView.as_view(),name='dd-revoir'),
 
 
    
     # gets pour chef:
+    path('budget/chef/valider-DR-DD/',ListeProjetsChefView.as_view(),  name='chef-valides'),
     path('budget/chef/valider-DR/', ListeProjetsChefView.as_view(), name='chef-valides'),
+    path('budget/chef/valider-DD/', ListeProjetsDDChefView.as_view(), name='chef-valides'),
     path('budget/chef/pre_approuves/', ListeProjetsChefValidesView.as_view(), name='chef-valides'),
+    path('budget/chef/pre_approuves/dr/', ListeProjetsChefValidesDRView.as_view(), name='chef-pre-approuves-dr'),
+    path('budget/chef/pre_approuves/dd/', ListeProjetsChefValidesDDView.as_view(), name='chef-pre-approuves-dd'),
     path('budget/chef/reserve-chef/', ListeProjetsChefReserveChefView.as_view(), name='chef-reserve-chef'),
+    path('budget/chef/reserve-chef/dr/', ListeProjetsChefReserveChefDRView.as_view(), name='chef-reserve-chef-dr'),
+    path('budget/chef/reserve-chef/dd/', ListeProjetsChefReserveChefDDView.as_view(), name='chef-reserve-chef-dd'),
     path('budget/chef/tous/', ListeProjetsChefTousView.as_view(), name='chef-tous'),
     # path('budget/chef/historique/', ListeProjetsChefHistoriqueView.as_view(), name='chef-historique'),
 
@@ -91,8 +114,6 @@ urlpatterns = [
 
 
     # gets pour directeur:
-    path('budget/directeur/valides-chef/', ListeProjetsDirecteurValidesChefView.as_view(), name='directeur-valides-chef'),
-    # path('budget/directeur/reserve-chef/', ListeProjetsDirecteurReserveChefView.as_view(), name='directeur-reserve-chef'),
     path('budget/directeur/ChefStatus/', ListeProjetsDirecteurView.as_view(), name='directeur-projets'),
     path('budget/directeur/valides/', ListeProjetsDirecteurValidesView.as_view(), name='directeur-valides'),
     path('budget/directeur/reserve-directeur/', ListeProjetsDirecteurReserveDirecteurView.as_view(), name='directeur-reserve-directeur'),

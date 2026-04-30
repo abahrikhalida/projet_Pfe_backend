@@ -50,6 +50,9 @@ class BudgetRecordSerializer(serializers.ModelSerializer):
     activite_nom = serializers.SerializerMethodField()
     famille_nom = serializers.SerializerMethodField()
     direction_nom  = serializers.SerializerMethodField()
+    #####################################################
+    direction_region_code = serializers.SerializerMethodField()
+    direction_region_nom = serializers.SerializerMethodField()
 
     # ✅ intervalle pour le frontend
     intervalle_pmt = serializers.SerializerMethodField()
@@ -229,6 +232,54 @@ class BudgetRecordSerializer(serializers.ModelSerializer):
         except Exception:
             pass
         return obj.direction
+    def get_direction_region_code(self, obj):
+        """
+        Retourne le code direction (si projet département) ou code région (si projet structure)
+        """
+        if obj.direction and not obj.region:
+            # Projet département
+            return obj.direction
+        elif obj.region and not obj.direction:
+            # Projet structure
+            return obj.region
+        return None
+
+    def get_direction_region_nom(self, obj):
+        """
+        Retourne le nom de la direction (si projet département) ou nom de la région (si projet structure)
+        """
+        if obj.direction and not obj.region:
+            # Projet département - récupérer le nom de la direction
+            try:
+                request = self.context.get('request')
+                token = request.headers.get('Authorization', '') if request else ''
+                service_url = get_service_param_url()
+                url = f"{service_url}/params/directions/code/{obj.direction}"
+                resp = requests.get(url, headers={'Authorization': token}, timeout=3)
+                if resp.status_code == 200:
+                    return resp.json().get('data', {}).get('nom_direction', obj.direction)
+                else:
+                    return obj.direction
+            except Exception:
+                return obj.direction
+                
+        elif obj.region and not obj.direction:
+            # Projet structure - récupérer le nom de la région
+            try:
+                request = self.context.get('request')
+                token = request.headers.get('Authorization', '') if request else ''
+                service_url = get_service_param_url()
+                url = f"{service_url}/params/regions/{obj.region}"
+                resp = requests.get(url, headers={'Authorization': token}, timeout=3)
+                if resp.status_code == 200:
+                    region_data = resp.json().get('data', {})
+                    return region_data.get('nom_region', obj.region)
+                else:
+                    return obj.region
+            except Exception:
+                return obj.region
+                
+        return None
     # ─────────────────────────
     # MAPPINGS
     # ─────────────────────────
