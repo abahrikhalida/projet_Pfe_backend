@@ -89,27 +89,27 @@ WSGI_APPLICATION = 'service3.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 # database de khalida
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'service3',
-        'USER': 'root',  # Ou un autre utilisateur
-        'PASSWORD': 'khalida2003',
-        'HOST': 'localhost',
-        'PORT': '3306',  # Port par défaut de MySQL
-    }
-}
-#database de lamia
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': 'sounatrach_db_service3',
+#         'NAME': 'service3',
 #         'USER': 'root',  # Ou un autre utilisateur
-#         'PASSWORD': 'root',
+#         'PASSWORD': 'khalida2003',
 #         'HOST': 'localhost',
 #         'PORT': '3306',  # Port par défaut de MySQL
 #     }
 # }
+#database de lamia
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'test2',
+        'USER': 'root',  # Ou un autre utilisateur
+        'PASSWORD': 'root',
+        'HOST': 'localhost',
+        'PORT': '3306',  # Port par défaut de MySQL
+    }
+}
 #database de lamia
 # DATABASES = {
 #     'default': {

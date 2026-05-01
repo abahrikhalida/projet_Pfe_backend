@@ -3567,6 +3567,149 @@ class BaseNouveauProjetView(APIView):
 # POST /api/budget/nouveau-projet/structure/
 # ══════════════════════════════════════════════════════════════════════════════
 
+# class NouveauProjetView(BaseNouveauProjetView):
+#     """
+#     Crée un nouveau projet pour un responsable_structure.
+
+#     JWT requis  : region_id, structure_id
+#     Body requis : activite, famille, code_division, libelle, perimetre
+#     En base     : region = code_region résolu | direction = None
+#     """
+
+#     ROLE_REQUIS = 'responsable_structure'
+
+#     def post(self, request):
+#         logger.info("=" * 60)
+#         logger.info("🔵 CRÉATION PROJET [STRUCTURE]")
+#         logger.info(f"👤 {request.user} | rôle={getattr(request.user, 'role', '?')}")
+#         data = request.data
+
+#         # ── 1. Vérification du rôle ───────────────────────────────────
+#         role = getattr(request.user, 'role', None)
+#         if role != self.ROLE_REQUIS:
+#             return Response(
+#                 {'error': f"Rôle '{role}' non autorisé. Attendu : '{self.ROLE_REQUIS}'"},
+#                 status=403
+#             )
+
+#         # ── 2. IDs depuis le token JWT ────────────────────────────────
+#         region_id    = getattr(request.user, 'region_id',    None)
+#         structure_id = getattr(request.user, 'structure_id', None)
+
+#         if not region_id:
+#             return Response({'error': "region_id manquant dans le token JWT."}, status=400)
+#         if not structure_id:
+#             return Response({'error': "structure_id manquant dans le token JWT."}, status=400)
+
+#         # ── 3. Périmètre (obligatoire pour structure) ─────────────────
+#         perimetre = data.get('perimetre')
+#         if not perimetre:
+#             return Response(
+#                 {'error': "'perimetre' est obligatoire pour responsable_structure."},
+#                 status=400
+#             )
+
+#         # ── 4. Champs communs ─────────────────────────────────────────
+#         try:
+#             code_division, libelle, activite, famille = \
+#                 self._validate_common_fields(data)
+#         except ValidationError as e:
+#             return Response({'error': e.detail}, status=400)
+
+#         # ── 5. Unicité code_division ──────────────────────────────────
+#         try:
+#             self._check_code_division_unique(code_division)
+#         except ValidationError as e:
+#             return Response({'error': e.detail}, status=400)
+
+#         # ── 6. PMT ────────────────────────────────────────────────────
+#         try:
+#             annee_debut_pmt, annee_fin_pmt = self._parse_pmt(data)
+#         except ValidationError as e:
+#             return Response({'error': e.detail}, status=400)
+
+#         # ── 7. Résolution code_region via service param ───────────────
+#         token       = request.headers.get('Authorization', '')
+#         service_url = get_service_param_url()
+#         try:
+#             code_region, label = self._resolve_code(
+#                 region_id, 'region', token, service_url
+#             )
+#         except ValidationError as e:
+#             return Response({'error': e.detail}, status=503)
+
+#         # ── 8. Champs financiers ──────────────────────────────────────
+#         try:
+#             v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d = \
+#                 self._load_financials(data)
+#         except ValidationError as e:
+#             return Response(
+#                 {'error': 'Incohérence montants financiers.', 'details': e.detail},
+#                 status=400
+#             )
+
+#         # ── 9. Création en base ───────────────────────────────────────
+#         try:
+#             record = self._create_budget_record(
+#                 request,
+#                 code_division   = code_division,
+#                 libelle         = libelle,
+#                 activite        = activite,
+#                 famille         = famille,
+#                 region          = code_region,   # ← champ region rempli
+#                 direction       = None,           # ← champ direction vide
+#                 perm            = perimetre,
+#                 region_id       = region_id,
+#                 structure_id    = structure_id,
+#                 direction_id    = None,
+#                 departement_id  = None,
+#                 annee_debut_pmt = annee_debut_pmt,
+#                 annee_fin_pmt   = annee_fin_pmt,
+#                 v=v,
+#                 prev_n1_t=prev_n1_t, prev_n1_d=prev_n1_d,
+#                 rar_t=rar_t,         rar_d=rar_d,
+#                 cout_t=cout_t,       cout_d=cout_d,
+#             )
+#         except Exception as e:
+#             logger.error(traceback.format_exc())
+#             return Response({'error': f'Erreur création en base : {e}'}, status=500)
+
+#         # ── 10. Sérialisation ─────────────────────────────────────────
+#         try:
+#             serialized = BudgetRecordSerializer(
+#                 record, context={'request': request}
+#             ).data
+#         except Exception as e:
+#             logger.error(traceback.format_exc())
+#             return Response({'error': f'Erreur sérialisation : {e}'}, status=500)
+
+#         logger.info(f"🎉 STRUCTURE créé — id={record.id} | region={code_region}")
+#         logger.info("=" * 60)
+
+#         return Response(
+#             {
+#                 'success': True,
+#                 'message': "Projet créé (version 1 | responsable_structure)",
+#                 'data':    serialized,
+#                 'meta': {
+#                     'role':         self.ROLE_REQUIS,
+#                     'region_id':    region_id,
+#                     'structure_id': structure_id,
+#                     'region':       code_region,
+#                     'label':        label,
+#                     'record_id':    record.id,
+#                 },
+#             },
+#             status=201
+#         )
+
+
+# # ══════════════════════════════════════════════════════════════════════════════
+# # ENDPOINT 2 — DÉPARTEMENT
+# # POST /api/budget/nouveau-projet/departement/
+# # ══════════════════════════════════════════════════════════════════════════════
+
+# class NouveauProjetDepartementView(BaseNouveauProjetView):
 class NouveauProjetView(BaseNouveauProjetView):
     """
     Crée un nouveau projet pour un responsable_structure.
@@ -3582,67 +3725,112 @@ class NouveauProjetView(BaseNouveauProjetView):
         logger.info("=" * 60)
         logger.info("🔵 CRÉATION PROJET [STRUCTURE]")
         logger.info(f"👤 {request.user} | rôle={getattr(request.user, 'role', '?')}")
+        
+        # DEBUG: Afficher les données reçues
+        print("\n" + "=" * 80)
+        print("[DEBUG] === CRÉATION PROJET STRUCTURE ===")
+        print(f"[DEBUG] Données reçues: {request.data}")
+        print(f"[DEBUG] Headers: {dict(request.headers)}")
+        
         data = request.data
 
         # ── 1. Vérification du rôle ───────────────────────────────────
         role = getattr(request.user, 'role', None)
+        print(f"[DEBUG] Rôle utilisateur: {role}")
+        
         if role != self.ROLE_REQUIS:
+            print(f"[DEBUG] ❌ Rôle non autorisé: {role} != {self.ROLE_REQUIS}")
             return Response(
                 {'error': f"Rôle '{role}' non autorisé. Attendu : '{self.ROLE_REQUIS}'"},
                 status=403
             )
+        print("[DEBUG] ✅ Rôle vérifié")
 
         # ── 2. IDs depuis le token JWT ────────────────────────────────
-        region_id    = getattr(request.user, 'region_id',    None)
+        region_id = getattr(request.user, 'region_id', None)
         structure_id = getattr(request.user, 'structure_id', None)
+        
+        print(f"[DEBUG] region_id du token: {region_id}")
+        print(f"[DEBUG] structure_id du token: {structure_id}")
 
         if not region_id:
+            print("[DEBUG] ❌ region_id manquant")
             return Response({'error': "region_id manquant dans le token JWT."}, status=400)
         if not structure_id:
+            print("[DEBUG] ❌ structure_id manquant")
             return Response({'error': "structure_id manquant dans le token JWT."}, status=400)
+        print("[DEBUG] ✅ IDs token présents")
 
         # ── 3. Périmètre (obligatoire pour structure) ─────────────────
         perimetre = data.get('perimetre')
+        print(f"[DEBUG] Périmètre reçu: {perimetre}")
+        
         if not perimetre:
+            print("[DEBUG] ❌ Périmètre manquant")
             return Response(
                 {'error': "'perimetre' est obligatoire pour responsable_structure."},
                 status=400
             )
+        print("[DEBUG] ✅ Périmètre présent")
 
         # ── 4. Champs communs ─────────────────────────────────────────
         try:
             code_division, libelle, activite, famille = \
                 self._validate_common_fields(data)
+            print(f"[DEBUG] Champs validés:")
+            print(f"  - code_division: {code_division}")
+            print(f"  - libelle: {libelle}")
+            print(f"  - activite: {activite}")
+            print(f"  - famille: {famille}")
         except ValidationError as e:
+            print(f"[DEBUG] ❌ Erreur validation champs communs: {e.detail}")
             return Response({'error': e.detail}, status=400)
 
         # ── 5. Unicité code_division ──────────────────────────────────
         try:
             self._check_code_division_unique(code_division)
+            print(f"[DEBUG] ✅ code_division '{code_division}' unique")
         except ValidationError as e:
+            print(f"[DEBUG] ❌ code_division déjà existant: {e.detail}")
             return Response({'error': e.detail}, status=400)
 
         # ── 6. PMT ────────────────────────────────────────────────────
         try:
             annee_debut_pmt, annee_fin_pmt = self._parse_pmt(data)
+            print(f"[DEBUG] PMT: debut={annee_debut_pmt}, fin={annee_fin_pmt}")
         except ValidationError as e:
+            print(f"[DEBUG] ❌ Erreur PMT: {e.detail}")
             return Response({'error': e.detail}, status=400)
 
         # ── 7. Résolution code_region via service param ───────────────
-        token       = request.headers.get('Authorization', '')
+        token = request.headers.get('Authorization', '')
         service_url = get_service_param_url()
+        print(f"[DEBUG] Service URL: {service_url}")
+        print(f"[DEBUG] Token (premier 50 chars): {token[:50]}..." if token else "[DEBUG] Pas de token")
+        
         try:
             code_region, label = self._resolve_code(
                 region_id, 'region', token, service_url
             )
+            print(f"[DEBUG] ✅ Code région résolu: {code_region}")
+            print(f"[DEBUG] Label région: {label}")
         except ValidationError as e:
+            print(f"[DEBUG] ❌ Erreur résolution région: {e.detail}")
             return Response({'error': e.detail}, status=503)
 
         # ── 8. Champs financiers ──────────────────────────────────────
         try:
             v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d = \
                 self._load_financials(data)
+            print(f"[DEBUG] ✅ Données financières calculées:")
+            print(f"  - prev_n_plus1_total: {prev_n1_t}")
+            print(f"  - prev_n_plus1_dont_dex: {prev_n1_d}")
+            print(f"  - rar_total: {rar_t}")
+            print(f"  - rar_dont_dex: {rar_d}")
+            print(f"  - cout_initial_total: {cout_t}")
+            print(f"  - cout_initial_dont_dex: {cout_d}")
         except ValidationError as e:
+            print(f"[DEBUG] ❌ Erreur finances: {e.detail}")
             return Response(
                 {'error': 'Incohérence montants financiers.', 'details': e.detail},
                 status=400
@@ -3650,14 +3838,15 @@ class NouveauProjetView(BaseNouveauProjetView):
 
         # ── 9. Création en base ───────────────────────────────────────
         try:
+            print("[DEBUG] 📝 Création du budget record...")
             record = self._create_budget_record(
                 request,
                 code_division   = code_division,
                 libelle         = libelle,
                 activite        = activite,
                 famille         = famille,
-                region          = code_region,   # ← champ region rempli
-                direction       = None,           # ← champ direction vide
+                region          = code_region,
+                direction       = None,
                 perm            = perimetre,
                 region_id       = region_id,
                 structure_id    = structure_id,
@@ -3670,18 +3859,28 @@ class NouveauProjetView(BaseNouveauProjetView):
                 rar_t=rar_t,         rar_d=rar_d,
                 cout_t=cout_t,       cout_d=cout_d,
             )
+            print(f"[DEBUG] ✅ Record créé avec ID: {record.id}")
+            print(f"[DEBUG] Record details: region={record.region}, direction={record.direction}")
+            
         except Exception as e:
+            print(f"[DEBUG] ❌ Erreur création base: {str(e)}")
             logger.error(traceback.format_exc())
             return Response({'error': f'Erreur création en base : {e}'}, status=500)
 
         # ── 10. Sérialisation ─────────────────────────────────────────
         try:
+            print("[DEBUG] 📝 Sérialisation du record...")
             serialized = BudgetRecordSerializer(
                 record, context={'request': request}
             ).data
+            print("[DEBUG] ✅ Sérialisation réussie")
         except Exception as e:
+            print(f"[DEBUG] ❌ Erreur sérialisation: {str(e)}")
             logger.error(traceback.format_exc())
             return Response({'error': f'Erreur sérialisation : {e}'}, status=500)
+
+        print("[DEBUG] ✅ PROJET STRUCTURE CRÉÉ AVEC SUCCÈS")
+        print("=" * 80)
 
         logger.info(f"🎉 STRUCTURE créé — id={record.id} | region={code_region}")
         logger.info("=" * 60)
@@ -3710,6 +3909,188 @@ class NouveauProjetView(BaseNouveauProjetView):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class NouveauProjetDepartementView(BaseNouveauProjetView):
+    """
+    Crée un nouveau projet pour un responsable_departement.
+
+    JWT requis  : direction_id, departement_id  (region_id optionnel)
+    Body requis : activite, famille, code_division, libelle
+                  (pas de perimetre → perm = None)
+    En base     : region = None | direction = code_direction résolu
+    """
+
+    ROLE_REQUIS = 'responsable_departement'
+
+    def post(self, request):
+        logger.info("=" * 60)
+        logger.info("🔵 CRÉATION PROJET [DÉPARTEMENT]")
+        logger.info(f"👤 {request.user} | rôle={getattr(request.user, 'role', '?')}")
+        
+        # DEBUG: Afficher les données reçues
+        print("\n" + "=" * 80)
+        print("[DEBUG] === CRÉATION PROJET DÉPARTEMENT ===")
+        print(f"[DEBUG] Données reçues: {request.data}")
+        print(f"[DEBUG] Headers: {dict(request.headers)}")
+        
+        data = request.data
+
+        # ── 1. Vérification du rôle ───────────────────────────────────
+        role = getattr(request.user, 'role', None)
+        print(f"[DEBUG] Rôle utilisateur: {role}")
+        
+        if role != self.ROLE_REQUIS:
+            print(f"[DEBUG] ❌ Rôle non autorisé: {role} != {self.ROLE_REQUIS}")
+            return Response(
+                {'error': f"Rôle '{role}' non autorisé. Attendu : '{self.ROLE_REQUIS}'"},
+                status=403
+            )
+        print("[DEBUG] ✅ Rôle vérifié")
+
+        # ── 2. IDs depuis le token JWT ────────────────────────────────
+        direction_id = getattr(request.user, 'direction_id', None)
+        departement_id = getattr(request.user, 'departement_id', None)
+        region_id = getattr(request.user, 'region_id', None)
+        
+        print(f"[DEBUG] direction_id du token: {direction_id}")
+        print(f"[DEBUG] departement_id du token: {departement_id}")
+        print(f"[DEBUG] region_id du token (optionnel): {region_id}")
+
+        if not direction_id:
+            print("[DEBUG] ❌ direction_id manquant")
+            return Response({'error': "direction_id manquant dans le token JWT."}, status=400)
+        if not departement_id:
+            print("[DEBUG] ❌ departement_id manquant")
+            return Response({'error': "departement_id manquant dans le token JWT."}, status=400)
+        print("[DEBUG] ✅ IDs token présents")
+
+        # ── 3. Champs communs ─────────────────────────────────────────
+        try:
+            code_division, libelle, activite, famille = \
+                self._validate_common_fields(data)
+            print(f"[DEBUG] Champs validés:")
+            print(f"  - code_division: {code_division}")
+            print(f"  - libelle: {libelle}")
+            print(f"  - activite: {activite}")
+            print(f"  - famille: {famille}")
+        except ValidationError as e:
+            print(f"[DEBUG] ❌ Erreur validation champs communs: {e.detail}")
+            return Response({'error': e.detail}, status=400)
+
+        # ── 4. Unicité code_division ──────────────────────────────────
+        try:
+            self._check_code_division_unique(code_division)
+            print(f"[DEBUG] ✅ code_division '{code_division}' unique")
+        except ValidationError as e:
+            print(f"[DEBUG] ❌ code_division déjà existant: {e.detail}")
+            return Response({'error': e.detail}, status=400)
+
+        # ── 5. PMT ────────────────────────────────────────────────────
+        try:
+            annee_debut_pmt, annee_fin_pmt = self._parse_pmt(data)
+            print(f"[DEBUG] PMT: debut={annee_debut_pmt}, fin={annee_fin_pmt}")
+        except ValidationError as e:
+            print(f"[DEBUG] ❌ Erreur PMT: {e.detail}")
+            return Response({'error': e.detail}, status=400)
+
+        # ── 6. Résolution code_direction via service param ────────────
+        token = request.headers.get('Authorization', '')
+        service_url = get_service_param_url()
+        print(f"[DEBUG] Service URL: {service_url}")
+        print(f"[DEBUG] Token (premier 50 chars): {token[:50]}..." if token else "[DEBUG] Pas de token")
+        
+        try:
+            code_direction, label = self._resolve_code(
+                direction_id, 'direction', token, service_url
+            )
+            print(f"[DEBUG] ✅ Code direction résolu: {code_direction}")
+            print(f"[DEBUG] Label direction: {label}")
+        except ValidationError as e:
+            print(f"[DEBUG] ❌ Erreur résolution direction: {e.detail}")
+            return Response({'error': e.detail}, status=503)
+
+        # ── 7. Champs financiers ──────────────────────────────────────
+        try:
+            v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d = \
+                self._load_financials(data)
+            print(f"[DEBUG] ✅ Données financières calculées:")
+            print(f"  - prev_n_plus1_total: {prev_n1_t}")
+            print(f"  - prev_n_plus1_dont_dex: {prev_n1_d}")
+            print(f"  - rar_total: {rar_t}")
+            print(f"  - rar_dont_dex: {rar_d}")
+            print(f"  - cout_initial_total: {cout_t}")
+            print(f"  - cout_initial_dont_dex: {cout_d}")
+        except ValidationError as e:
+            print(f"[DEBUG] ❌ Erreur finances: {e.detail}")
+            return Response(
+                {'error': 'Incohérence montants financiers.', 'details': e.detail},
+                status=400
+            )
+
+        # ── 8. Création en base ───────────────────────────────────────
+        try:
+            print("[DEBUG] 📝 Création du budget record...")
+            record = self._create_budget_record(
+                request,
+                code_division   = code_division,
+                libelle         = libelle,
+                activite        = activite,
+                famille         = famille,
+                region          = None,
+                direction       = code_direction,
+                perm            = None,
+                region_id       = region_id,
+                structure_id    = None,
+                direction_id    = direction_id,
+                departement_id  = departement_id,
+                annee_debut_pmt = annee_debut_pmt,
+                annee_fin_pmt   = annee_fin_pmt,
+                v=v,
+                prev_n1_t=prev_n1_t, prev_n1_d=prev_n1_d,
+                rar_t=rar_t,         rar_d=rar_d,
+                cout_t=cout_t,       cout_d=cout_d,
+            )
+            print(f"[DEBUG] ✅ Record créé avec ID: {record.id}")
+            print(f"[DEBUG] Record details: region={record.region}, direction={record.direction}")
+            
+        except Exception as e:
+            print(f"[DEBUG] ❌ Erreur création base: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response({'error': f'Erreur création en base : {e}'}, status=500)
+
+        # ── 9. Sérialisation ──────────────────────────────────────────
+        try:
+            print("[DEBUG] 📝 Sérialisation du record...")
+            serialized = BudgetRecordSerializer(
+                record, context={'request': request}
+            ).data
+            print("[DEBUG] ✅ Sérialisation réussie")
+        except Exception as e:
+            print(f"[DEBUG] ❌ Erreur sérialisation: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response({'error': f'Erreur sérialisation : {e}'}, status=500)
+
+        print("[DEBUG] ✅ PROJET DÉPARTEMENT CRÉÉ AVEC SUCCÈS")
+        print("=" * 80)
+
+        logger.info(f"🎉 DÉPARTEMENT créé — id={record.id} | direction={code_direction}")
+        logger.info("=" * 60)
+
+        return Response(
+            {
+                'success': True,
+                'message': "Projet créé (version 1 | responsable_departement)",
+                'data':    serialized,
+                'meta': {
+                    'role':           self.ROLE_REQUIS,
+                    'direction_id':   direction_id,
+                    'departement_id': departement_id,
+                    'region_id':      region_id,
+                    'direction':      code_direction,
+                    'label':          label,
+                    'record_id':      record.id,
+                },
+            },
+            status=201
+        )
     """
     Crée un nouveau projet pour un responsable_departement.
 
@@ -7803,35 +8184,47 @@ class ListeProjetsResponsableView(APIView):
 # ================================================================== #
 
 class ListeProjetsResponsableDepartementView(APIView):
-    """
-    GET /recap/budget/projets/responsable-departement/
-    
-    ?statut_workflow=soumis|pre_approuve_chef|reserve_chef|reserve_directeur|approuve_directeur
-    ?statut_final=valide_directeur_region|rejete_directeur_region|valide_directeur_direction|rejete_directeur_direction|valide_divisionnaire|rejete_divisionnaire|annule_divisionnaire
-    ?type_projet=nouveau|en_cours
-    ?code_division=PROJ001
-    
-    Filtre automatique par departement_id du token
-    """
-
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsResponsableDepartement]
 
     def get(self, request):
-        # Récupérer l'ID du département depuis le token
-        departement_id = getattr(request.user, 'departement_id', None)
-        direction_id = getattr(request.user, 'direction_id', None)
-
+        # Récupérer l'ID du département depuis la requête (passé en paramètre)
+        # ou depuis le token si disponible
+        departement_id = request.query_params.get('departement_id')
+        direction_id = request.query_params.get('direction_id')
+        
+        # Si pas dans les paramètres, essayer depuis le token
+        if not departement_id:
+            departement_id = getattr(request.user, 'departement_id', None)
+        if not direction_id:
+            direction_id = getattr(request.user, 'direction_id', None)
+        
+        # 🔥 Si toujours pas d'IDs, faire un appel au service param pour les récupérer
+        if not departement_id and not direction_id:
+            token = request.headers.get('Authorization', '')
+            user_id = getattr(request.user, 'id', None)
+            
+            if user_id:
+                # Appeler le service param pour récupérer les infos de l'utilisateur
+                service_url = get_service_param_url()
+                try:
+                    url = f"{service_url}/users/{user_id}/"
+                    response = requests.get(url, headers={'Authorization': token}, timeout=3)
+                    if response.status_code == 200:
+                        user_data = response.json().get('data', {})
+                        departement_id = user_data.get('departement_id')
+                        direction_id = user_data.get('direction_id')
+                except Exception as e:
+                    logger.error(f"Erreur récupération user: {e}")
+        
         if not departement_id:
             return Response(
-                {'error': "Votre token ne contient pas de departement_id."},
-                status=403
+                {'error': "Impossible de déterminer le département. Veuillez contacter l'administrateur."},
+                status=400
             )
 
         # Filtrer par departement_id
-        qs = BudgetRecord.objects.filter(
-            departement_id=departement_id
-        )
+        qs = BudgetRecord.objects.filter(departement_id=departement_id)
 
         # Filtres optionnels
         statut_workflow = request.query_params.get('statut_workflow')
