@@ -11,6 +11,8 @@ urlpatterns = [
 
     # Recaps
     path('region/',   RecapParRegionView.as_view(),  name='recap-region'),#valider
+    path('direction/', RecapParDirectionView.as_view(), name='recap-par-direction'),
+
     path('famille/',  RecapParFamilleView.as_view(), name='recap-famille'),#valider
     path('activite/', RecapParActiviteView.as_view(),name='recap-activite'),#valider
     path('global/',   RecapGlobalView.as_view(),     name='recap-global'),#valider
@@ -98,7 +100,7 @@ urlpatterns = [
 
    
     # gets pour chef:
-    path('budget/chef/valider-DR-DD/',ListeProjetsChefView.as_view(),  name='chef-valides'),
+    path('budget/chef/valider-DR-DD/',ListeProjetsDRDDChefView.as_view(),  name='chef-valides'),
     path('budget/chef/valider-DR/', ListeProjetsChefView.as_view(), name='chef-valides'),
     path('budget/chef/valider-DD/', ListeProjetsDDChefView.as_view(), name='chef-valides'),
     path('budget/chef/pre_approuves/', ListeProjetsChefValidesView.as_view(), name='chef-valides'),
