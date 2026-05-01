@@ -252,6 +252,47 @@ class UploadListView(generics.ListAPIView):
     serializer_class = ExcelUploadSerializer
 
 
+# class BudgetRecordListView(generics.ListAPIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+#     serializer_class = BudgetRecordSerializer
+
+#     def get_queryset(self):
+#         user = self.request.user
+#         role = getattr(user, 'role', None)
+#         structure_id = getattr(user, 'structure_id', None)
+#         region_id = getattr(user, 'region_id', None)
+        
+#         qs = BudgetRecord.objects.all()
+        
+#         if role == 'responsable_structure':
+#             # Responsable structure → voit sa structure
+#             if structure_id:
+#                 qs = qs.filter(structure_id=structure_id)
+#             else:
+#                 return BudgetRecord.objects.none()
+#         elif role == 'directeur_region':
+#             # Directeur région → voit sa région
+#             if region_id:
+#                 qs = qs.filter(region_id=region_id)
+#             else:
+#                 return BudgetRecord.objects.none()
+#         elif role == 'agent':
+#             # Agent → voit ses projets
+#             qs = qs.filter(created_by=user.id)
+#         # Chef, directeur, divisionnaire → voient tout
+        
+#         uid = self.request.query_params.get('upload_id')
+#         if uid:
+#             qs = qs.filter(upload_id=uid)
+        
+#         return qs.order_by('-id')
+# En haut de votre fichier views.py, ajoutez :
+from rest_framework import status
+from rest_framework import generics
+from rest_framework.response import Response
+# ... vos autres imports
+
 class BudgetRecordListView(generics.ListAPIView):
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -263,6 +304,10 @@ class BudgetRecordListView(generics.ListAPIView):
         structure_id = getattr(user, 'structure_id', None)
         region_id = getattr(user, 'region_id', None)
         
+        # 🔥 Récupérer les IDs manquants
+        departement_id = getattr(user, 'departement_id', None)
+        direction_id = getattr(user, 'direction_id', None)
+        
         qs = BudgetRecord.objects.all()
         
         if role == 'responsable_structure':
@@ -271,12 +316,28 @@ class BudgetRecordListView(generics.ListAPIView):
                 qs = qs.filter(structure_id=structure_id)
             else:
                 return BudgetRecord.objects.none()
+                
         elif role == 'directeur_region':
             # Directeur région → voit sa région
             if region_id:
                 qs = qs.filter(region_id=region_id)
             else:
                 return BudgetRecord.objects.none()
+                
+        elif role == 'responsable_departement':
+            # Responsable département → voit son département
+            if departement_id:
+                qs = qs.filter(departement_id=departement_id)
+            else:
+                return BudgetRecord.objects.none()
+                
+        elif role == 'directeur_direction':
+            # Directeur direction → voit sa direction
+            if direction_id:
+                qs = qs.filter(direction_id=direction_id)
+            else:
+                return BudgetRecord.objects.none()
+                
         elif role == 'agent':
             # Agent → voit ses projets
             qs = qs.filter(created_by=user.id)
@@ -287,7 +348,18 @@ class BudgetRecordListView(generics.ListAPIView):
             qs = qs.filter(upload_id=uid)
         
         return qs.order_by('-id')
-
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        
+        # Return custom response structure
+        return Response({
+            'success': True,
+            'data': serializer.data,
+            'count': queryset.count(),
+            'message': 'Budget records retrieved successfully'
+        }, status=status.HTTP_200_OK)
 #voir plus
 class GetProjetByIdView(APIView):
     """
@@ -1265,17 +1337,275 @@ def _get_famille_mapping(token):
         print(f"Error fetching familles: {e}")
     return famille_mapping, famille_order
 
+def _get_direction_mapping(token):
+    """Récupère le mapping des directions depuis le service param"""
+    service_url = get_service_param_url()
+    direction_mapping = {}
+    direction_order = []
+    try:
+        headers = {'Authorization': f'Bearer {token}'} if token else {}
+        response = requests.get(f"{service_url}/params/directions", headers=headers, timeout=5)
+        if response.status_code == 200:
+            for direction in response.json().get('data', []):
+                code = direction.get('code_direction')
+                nom = direction.get('nom_direction')
+                ordre = direction.get('ordre', 999)
+                if code:
+                    direction_mapping[str(code)] = nom
+                    direction_order.append({'code': code, 'nom': nom, 'ordre': ordre})
+            direction_order.sort(key=lambda x: x['ordre'])
+    except Exception as e:
+        print(f"Error fetching directions: {e}")
+    return direction_mapping, direction_order
+
+
+def _get_famille_direction_mapping(token):
+    """Récupère le mapping des familles-direction depuis le service param"""
+    service_url = get_service_param_url()
+    famille_mapping = {}
+    famille_order = []
+    try:
+        headers = {'Authorization': f'Bearer {token}'} if token else {}
+        response = requests.get(f"{service_url}/params/familles-direction", headers=headers, timeout=5)
+        if response.status_code == 200:
+            for famille in response.json().get('data', []):
+                code = famille.get('code_famille')
+                nom = famille.get('nom_famille')
+                ordre = famille.get('ordre', 999)
+                if code:
+                    famille_mapping[str(code)] = nom
+                    famille_order.append({'code': code, 'nom': nom, 'ordre': ordre})
+            famille_order.sort(key=lambda x: x['ordre'])
+    except Exception as e:
+        print(f"Error fetching familles-direction: {e}")
+    return famille_mapping, famille_order
 
 def _base_qs():
     next_year = datetime.now().year + 1
     return BudgetRecord.objects.filter(
         annee_debut_pmt=next_year,
-        # statut='valide_divisionnaire'
+        # statut_final='valide_divisionnaire'
     )
+# def _base_qs_structure():
+#     """Projets STRUCTURE (ceux qui ont une région)"""
+#     next_year = datetime.now().year + 1
+#     return BudgetRecord.objects.filter(
+#         annee_debut_pmt=next_year,
+#         region__isnull=False,
+#         direction__isnull=True,
+#     ).exclude(region__in=['', 'None', 'null'])
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# def _base_qs_departement():
+#     """Projets DÉPARTEMENT (ceux qui ont une direction)"""
+#     next_year = datetime.now().year + 1
+#     print(f"[DEBUG _base_qs_departement] Année cible: {next_year}")
+    
+#     qs = BudgetRecord.objects.filter(
+#         annee_debut_pmt=next_year,
+#         direction__isnull=False,
+#         region__isnull=True,
+#     ).exclude(direction__in=['', 'None', 'null', 'NoneType'])
+    
+#     print(f"[DEBUG _base_qs_departement] Nombre de projets: {qs.count()}")
+    
+#     # Afficher les 5 premiers projets pour debug
+#     for i, p in enumerate(qs[:5]):
+#         print(f"  Projet {i+1}: code={p.code_division}, direction='{p.direction}', direction_id={p.direction_id}")
+    
+#     return qs
 
+
+# def _get_token(request):
+#     """Extrait le token JWT de la requête"""
+#     auth_header = request.headers.get('Authorization', '')
+#     print(f"[DEBUG _get_token] Authorization header: {auth_header[:50] if auth_header else 'None'}...")
+    
+#     if auth_header.startswith('Bearer '):
+#         token = auth_header.replace('Bearer ', '')
+#         print(f"[DEBUG _get_token] Token extrait: {token[:50]}...")
+#         return token
+#     print("[DEBUG _get_token] Pas de token trouvé")
+#     return ''
+
+
+# def _get_direction_mapping(token):
+#     """Récupère le mapping des directions depuis le service param"""
+#     print("\n[DEBUG _get_direction_mapping] Début...")
+#     service_url = get_service_param_url()
+#     print(f"[DEBUG _get_direction_mapping] Service URL: {service_url}")
+    
+#     direction_mapping = {}
+#     direction_order = []
+    
+#     try:
+#         headers = {'Authorization': f'Bearer {token}'} if token else {}
+#         print(f"[DEBUG _get_direction_mapping] Headers: {headers}")
+        
+#         url = f"{service_url}/params/directions"
+#         print(f"[DEBUG _get_direction_mapping] Appel URL: {url}")
+        
+#         response = requests.get(url, headers=headers, timeout=5)
+#         print(f"[DEBUG _get_direction_mapping] Status code: {response.status_code}")
+        
+#         if response.status_code == 200:
+#             data = response.json().get('data', [])
+#             print(f"[DEBUG _get_direction_mapping] Nombre de directions reçues: {len(data)}")
+            
+#             for direction in data:
+#                 code = direction.get('code_direction')
+#                 nom = direction.get('nom_direction')
+#                 ordre = direction.get('ordre', 999)
+#                 if code:
+#                     direction_mapping[str(code)] = nom
+#                     direction_order.append({'code': code, 'nom': nom, 'ordre': ordre})
+#                     print(f"[DEBUG _get_direction_mapping]   {code} → {nom}")
+            
+#             direction_order.sort(key=lambda x: x['ordre'])
+#             print(f"[DEBUG _get_direction_mapping] Mapping créé: {len(direction_mapping)} entrées")
+#         else:
+#             print(f"[DEBUG _get_direction_mapping] Erreur HTTP {response.status_code}: {response.text[:200]}")
+            
+#     except requests.exceptions.Timeout:
+#         print("[DEBUG _get_direction_mapping] TIMEOUT - Le service param ne répond pas")
+#     except Exception as e:
+#         print(f"[DEBUG _get_direction_mapping] EXCEPTION: {type(e).__name__}: {e}")
+    
+#     return direction_mapping, direction_order
+
+
+# # ================================================================== #
+# # RECAP PAR DIRECTION (corrigé)
+# # ================================================================== #
+
+# # ================================================================== #
+# # RECAP PAR DIRECTION (sans filtrage)
+# # ================================================================== #
+
+# class RecapParDirectionView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         from django.db.models import Sum
+#         from datetime import datetime
+        
+#         print("=" * 50)
+#         print("RECAP DIRECTION - VERSION SIMPLE")
+        
+#         # Requête directe - SANS aucun nettoyage
+#         qs = BudgetRecord.objects.filter(
+#             direction__isnull=False,
+#             direction__in=['DAT'],  # Force DAT pour test
+#             annee_debut_pmt=2027,
+#         )
+        
+#         print(f"COUNT: {qs.count()}")
+        
+#         # Si rien, essayer sans filtre d'année
+#         if qs.count() == 0:
+#             qs = BudgetRecord.objects.filter(
+#                 direction__isnull=False,
+#                 direction__in=['DAT'],
+#             )
+#             print(f"COUNT sans annee: {qs.count()}")
+        
+#         # Agrégation
+#         data = qs.values('direction').annotate(
+#             total=Sum('cout_initial_total')
+#         )
+        
+#         print(f"DATA: {list(data)}")
+        
+#         return Response({
+#             "success": True,
+#             "data": list(data),
+#             "count": qs.count()
+#         })
+class RecapParDirectionView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import datetime
+
+        # 1. Récupération directe des projets département
+        qs = BudgetRecord.objects.filter(
+            annee_debut_pmt=datetime.now().year + 1,
+            direction__isnull=False,
+            region__isnull=True,
+        ).exclude(direction__in=['', '-', 'None', 'null'])
+
+        print(f"[DEBUG] Total projets département: {qs.count()}")
+
+        # Si aucun projet, retourner vide
+        if qs.count() == 0:
+            return Response({
+                "success": True,
+                "directions": [],
+                "total": {
+                    "cout_initial_total": 0,
+                    "cout_initial_dont_dex": 0,
+                    "prev_n_plus1_total": 0,
+                    "prev_n_plus1_dont_dex": 0,
+                    "reste_a_realiser_total": 0,
+                    "reste_a_realiser_dont_dex": 0,
+                }
+            })
+
+        # 2. Agrégation par direction
+        data = list(
+            qs.values('direction')
+            .annotate(**build_aggregation())
+            .order_by('direction')
+        )
+
+        print(f"[DEBUG] Directions trouvées: {len(data)}")
+
+        # 3. Récupération du mapping des directions
+        token = _get_token(request)
+        direction_mapping, direction_order = _get_direction_mapping(token)
+
+        print(f"[DEBUG] Mapping reçu: {len(direction_mapping)} directions")
+
+        # 4. Construction de l'ordre pour le tri
+        direction_order_dict = {}
+        for idx, d in enumerate(direction_order):
+            if 'code' in d:
+                direction_order_dict[d['code']] = idx
+            if 'nom' in d:
+                direction_order_dict[d['nom']] = idx
+
+        # 5. Construction du résultat
+        result = []
+        for row in data:
+            code = str(row.get('direction') or '').strip()
+            nom = direction_mapping.get(code, code) if code else '-'
+
+            print(f"[DEBUG] {code} → {nom}")
+
+            result.append({
+                'direction_code': code if code else '-',
+                'direction_nom': nom,
+                'cout_initial_total': float(row.get('cout_initial_total', 0) or 0),
+                'cout_initial_dont_dex': float(row.get('cout_initial_dont_dex', 0) or 0),
+                'prev_n_plus1_total': float(row.get('prev_n_plus1_total', 0) or 0),
+                'prev_n_plus1_dont_dex': float(row.get('prev_n_plus1_dont_dex', 0) or 0),
+                'reste_a_realiser_total': float(row.get('reste_a_realiser_total', 0) or 0),
+                'reste_a_realiser_dont_dex': float(row.get('reste_a_realiser_dont_dex', 0) or 0),
+            })
+
+        # Trier par ordre défini dans le service param
+        result.sort(key=lambda x: direction_order_dict.get(x["direction_code"], 999))
+
+        # 6. Calcul des totaux généraux
+        total = qs.aggregate(**build_aggregation())
+
+        return Response({
+            "success": True,
+            "directions": result,
+            "total_direction": total
+        })
 class RecapParRegionView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -9271,7 +9601,7 @@ class ListeProjetsRevoirDDView(APIView):
 # ================================================================== #
 #  CHEF les gets 
 # ================================================================== #
-class ListeProjetsChefView(APIView):
+class ListeProjetsDRDDChefView(APIView):
     """
     GET /recap/budget/chef/valider-DR-DD/
     

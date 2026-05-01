@@ -50,6 +50,7 @@ class BudgetRecordSerializer(serializers.ModelSerializer):
     activite_nom = serializers.SerializerMethodField()
     famille_nom = serializers.SerializerMethodField()
     direction_nom  = serializers.SerializerMethodField()
+    perimetre_nom = serializers.SerializerMethodField() 
     #####################################################
     direction_region_code = serializers.SerializerMethodField()
     direction_region_nom = serializers.SerializerMethodField()
@@ -87,6 +88,44 @@ class BudgetRecordSerializer(serializers.ModelSerializer):
     #         # Log l'erreur mais ne casse pas la sérialisation
     #         print(f"Erreur récupération nom région: {e}")
     #         return obj.region  # Fallback: retourne le code
+    def get_perimetre_nom(self, obj):
+        """
+        Récupère le nom du périmètre depuis le service param
+        Le périmètre (perm) peut être un code qui doit être résolu
+        """
+        if not obj.perm or obj.perm in ['', '-', 'None', 'null']:
+            return None
+        
+        try:
+            request = self.context.get('request')
+            token = request.headers.get('Authorization', '') if request else ''
+            service_url = get_service_param_url()
+            
+            # Appel au service param pour récupérer le nom du périmètre
+            url = f"{service_url}/params/perimetres/{obj.perm}"
+            print(f"[DEBUG PERIMETRE] Calling URL: {url}")
+            
+            response = requests.get(
+                url,
+                headers={'Authorization': token},
+                timeout=3
+            )
+            
+            if response.status_code == 200:
+                perimetre_data = response.json().get('data', {})
+                nom = perimetre_data.get('nom_perimetre') or perimetre_data.get('nom')
+                if nom:
+                    print(f"[DEBUG PERIMETRE] Found nom: {nom}")
+                    return nom
+                else:
+                    return obj.perm
+            else:
+                print(f"[DEBUG PERIMETRE] Error {response.status_code}, returning fallback: {obj.perm}")
+                return obj.perm
+                
+        except Exception as e:
+            print(f"[DEBUG PERIMETRE] Exception: {e}")
+            return obj.perm
     def get_region_nom(self, obj):
         """Récupère le nom de la région depuis le service param"""
         try:
