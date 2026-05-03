@@ -1529,82 +1529,47 @@ class RecapParDirectionView(APIView):
     def get(self, request):
         from datetime import datetime
 
-        # 1. Récupération directe des projets département
         qs = BudgetRecord.objects.filter(
             annee_debut_pmt=datetime.now().year + 1,
+            # statut_final='valide_divisionnaire'
             direction__isnull=False,
             region__isnull=True,
         ).exclude(direction__in=['', '-', 'None', 'null'])
 
         print(f"[DEBUG] Total projets département: {qs.count()}")
 
-        # Si aucun projet, retourner vide
         if qs.count() == 0:
             return Response({
                 "success": True,
                 "directions": [],
-                "total": {
-                    "cout_initial_total": 0,
-                    "cout_initial_dont_dex": 0,
-                    "prev_n_plus1_total": 0,
-                    "prev_n_plus1_dont_dex": 0,
-                    "reste_a_realiser_total": 0,
-                    "reste_a_realiser_dont_dex": 0,
-                }
+                "total_division": build_aggregation(),  # ou {} selon besoin
             })
 
-        # 2. Agrégation par direction
+        # 🔥 Agrégation
         data = list(
             qs.values('direction')
             .annotate(**build_aggregation())
             .order_by('direction')
         )
 
-        print(f"[DEBUG] Directions trouvées: {len(data)}")
 
-        # 3. Récupération du mapping des directions
+        # 🔥 Mapping
         token = _get_token(request)
-        direction_mapping, direction_order = _get_direction_mapping(token)
-
-        print(f"[DEBUG] Mapping reçu: {len(direction_mapping)} directions")
-
-        # 4. Construction de l'ordre pour le tri
-        direction_order_dict = {}
-        for idx, d in enumerate(direction_order):
-            if 'code' in d:
-                direction_order_dict[d['code']] = idx
-            if 'nom' in d:
-                direction_order_dict[d['nom']] = idx
-
-        # 5. Construction du résultat
+        token = _get_token(request)
+        direction_mapping, _ = _get_region_mapping(token), None
+        direction_mapping = _get_region_mapping(token)
         result = []
         for row in data:
-            code = str(row.get('direction') or '').strip()
-            nom = direction_mapping.get(code, code) if code else '-'
+            code = str(row.get('direction', '') or '').strip()
+            row['direction'] = direction_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
+            result.append(row)
 
-            print(f"[DEBUG] {code} → {nom}")
 
-            result.append({
-                'direction_code': code if code else '-',
-                'direction_nom': nom,
-                'cout_initial_total': float(row.get('cout_initial_total', 0) or 0),
-                'cout_initial_dont_dex': float(row.get('cout_initial_dont_dex', 0) or 0),
-                'prev_n_plus1_total': float(row.get('prev_n_plus1_total', 0) or 0),
-                'prev_n_plus1_dont_dex': float(row.get('prev_n_plus1_dont_dex', 0) or 0),
-                'reste_a_realiser_total': float(row.get('reste_a_realiser_total', 0) or 0),
-                'reste_a_realiser_dont_dex': float(row.get('reste_a_realiser_dont_dex', 0) or 0),
-            })
-
-        # Trier par ordre défini dans le service param
-        result.sort(key=lambda x: direction_order_dict.get(x["direction_code"], 999))
-
-        # 6. Calcul des totaux généraux
         total = qs.aggregate(**build_aggregation())
 
         return Response({
-            "success": True,
             "directions": result,
-            "total_direction": total
+            "total_division": total,
         })
 class RecapParRegionView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
@@ -1868,6 +1833,486 @@ class RecapRegionFamilleView(APIView):
             'detail': result,
             'total_global': total_global,
         })
+# ─────────────────────────────────────────────────────────────────
+# 1. Récap Direction × Famille  (nested)
+# ─────────────────────────────────────────────────────────────────
+class RecapDirectionFamilleView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            annee_debut_pmt=datetime.now().year + 1,
+            # statut_final='valide_divisionnaire'
+            direction__isnull=False,
+            region__isnull=True,
+        ).exclude(direction__in=['', '-', 'None', 'null'])
+
+        data = list(
+            qs.values('direction', 'famille')
+            .annotate(**build_aggregation())
+            .order_by('direction', 'famille')
+        )
+
+        token = _get_token(request)
+        direction_mapping, direction_order   = _get_direction_mapping(token)
+        famille_mapping,   famille_order     = _get_famille_direction_mapping(token)
+
+        direction_order_dict = {
+            d[key]: idx
+            for idx, d in enumerate(direction_order)
+            for key in ('code', 'nom')
+        }
+        famille_order_dict = {
+            d[key]: idx
+            for idx, d in enumerate(famille_order)
+            for key in ('code', 'nom')
+        }
+
+        # ── Agrégation Python  direction → famille ──
+        directions = {}
+        for row in data:
+            dir_code = str(row.get('direction') or '').strip()
+            dir_nom  = direction_mapping.get(dir_code, dir_code) if dir_code not in ['', '-', 'None'] else '-'
+            fam_code = str(row.get('famille')   or '').strip()
+            fam_nom  = famille_mapping.get(fam_code, fam_code)  if fam_code not in ['', '-', 'None'] else '-'
+
+            if dir_code not in directions:
+                directions[dir_code] = {
+                    'direction_code': dir_code,
+                    'direction_nom':  dir_nom,
+                    'familles':       {},
+                    'total':          {f: 0 for f in NUMERIC_FIELDS},
+                }
+            if fam_code not in directions[dir_code]['familles']:
+                directions[dir_code]['familles'][fam_code] = {
+                    'famille_code': fam_code,
+                    'famille_nom':  fam_nom,
+                    **{f: 0 for f in NUMERIC_FIELDS},
+                }
+            for field in NUMERIC_FIELDS:
+                val = float(row.get(field) or 0)
+                directions[dir_code]['familles'][fam_code][field] += val
+                directions[dir_code]['total'][field]              += val
+
+        # ── Construction résultat trié ──
+        result       = []
+        total_global = {f: 0 for f in NUMERIC_FIELDS}
+
+        for dir_code, dir_data in sorted(
+            directions.items(),
+            key=lambda kv: direction_order_dict.get(kv[0], 999)
+        ):
+            familles_triees = sorted(
+                dir_data['familles'].values(),
+                key=lambda x: famille_order_dict.get(x['famille_code'], 999),
+            )
+            result.append({
+                'direction_code':  dir_data['direction_code'],
+                'direction_nom':   dir_data['direction_nom'],
+                'familles':        familles_triees,
+                'total_direction': dir_data['total'],
+            })
+            for f in NUMERIC_FIELDS:
+                total_global[f] += dir_data['total'][f]
+
+        return Response({
+            'detail':       result,
+            'total_global': total_global,
+        })
+
+
+# ─────────────────────────────────────────────────────────────────
+# 2. Récap Toutes Familles
+#    — région   → famille  via /params/familles
+#    — direction → famille via /params/familles-direction
+#    Les deux partagent le champ `famille` dans BudgetRecord
+# ─────────────────────────────────────────────────────────────────
+# class RecapToutesFamillesView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         token = _get_token(request)
+#         agg   = build_aggregation()
+
+#         famille_mapping,     famille_order     = _get_famille_mapping(token)
+#         famille_dir_mapping, famille_dir_order = _get_famille_direction_mapping(token)
+
+#         # ── Projets structure (région) ──
+#         qs_region = clean_queryset(
+#             _base_qs()
+#             .filter(region__isnull=False)
+#             .exclude(region__in=['', '-', 'None'])
+#         )
+#         # ── Projets département (direction) ──
+#         qs_dir = clean_queryset(
+#             _base_qs()
+#             .filter(direction__isnull=False)
+#             .exclude(direction__in=['', '-', 'None'])
+#         )
+
+#         rows_region = list(qs_region.values('famille').annotate(**agg))
+#         rows_dir    = list(qs_dir.values('famille').annotate(**agg))
+
+#         # ── Ordre global fusionné (famille puis famille-direction, sans doublon) ──
+#         seen      = set()
+#         ordre_global = {}
+#         idx = 0
+#         for fam in famille_order:
+#             key = str(fam['code'])
+#             if key not in seen:
+#                 ordre_global[key] = idx
+#                 seen.add(key)
+#                 idx += 1
+#         for fam in famille_dir_order:
+#             key = str(fam['code'])
+#             if key not in seen:
+#                 ordre_global[key] = idx
+#                 seen.add(key)
+#                 idx += 1
+
+#         def build_row(row, mapping, type_label):
+#             code = str(row.get('famille', '') or '').strip()
+#             nom  = mapping.get(code, code) if code not in ['', '-', 'None'] else '-'
+#             return {
+#                 'famille_code': code,
+#                 'famille_nom':  nom,
+#                 'type':         type_label,   # 'structure' | 'departement'
+#                 **{f: float(row.get(f) or 0) for f in NUMERIC_FIELDS},
+#             }
+
+#         all_rows = (
+#             [build_row(r, famille_mapping,     'structure')   for r in rows_region] +
+#             [build_row(r, famille_dir_mapping, 'departement') for r in rows_dir]
+#         )
+#         all_rows.sort(key=lambda x: ordre_global.get(x['famille_code'], 999))
+
+#         # totaux séparés + global
+#         total_structure   = _sum_rows(rows_region)
+#         total_departement = _sum_rows(rows_dir)
+#         total_global      = {
+#             f: (total_structure.get(f) or 0) + (total_departement.get(f) or 0)
+#             for f in NUMERIC_FIELDS
+#         }
+
+#         return Response({
+#             'familles':          all_rows,
+#             'total_structure':   total_structure,
+#             'total_departement': total_departement,
+#             'total_global':      total_global,
+#         })
+# class RecapToutesFamillesView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         token = _get_token(request)
+#         agg   = build_aggregation()
+
+#         # ── Récupération des deux mappings ──────────────────────────
+#         famille_mapping,     famille_order     = _get_famille_mapping(token)
+#         famille_dir_mapping, famille_dir_order = _get_famille_direction_mapping(token)
+
+#         # ── Fusion mapping : famille_dir en priorité si doublon de code ──
+#         merged_mapping = {**famille_mapping, **famille_dir_mapping}
+
+#         # ── Fusion ordre : famille_order + famille_dir_order sans doublon ──
+#         seen         = set()
+#         merged_order = []
+#         for fam in famille_order + famille_dir_order:
+#             key = str(fam['code'])
+#             if key not in seen:
+#                 merged_order.append(fam)
+#                 seen.add(key)
+#         # trier par ordre
+#         merged_order.sort(key=lambda x: x.get('ordre', 999))
+
+#         ordre_dict = {
+#             str(f['code']): idx
+#             for idx, f in enumerate(merged_order)
+#         }
+
+#         # ── QuerySet : TOUS les projets sans distinction ─────────────
+#         qs = BudgetRecord.objects.filter(
+#             annee_debut_pmt=datetime.now().year + 1,
+#             # statut_final='valide_divisionnaire'
+#         )
+
+#         print(f"[DEBUG FAMILLES] total projets: {qs.count()}")
+
+#         data = list(
+#             qs.values('famille')
+#             .annotate(**agg)
+#             .order_by('famille')
+#         )
+
+#         print(f"[DEBUG FAMILLES] familles distinctes: {len(data)}")
+
+#         # ── Construction résultat ────────────────────────────────────
+#         result = []
+#         for row in data:
+#             code = str(row.get('famille') or '').strip()
+#             nom  = merged_mapping.get(code, code) if code not in ['', '-', 'None'] else '-'
+
+#             # indique la provenance du mapping pour debug
+#             type_famille = (
+#                 'departement' if code in famille_dir_mapping
+#                 else 'structure' if code in famille_mapping
+#                 else 'inconnu'
+#             )
+
+#             result.append({
+#                 'famille_code': code,
+#                 'famille_nom':  nom,
+#                 'type':         type_famille,
+#                 **{f: float(row.get(f) or 0) for f in NUMERIC_FIELDS},
+#             })
+
+#         result.sort(key=lambda x: ordre_dict.get(x['famille_code'], 999))
+
+#         # ── Total global ─────────────────────────────────────────────
+#         total_raw = qs.aggregate(**agg)
+#         total     = {f: float(total_raw.get(f) or 0) for f in NUMERIC_FIELDS}
+
+#         return Response({
+#             'familles':     result,
+#             'total_global': total,
+#         })
+class RecapToutesFamillesView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import datetime
+
+        token = _get_token(request)
+        agg   = build_aggregation()
+
+        # 🔥 mappings fusionnés
+        famille_mapping,     famille_order     = _get_famille_mapping(token)
+        famille_dir_mapping, famille_dir_order = _get_famille_direction_mapping(token)
+
+        merged_mapping = {**famille_mapping, **famille_dir_mapping}
+
+        # 🔥 ordre fusionné
+        seen         = set()
+        merged_order = []
+        for fam in famille_order + famille_dir_order:
+            key = str(fam['code'])
+            if key not in seen:
+                merged_order.append(fam)
+                seen.add(key)
+
+        ordre_dict = {
+            str(f['code']): idx
+            for idx, f in enumerate(merged_order)
+        }
+
+        # 🔥 queryset global (comme tu veux)
+        qs = BudgetRecord.objects.filter(
+            annee_debut_pmt=datetime.now().year + 1,
+        )
+
+        data = list(
+            qs.values('famille')
+            .annotate(**agg)
+            .order_by('famille')
+        )
+
+        # 🔥 même style que RecapParFamilleView
+        result = []
+        for row in data:
+            code = str(row.get('famille') or '').strip()
+
+            row['famille'] = (
+                merged_mapping.get(code, code)
+                if code not in ['', '-', 'None']
+                else '-'
+            )
+
+            result.append(row)
+
+        # 🔥 tri
+        result.sort(
+            key=lambda x: ordre_dict.get(
+                str(x.get('famille')), 999
+            )
+        )
+
+        # 🔥 total
+        total = qs.aggregate(**agg)
+
+        return Response({
+            "familles": result,
+            "total_division_production": total,
+        })
+# # ─────────────────────────────────────────────────────────────────
+# # 3. Récap Toutes Activités
+# #    Agrège TOUS les enregistrements par code activité
+# #    (structure + département confondus)
+# # ─────────────────────────────────────────────────────────────────
+# class RecapToutesActivitesView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         qs = BudgetRecord.objects.filter(
+#             annee_debut_pmt=datetime.now().year + 1,
+#             # statut_final='valide_divisionnaire'
+#         )
+#         data  = list(
+#             qs.values('activite')
+#             .annotate(**build_aggregation())
+#             .order_by('activite')
+#         )
+#         total = qs.aggregate(**build_aggregation())
+
+#         result = []
+#         for row in data:
+#             code = str(row.get('activite', '') or '').strip()
+#             result.append({
+#                 'activite_code': code,
+#                 'activite_nom':  ACTIVITE_MAPPING.get(code, code),
+#                 **{f: row.get(f) for f in NUMERIC_FIELDS},
+#             })
+
+#         return Response({
+#             'activites': result,
+#             'total':     total,
+#         })
+class RecapToutesActivitesView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import datetime
+
+        qs = BudgetRecord.objects.filter(
+            annee_debut_pmt=datetime.now().year + 1,
+            # statut_final='valide_divisionnaire'
+        )
+
+        data = list(
+            qs.values('activite')
+            .annotate(**build_aggregation())
+            .order_by('activite')
+        )
+
+        total = qs.aggregate(**build_aggregation())
+
+        result = []
+        for row in data:
+            code = str(row.get('activite', '') or '').strip()
+
+            # ✅ même logique que famille
+            row['activite'] = (
+                ACTIVITE_MAPPING.get(code, code)
+                if code not in ['', '-', 'None']
+                else '-'
+            )
+
+            result.append(row)
+
+        return Response({
+            "activites": result,
+            "total_division": total,
+        })
+
+# ─────────────────────────────────────────────────────────────────
+# 4. Récap Direction × Activité  (nested)
+# ─────────────────────────────────────────────────────────────────
+class RecapDirectionActiviteView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = BudgetRecord.objects.filter(
+            annee_debut_pmt=datetime.now().year + 1,
+            # statut_final='valide_divisionnaire'
+            direction__isnull=False,
+            region__isnull=True,
+        ).exclude(direction__in=['', '-', 'None', 'null'])
+
+        data = list(
+            qs.values('direction', 'activite')
+            .annotate(**build_aggregation())
+            .order_by('direction', 'activite')
+        )
+
+        token = _get_token(request)
+        direction_mapping, direction_order = _get_direction_mapping(token)
+
+        direction_order_dict = {
+            d[key]: idx
+            for idx, d in enumerate(direction_order)
+            for key in ('code', 'nom')
+        }
+
+        # ── Agrégation Python  direction → activité ──
+        directions = {}
+        for row in data:
+            dir_code = str(row.get('direction') or '').strip()
+            dir_nom  = direction_mapping.get(dir_code, dir_code) if dir_code not in ['', '-', 'None'] else '-'
+            act_code = str(row.get('activite')  or '').strip()
+            act_nom  = ACTIVITE_MAPPING.get(act_code, act_code)
+
+            if dir_code not in directions:
+                directions[dir_code] = {
+                    'direction_code': dir_code,
+                    'direction_nom':  dir_nom,
+                    'activites':      {},
+                    'total':          {f: 0 for f in NUMERIC_FIELDS},
+                }
+            if act_code not in directions[dir_code]['activites']:
+                directions[dir_code]['activites'][act_code] = {
+                    'activite_code': act_code,
+                    'activite_nom':  act_nom,
+                    **{f: 0 for f in NUMERIC_FIELDS},
+                }
+            for field in NUMERIC_FIELDS:
+                val = float(row.get(field) or 0)
+                directions[dir_code]['activites'][act_code][field] += val
+                directions[dir_code]['total'][field]               += val
+
+        # ── Construction résultat trié ──
+        result       = []
+        total_global = {f: 0 for f in NUMERIC_FIELDS}
+
+        for dir_code, dir_data in sorted(
+            directions.items(),
+            key=lambda kv: direction_order_dict.get(kv[0], 999)
+        ):
+            # activités triées alphabétiquement par nom
+            activites_triees = sorted(
+                dir_data['activites'].values(),
+                key=lambda x: x['activite_nom'],
+            )
+            result.append({
+                'direction_code':  dir_data['direction_code'],
+                'direction_nom':   dir_data['direction_nom'],
+                'activites':       activites_triees,
+                'total_direction': dir_data['total'],
+            })
+            for f in NUMERIC_FIELDS:
+                total_global[f] += dir_data['total'][f]
+
+        return Response({
+            'detail':       result,
+            'total_global': total_global,
+        })
+
+
+# ─────────────────────────────────────────────────────────────────
+# Helper utilisé dans RecapToutesFamillesView
+# ─────────────────────────────────────────────────────────────────
+def _sum_rows(rows):
+    """Somme les NUMERIC_FIELDS d'une liste de dicts (résultats d'aggregate)."""
+    total = {f: 0 for f in NUMERIC_FIELDS}
+    for row in rows:
+        for f in NUMERIC_FIELDS:
+            total[f] += float(row.get(f) or 0)
+    return total
 # ─────────────────────────────────────────
 # PDF
 # ─────────────────────────────────────────
@@ -5819,7 +6264,379 @@ class PatchProjetAdminView(APIView):
             },
             status=200,
         )
+# ================================================================== #
+# PATCH PROJET POUR RESPONSABLE STRUCTURE
+# Condition : statut_workflow = 'soumis'
+# ================================================================== #
 
+class PatchProjetStructureView(APIView):
+    """
+    PATCH /api/budget/responsable/patch-projet/structure/{code_division}/
+    
+    Permet au responsable structure de modifier les champs d'un projet
+    à condition qu'il soit en statut 'soumis'.
+    
+    Le responsable structure ne peut modifier que les projets de SA structure.
+    
+    Champs modifiables :
+    - libelle
+    - description_technique
+    - opportunite_projet
+    - version_comment
+    - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+    Champs NON modifiables :
+    - region, perimetre, famille, activite (champs identitaires)
+    - code_division, annee_debut_pmt, annee_fin_pmt
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableStructure]
+
+    PATCHABLE_FIELDS = {
+        # Identitaires
+        'libelle',
+        'description_technique', 
+        'opportunite_projet',
+        'version_comment',
+        # Financiers — prévisions
+        'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+        'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+        'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+        'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+        # Financiers — mois
+        'janvier_total',   'janvier_dont_dex',
+        'fevrier_total',   'fevrier_dont_dex',
+        'mars_total',      'mars_dont_dex',
+        'avril_total',     'avril_dont_dex',
+        'mai_total',       'mai_dont_dex',
+        'juin_total',      'juin_dont_dex',
+        'juillet_total',   'juillet_dont_dex',
+        'aout_total',      'aout_dont_dex',
+        'septembre_total', 'septembre_dont_dex',
+        'octobre_total',   'octobre_dont_dex',
+        'novembre_total',  'novembre_dont_dex',
+        'decembre_total',  'decembre_dont_dex',
+        # Réalisations
+        'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+        'real_s1_n_total',  'real_s1_n_dont_dex',
+        'prev_s2_n_total',  'prev_s2_n_dont_dex',
+    }
+    
+    READONLY_FIELDS = {
+        'id', 'version', 'is_active', 'parent_id',
+        'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+        'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+        'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+        'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+        'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+        'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+        'cout_initial_total', 'cout_initial_dont_dex',
+        'statut_workflow', 'statut_final',
+    }
+    
+    DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+    @staticmethod
+    def _to_decimal_or_none(val):
+        if val in (None, '', 'null', 'None'):
+            return None
+        try:
+            return Decimal(str(val))
+        except (ValueError, TypeError):
+            return None
+
+    def patch(self, request, code_division):
+        data = request.data
+
+        if not data:
+            return Response(
+                {'error': 'Aucun champ fourni.'},
+                status=400
+            )
+
+        # Récupérer la version active
+        actif = (
+            BudgetRecord.objects.filter(
+                code_division=code_division, is_active=True
+            ).first()
+            or BudgetRecord.objects.filter(
+                code_division=code_division
+            ).order_by('-version').first()
+        )
+        if not actif:
+            return Response(
+                {'error': f'Projet {code_division} introuvable.'},
+                status=404
+            )
+
+        # ✅ Vérifier que le projet est en statut 'soumis'
+        if actif.statut_workflow != 'soumis':
+            return Response(
+                {
+                    'error': f'Le projet doit être en statut "soumis" pour être modifié.',
+                    'statut_actuel': actif.statut_workflow or actif.statut_final,
+                    'statut_attendu': 'soumis'
+                },
+                status=403
+            )
+
+        # ✅ Vérifier que le responsable structure est bien celui de la structure du projet
+        structure_id = getattr(request.user, 'structure_id', None)
+        if not structure_id or actif.structure_id != structure_id:
+            return Response(
+                {
+                    'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+                    'detail': 'Ce projet n\'appartient pas à votre structure.'
+                },
+                status=403
+            )
+
+        # Vérifier les champs envoyés
+        unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+        readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+        if readonly_sent:
+            return Response(
+                {
+                    'error': 'Champs système non modifiables par les responsables.',
+                    'champs': list(readonly_sent),
+                },
+                status=400
+            )
+
+        if unknown_fields:
+            return Response(
+                {
+                    'error': 'Champs inconnus ou non modifiables.',
+                    'champs': list(unknown_fields),
+                },
+                status=400
+            )
+
+        # Appliquer les modifications
+        updated_fields = []
+
+        for field, value in data.items():
+            if field not in self.PATCHABLE_FIELDS:
+                continue
+
+            if field in self.DECIMAL_FIELDS:
+                value = self._to_decimal_or_none(value)
+
+            setattr(actif, field, value)
+            updated_fields.append(field)
+
+        if not updated_fields:
+            return Response(
+                {'error': 'Aucun champ valide à mettre à jour.'},
+                status=400
+            )
+
+        actif.save(update_fields=updated_fields)
+
+        serializer = BudgetRecordSerializer(
+            actif,
+            context={'request': request}
+        )
+
+        return Response(
+            {
+                'success': True,
+                'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet (statut: soumis).',
+                'version': actif.version,
+                'champs_modifies': updated_fields,
+                'data': serializer.data,
+            },
+            status=200,
+        )
+
+
+# ================================================================== #
+# PATCH PROJET POUR RESPONSABLE DÉPARTEMENT
+# Condition : statut_workflow = 'soumis'
+# ================================================================== #
+
+class PatchProjetDepartementView(APIView):
+    """
+    PATCH /api/budget/responsable/patch-projet/departement/{code_division}/
+    
+    Permet au responsable département de modifier les champs d'un projet
+    à condition qu'il soit en statut 'soumis'.
+    
+    Le responsable département ne peut modifier que les projets de SON département.
+    
+    Champs modifiables :
+    - libelle
+    - description_technique
+    - opportunite_projet
+    - version_comment
+    - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+    Champs NON modifiables :
+    - direction, famille, activite (champs identitaires)
+    - code_division, annee_debut_pmt, annee_fin_pmt
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableDepartement]
+
+    PATCHABLE_FIELDS = {
+        # Identitaires
+        'libelle',
+        'description_technique', 
+        'opportunite_projet',
+        'version_comment',
+        # Financiers — prévisions
+        'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+        'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+        'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+        'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+        # Financiers — mois
+        'janvier_total',   'janvier_dont_dex',
+        'fevrier_total',   'fevrier_dont_dex',
+        'mars_total',      'mars_dont_dex',
+        'avril_total',     'avril_dont_dex',
+        'mai_total',       'mai_dont_dex',
+        'juin_total',      'juin_dont_dex',
+        'juillet_total',   'juillet_dont_dex',
+        'aout_total',      'aout_dont_dex',
+        'septembre_total', 'septembre_dont_dex',
+        'octobre_total',   'octobre_dont_dex',
+        'novembre_total',  'novembre_dont_dex',
+        'decembre_total',  'decembre_dont_dex',
+        # Réalisations
+        'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+        'real_s1_n_total',  'real_s1_n_dont_dex',
+        'prev_s2_n_total',  'prev_s2_n_dont_dex',
+    }
+    
+    READONLY_FIELDS = {
+        'id', 'version', 'is_active', 'parent_id',
+        'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+        'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+        'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+        'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+        'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+        'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+        'cout_initial_total', 'cout_initial_dont_dex',
+        'statut_workflow', 'statut_final',
+    }
+    
+    DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+    @staticmethod
+    def _to_decimal_or_none(val):
+        if val in (None, '', 'null', 'None'):
+            return None
+        try:
+            return Decimal(str(val))
+        except (ValueError, TypeError):
+            return None
+
+    def patch(self, request, code_division):
+        data = request.data
+
+        if not data:
+            return Response(
+                {'error': 'Aucun champ fourni.'},
+                status=400
+            )
+
+        # Récupérer la version active
+        actif = (
+            BudgetRecord.objects.filter(
+                # code_division=code_division, is_active=True
+                code_division=code_division, is_active=True
+            ).first()
+            or BudgetRecord.objects.filter(
+                code_division=code_division
+            ).order_by('-version').first()
+        )
+        if not actif:
+            return Response(
+                {'error': f'Projet {code_division} introuvable.'},
+                status=404
+            )
+
+        # ✅ Vérifier que le projet est en statut 'soumis'
+        if actif.statut_workflow != 'soumis':
+            return Response(
+                {
+                    'error': f'Le projet doit être en statut "soumis" pour être modifié.',
+                    'statut_actuel': actif.statut_workflow or actif.statut_final,
+                    'statut_attendu': 'soumis'
+                },
+                status=403
+            )
+
+        # ✅ Vérifier que le responsable département est bien celui du département du projet
+        departement_id = getattr(request.user, 'departement_id', None)
+        if not departement_id or actif.departement_id != departement_id:
+            return Response(
+                {
+                    'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+                    'detail': 'Ce projet n\'appartient pas à votre département.'
+                },
+                status=403
+            )
+
+        # Vérifier les champs envoyés
+        unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+        readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+        if readonly_sent:
+            return Response(
+                {
+                    'error': 'Champs système non modifiables par les responsables.',
+                    'champs': list(readonly_sent),
+                },
+                status=400
+            )
+
+        if unknown_fields:
+            return Response(
+                {
+                    'error': 'Champs inconnus ou non modifiables.',
+                    'champs': list(unknown_fields),
+                },
+                status=400
+            )
+
+        # Appliquer les modifications
+        updated_fields = []
+
+        for field, value in data.items():
+            if field not in self.PATCHABLE_FIELDS:
+                continue
+
+            if field in self.DECIMAL_FIELDS:
+                value = self._to_decimal_or_none(value)
+
+            setattr(actif, field, value)
+            updated_fields.append(field)
+
+        if not updated_fields:
+            return Response(
+                {'error': 'Aucun champ valide à mettre à jour.'},
+                status=400
+            )
+
+        actif.save(update_fields=updated_fields)
+
+        serializer = BudgetRecordSerializer(
+            actif,
+            context={'request': request}
+        )
+
+        return Response(
+            {
+                'success': True,
+                'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet (statut: soumis).',
+                'version': actif.version,
+                'champs_modifies': updated_fields,
+                'data': serializer.data,
+            },
+            status=200,
+        )
 
 # class PatchProjetAdminView(APIView):
 #     """

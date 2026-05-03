@@ -10,8 +10,8 @@ urlpatterns = [
 
 
     # Recaps
-    path('region/',   RecapParRegionView.as_view(),  name='recap-region'),#valider
     path('direction/', RecapParDirectionView.as_view(), name='recap-par-direction'),
+    path('region/',   RecapParRegionView.as_view(),  name='recap-region'),#valider
 
     path('famille/',  RecapParFamilleView.as_view(), name='recap-famille'),#valider
     path('activite/', RecapParActiviteView.as_view(),name='recap-activite'),#valider
@@ -19,13 +19,22 @@ urlpatterns = [
     path('famille-par-activite/', RecapFamilleParActiviteView.as_view()),#valider
     path('export/pdf/<int:pk>/', BudgetRecordPDFView.as_view(), name='budget-pdf'),#valider
     path('region-famille/', RecapRegionFamilleView.as_view(), name='recap-region-famille'),#valider
+    path('direction-famille/',  RecapDirectionFamilleView.as_view()),
+    path('toutes-familles/',    RecapToutesFamillesView.as_view()),
+    path('toutes-activites/',   RecapToutesActivitesView.as_view()),
+    path('direction-activite/', RecapDirectionActiviteView.as_view()),
     # path('verification/', VerificationCalculsView.as_view(), name='verification-calculs'),
 
     # creation projet:(nv , ancien)
     path('budget/nouveau-projet/', NouveauProjetView.as_view(), name='create-budget-manuel'),#valider
     path('budget/nouveau-projet/departement', NouveauProjetDepartementView.as_view(), name='create-budget-manuel'),#valider
-
+    
+    #patch projet
     path('budget/admin/patch-projet/<str:code_division>/',PatchProjetAdminView.as_view(),name='admin-patch-projet',),
+    path('budget/structure/patch-projet/<str:code_division>/',PatchProjetStructureView.as_view(),name='patch-projet-structure'),
+    path('budget/departement/patch-projet/<str:code_division>/',PatchProjetDepartementView.as_view(),name='patch-projet-departement'),
+
+
     path('budget/responsable/modifier-projet/<str:code_division>/',ModifierProjetStructureView.as_view(),name='responsable-modifier-projet',),
     path('budget/departement/modifier-projet/<str:code_division>/',ModifierProjetDepartementView.as_view(),name='departement-modifier-projet',),
    
