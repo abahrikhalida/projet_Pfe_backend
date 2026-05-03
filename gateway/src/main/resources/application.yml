@@ -50,6 +50,13 @@ spring:
             - Path=/params/**
           filters:
             - RewritePath=/params/(?<segment>.*), /api/$\{segment}
+        # Ajoutez cette route dans votre gateway application.yml
+        - id: service-notification
+          uri: lb://SERVICE-NOTIFICATION
+          predicates:
+           - Path=/notifications/**
+          filters:
+          - StripPrefix=0
 
 eureka:
   client:
