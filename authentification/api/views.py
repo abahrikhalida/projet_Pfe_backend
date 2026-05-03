@@ -102,6 +102,7 @@ def api_login(request):
         "role": getattr(user, 'role', None),
         "refresh": str(refresh),
         "access": str(refresh.access_token),
+        "user_id":str(user.id),
         "message": f"Logged in as {nom_complet(user)}",
         "nom_complet": nom_complet(user),
         "photo_profil": user.photo_profil.url if user.photo_profil else None,   # ✅
@@ -1039,6 +1040,56 @@ def api_list_all_users(request):
             "poste": u.poste,
             "region_id": u.region_id,
             "structure_id": u.structure_id,
+            "direction_id":u.direction_id,
+            "departement_id":u.departement_id,
+            "is_active": u.is_active,
+            "is_superuser": u.is_superuser,
+            "photo_profil": u.photo_profil.url if u.photo_profil else None,
+        }
+
+        # 🔹 Chef → agents
+        if u.role == 'chef':
+            agents = Agent.objects.filter(chef=u).select_related('user')
+            entry["members_count"] = agents.count()
+
+        # 🔹 Agent → chef
+        if u.role == 'agent':
+            agent = getattr(u, "agent_profile", None)
+            entry["chef_id"] = agent.chef.id if agent and agent.chef else None
+
+        data.append(entry)
+
+    return Response({
+        "status": "success",
+        "count": len(data),
+        "users": data
+    })
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_list_all_users_public(request):
+    
+    # ✅ All authenticated users can access this endpoint
+    # No admin restriction - just view-only access
+    
+    users = User.objects.all().order_by('nom')  # includes all users
+
+    data = []
+    for u in users:
+        entry = {
+            "id": u.id,
+            "email": u.email,
+            "nom": u.nom,
+            "prenom": u.prenom,
+            "nom_complet": f"{u.prenom} {u.nom}",
+            "role": u.role,
+            "role_display": dict(User.ROLE_CHOICES).get(u.role, u.role),
+            "matricule": u.matricule,
+            "telephone": u.telephone,
+            "poste": u.poste,
+            "region_id": u.region_id,
+            "structure_id": u.structure_id,
+            "direction_id": u.direction_id,
+            "departement_id": u.departement_id,
             "is_active": u.is_active,
             "is_superuser": u.is_superuser,
             "photo_profil": u.photo_profil.url if u.photo_profil else None,
