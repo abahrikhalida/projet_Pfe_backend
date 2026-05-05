@@ -4262,6 +4262,8 @@ class BaseNouveauProjetView(APIView):
         duree_realisation_val = data.get('duree_realisation')
         point_situation_val = data.get('point_situation')
         commentaire_point_situation_val = data.get('commentaire_point_situation')
+        annee_debut_projet_val = data.get('annee_debut_projet')
+        mois_debut_projet_val = data.get('mois_debut_projet')
 
         record = BudgetRecord.objects.create(
             upload = upload,
@@ -4305,6 +4307,8 @@ class BaseNouveauProjetView(APIView):
             duree_realisation = duree_realisation_val,
             point_situation = point_situation_val,
             commentaire_point_situation = commentaire_point_situation_val,
+            annee_debut_projet = annee_debut_projet_val,
+            mois_debut_projet = mois_debut_projet_val,
 
             # Réalisation NULL (nouveau projet)
             realisation_cumul_n_mins1_total    = None,
@@ -4333,6 +4337,8 @@ class BaseNouveauProjetView(APIView):
             f"code_division={code_division} | "
             f"region={region} | direction={direction} | "
             f"duree={duree_realisation_val} | point={point_situation_val}"
+            f"annee={annee_debut_projet_val} | mois={mois_debut_projet_val}"
+
         )
         return record
 
@@ -9584,7 +9590,6 @@ class ListeProjetsParResponsableStructureView(APIView):
 class ListeProjetsResponsableView(APIView):
     """
     GET /recap/budget/projets/responsable-structure/
-    
     ?statut_workflow=soumis|pre_approuve_chef|reserve_chef|reserve_directeur|approuve_directeur
     ?statut_final=valide_directeur_region|rejete_directeur_region|valide_divisionnaire|rejete_divisionnaire|annule_divisionnaire
     ?type_projet=nouveau|en_cours

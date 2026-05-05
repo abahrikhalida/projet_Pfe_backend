@@ -109,8 +109,5 @@ const familleSchema = new mongoose.Schema({
     }
 });
 
-// Index pour code_famille unique
-familleSchema.index({ code_famille: 1 }, { unique: true });
-familleSchema.index({ nom_famille: 1 });
 
 module.exports = mongoose.model('Famille', familleSchema);

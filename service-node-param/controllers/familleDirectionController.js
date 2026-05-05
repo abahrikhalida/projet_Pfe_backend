@@ -67,6 +67,37 @@ exports.getFamillesByDirection = async (req, res) => {
         });
     }
 };
+exports.getFamillesDirectionByDirectionCode = async (req, res) => {
+    try {
+        const { directionCode } = req.params;
+ 
+        // Trouver d'abord la direction par son code
+        const direction = await Direction.findOne({ code_direction: directionCode });
+        if (!direction) {
+            return res.status(404).json({
+                success: false,
+                message: `Direction avec le code "${directionCode}" introuvable.`
+            });
+        }
+ 
+        // Récupérer toutes les familles de cette direction
+        const familles = await FamilleDirection.find({
+            direction: direction._id,
+            is_active: true
+        }).populate('direction', 'code_direction nom_direction');
+ 
+        res.status(200).json({
+            success: true,
+            data: familles,
+            count: familles.length
+        });
+    } catch (error) {
+        res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
 
 // Get famille by ID
 exports.getFamilleDirectionById = async (req, res) => {
