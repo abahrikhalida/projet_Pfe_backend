@@ -263,6 +263,9 @@ class BudgetRecord(models.Model):
     # Intervalle PMT
     annee_debut_pmt = models.IntegerField(null=True, blank=True)
     annee_fin_pmt = models.IntegerField(null=True, blank=True)
+    annee_debut_projet = models.IntegerField(null=True, blank=True)
+    mois_debut_projet = models.IntegerField(null=True, blank=True)
+        
     
     # Champs pour le filtrage
     region_id = models.CharField(max_length=50, null=True, blank=True)
