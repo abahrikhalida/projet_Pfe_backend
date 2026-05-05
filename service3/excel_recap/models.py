@@ -326,8 +326,10 @@ class BudgetRecord(models.Model):
         ('annule_divisionnaire', 'Annulé Divisionnaire'),
         ('valide_directeur_region', 'Validé Directeur Région'),
         ('rejete_directeur_region', 'Rejeté Directeur Région'),
+        ('reserve_directeur_region', 'Réservé Directeur Région'), 
         ('valide_directeur_direction', 'Validé Directeur Direction'),
         ('rejete_directeur_direction', 'Rejeté Directeur Direction'),
+        ('reserve_directeur_direction', 'Réservé Directeur Direction')
     ]
     
     statut_workflow = models.CharField(
@@ -389,7 +391,12 @@ class BudgetRecord(models.Model):
     rejete_par_directeur_direction = models.CharField(max_length=255, blank=True, null=True)
     date_rejet_directeur_direction = models.DateTimeField(blank=True, null=True)
     motif_rejet_directeur_direction = models.TextField(blank=True, null=True)
-    
+
+    # Reserve par directeur DIRECTION
+    reserve_par_directeur_direction = models.CharField(max_length=255, blank=True, null=True)
+    date_reserve_directeur_direction = models.DateTimeField(blank=True, null=True)
+    commentaire_reserve_directeur_direction = models.TextField(blank=True, null=True)
+        
     # DIRECTEUR RÉGION - valide ou rejette
     valide_par_directeur_region = models.CharField(max_length=255, blank=True, null=True)
     date_validation_directeur_region = models.DateTimeField(blank=True, null=True)
@@ -399,6 +406,11 @@ class BudgetRecord(models.Model):
     rejete_par_directeur_region = models.CharField(max_length=255, blank=True, null=True)
     date_rejet_directeur_region = models.DateTimeField(blank=True, null=True)
     motif_rejet_directeur_region = models.TextField(blank=True, null=True)
+ 
+    # Reserve par directeur région
+    reserve_par_directeur_region = models.CharField(max_length=255, blank=True, null=True)
+    date_reserve_directeur_region = models.DateTimeField(blank=True, null=True)
+    commentaire_reserve_directeur_region = models.TextField(blank=True, null=True)
     
     # CHEF - pré-approuve ou réserve
     preapprouve_par_chef = models.CharField(max_length=255, blank=True, null=True)

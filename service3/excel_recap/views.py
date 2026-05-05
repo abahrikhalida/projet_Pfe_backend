@@ -6493,7 +6493,7 @@ class ModifierProjetDepartementView(BaseModifierProjetView):
 #         )
 class PatchProjetAdminView(APIView):
     """
-    PATCH /api/budget/admin/patch-projet/{code_division}/
+    PATCH /recap/budget/admin/patch-projet/{code_division}/
 
     Permet à l'admin de modifier un ou plusieurs champs directement
     sur la version active, sans créer de nouvelle version.
@@ -8220,6 +8220,176 @@ from datetime import datetime
 #    Condition : region_id correspond à sa région
 #    Statuts autorisés : soumis, reserve_directeur, annule_divisionnaire, rejete_divisionnaire
 # ================================================================== #
+# class ValiderDirecteurRegionView(APIView):
+#     """
+#     POST /recap/budget/valider/directeur-region/<id>/
+    
+#     Uniquement pour les projets de TYPE STRUCTURE (qui ont une région)
+#     Le directeur région ne peut valider que les projets de SA région
+    
+#     Actions : valider | rejeter | reserver
+#     """
+
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDirecteurRegion]
+
+#     ALLOWED_WORKFLOW = {'soumis', 'reserve_directeur'}
+#     ALLOWED_FINAL = {'annule_divisionnaire', 'rejete_divisionnaire'}
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         # 🔥 Vérifier que c'est un projet structure (a une région, pas de direction)
+#         if record.direction and not record.region:
+#             return Response({
+#                 'error': 'Ce projet est un projet département. Utilisez le endpoint directeur-direction.'
+#             }, status=400)
+
+#         # 🔥 Vérifier que le directeur région est bien celui de la région du projet
+#         if record.region_id != request.user.region_id:
+#             return Response({
+#                 'error': f'Vous n\'êtes pas autorisé à valider ce projet. '
+#                          f'Ce projet dépend de la région {record.region_id}, '
+#                          f'vous êtes responsable de la région {request.user.region_id}'
+#             }, status=403)
+
+#         action = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'rejeter'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'rejeter'"},
+#                 status=400
+#             )
+
+#         if action == 'rejeter' and not commentaire:
+#             return Response(
+#                 {'error': "Le commentaire est obligatoire pour un rejet"},
+#                 status=400
+#             )
+
+#         statut_workflow_ok = record.statut_workflow in self.ALLOWED_WORKFLOW
+#         statut_final_ok = record.statut_final in self.ALLOWED_FINAL
+
+#         if not (statut_workflow_ok or statut_final_ok):
+#             return Response({
+#                 'error': (
+#                     f"Statut non autorisé. Workflow: {record.statut_workflow}, Final: {record.statut_final}"
+#                 )
+#             }, status=400)
+
+#         if action == 'valider':
+#             record.statut_final = 'valide_directeur_region'
+#             record.statut_workflow = None
+#             record.valide_par_directeur_region = request.user.nom_complet
+#             record.date_validation_directeur_region = timezone.now()
+#             record.commentaire_directeur_region = commentaire or None
+#             message = 'Projet validé par le directeur région'
+#         else:
+#             record.statut_final = 'rejete_directeur_region'
+#             record.statut_workflow = None
+#             record.rejete_par_directeur_region = request.user.nom_complet
+#             record.date_rejet_directeur_region = timezone.now()
+#             record.motif_rejet_directeur_region = commentaire
+#             record.rejete_par = request.user.nom_complet
+#             record.date_rejet = timezone.now()
+#             record.motif_rejet = commentaire
+#             message = 'Projet rejeté par le directeur région'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut_final': record.statut_final,
+#             'statut_workflow': record.statut_workflow,
+#         })
+# class ValiderDirecteurRegionView(APIView):
+#     """
+#     POST /recap/budget/valider/directeur-region/<id>/
+    
+#     Uniquement pour les projets de TYPE STRUCTURE (qui ont une région)
+#     Le directeur région ne peut valider que les projets de SA région
+    
+#     Actions : valider | rejeter | reserver
+#     """
+
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDirecteurRegion]
+
+#     ALLOWED_WORKFLOW = {'soumis', 'reserve_directeur'}
+#     ALLOWED_FINAL = {'annule_divisionnaire', 'rejete_divisionnaire'}
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         # 🔥 Vérifier que c'est un projet structure (a une région, pas de direction)
+#         if record.direction and not record.region:
+#             return Response({
+#                 'error': 'Ce projet est un projet département. Utilisez le endpoint directeur-direction.'
+#             }, status=400)
+
+#         # 🔥 Vérifier que le directeur région est bien celui de la région du projet
+#         if record.region_id != request.user.region_id:
+#             return Response({
+#                 'error': f'Vous n\'êtes pas autorisé à valider ce projet. '
+#                          f'Ce projet dépend de la région {record.region_id}, '
+#                          f'vous êtes responsable de la région {request.user.region_id}'
+#             }, status=403)
+
+#         action = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'rejeter'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'rejeter'"},
+#                 status=400
+#             )
+
+#         if action == 'rejeter' and not commentaire:
+#             return Response(
+#                 {'error': "Le commentaire est obligatoire pour un rejet"},
+#                 status=400
+#             )
+
+#         statut_workflow_ok = record.statut_workflow in self.ALLOWED_WORKFLOW
+#         statut_final_ok = record.statut_final in self.ALLOWED_FINAL
+
+#         if not (statut_workflow_ok or statut_final_ok):
+#             return Response({
+#                 'error': (
+#                     f"Statut non autorisé. Workflow: {record.statut_workflow}, Final: {record.statut_final}"
+#                 )
+#             }, status=400)
+
+#         if action == 'valider':
+#             record.statut_final = 'valide_directeur_region'
+#             record.statut_workflow = None
+#             record.valide_par_directeur_region = request.user.nom_complet
+#             record.date_validation_directeur_region = timezone.now()
+#             record.commentaire_directeur_region = commentaire or None
+#             message = 'Projet validé par le directeur région'
+#         else:
+#             record.statut_final = 'rejete_directeur_region'
+#             record.statut_workflow = None
+#             record.rejete_par_directeur_region = request.user.nom_complet
+#             record.date_rejet_directeur_region = timezone.now()
+#             record.motif_rejet_directeur_region = commentaire
+#             record.rejete_par = request.user.nom_complet
+#             record.date_rejet = timezone.now()
+#             record.motif_rejet = commentaire
+#             message = 'Projet rejeté par le directeur région'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut_final': record.statut_final,
+#             'statut_workflow': record.statut_workflow,
+#         })
 class ValiderDirecteurRegionView(APIView):
     """
     POST /recap/budget/valider/directeur-region/<id>/
@@ -8227,7 +8397,7 @@ class ValiderDirecteurRegionView(APIView):
     Uniquement pour les projets de TYPE STRUCTURE (qui ont une région)
     Le directeur région ne peut valider que les projets de SA région
     
-    Actions : valider | rejeter
+    Actions : valider | rejeter | reserver
     """
 
     authentication_classes = [RemoteJWTAuthentication]
@@ -8258,9 +8428,10 @@ class ValiderDirecteurRegionView(APIView):
         action = request.data.get('action')
         commentaire = request.data.get('commentaire', '')
 
-        if action not in ('valider', 'rejeter'):
+        # ✅ Ajout de 'reserver' dans les actions autorisées
+        if action not in ('valider', 'rejeter', 'reserver'):
             return Response(
-                {'error': "action doit être 'valider' ou 'rejeter'"},
+                {'error': "action doit être 'valider', 'rejeter' ou 'reserver'"},
                 status=400
             )
 
@@ -8287,7 +8458,7 @@ class ValiderDirecteurRegionView(APIView):
             record.date_validation_directeur_region = timezone.now()
             record.commentaire_directeur_region = commentaire or None
             message = 'Projet validé par le directeur région'
-        else:
+        elif action == 'rejeter':
             record.statut_final = 'rejete_directeur_region'
             record.statut_workflow = None
             record.rejete_par_directeur_region = request.user.nom_complet
@@ -8297,6 +8468,14 @@ class ValiderDirecteurRegionView(APIView):
             record.date_rejet = timezone.now()
             record.motif_rejet = commentaire
             message = 'Projet rejeté par le directeur région'
+        # ✅ Ajout du bloc pour l'action reserver
+        elif action == 'reserver':
+            record.statut_final = 'reserve_directeur_region'
+            record.statut_workflow = None
+            record.reserve_par_directeur_region = request.user.nom_complet
+            record.date_reserve_directeur_region = timezone.now()
+            record.commentaire_reserve_directeur_region = commentaire or None
+            message = 'Projet réservé par le directeur région'
 
         record.save()
         return Response({
@@ -8306,12 +8485,96 @@ class ValiderDirecteurRegionView(APIView):
             'statut_workflow': record.statut_workflow,
         })
 
-
 # ================================================================== #
 # 2. DIRECTEUR DIRECTION - Valide les projets DÉPARTEMENT
 #    Condition : direction_id correspond à sa direction
 #    Statuts autorisés : soumis, reserve_directeur, annule_divisionnaire, rejete_divisionnaire
 # ================================================================== #
+# class ValiderDirecteurDirectionView(APIView):
+#     """
+#     POST /recap/budget/valider/directeur-direction/<id>/
+    
+#     Uniquement pour les projets de TYPE DÉPARTEMENT (qui ont une direction)
+#     Le directeur direction ne peut valider que les projets de SA direction
+    
+#     Actions : valider | rejeter
+#     """
+
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsDirecteurDirection]  # Nouvelle permission
+
+#     ALLOWED_WORKFLOW = {'soumis', 'reserve_directeur'}
+#     ALLOWED_FINAL = {'annule_divisionnaire', 'rejete_divisionnaire'}
+
+#     def post(self, request, record_id):
+#         record = get_record_or_404(record_id)
+#         if not record:
+#             return Response({'error': 'Projet introuvable'}, status=404)
+
+#         # 🔥 Vérifier que c'est un projet département (a une direction, pas de région)
+#         if record.region and not record.direction:
+#             return Response({
+#                 'error': 'Ce projet est un projet structure. Utilisez le endpoint directeur-region.'
+#             }, status=400)
+
+#         # 🔥 Vérifier que le directeur direction est bien celui de la direction du projet
+#         if record.direction_id != request.user.direction_id:
+#             return Response({
+#                 'error': f'Vous n\'êtes pas autorisé à valider ce projet. '
+#                          f'Ce projet dépend de la direction {record.direction_id}, '
+#                          f'vous êtes responsable de la direction {request.user.direction_id}'
+#             }, status=403)
+
+#         action = request.data.get('action')
+#         commentaire = request.data.get('commentaire', '')
+
+#         if action not in ('valider', 'rejeter'):
+#             return Response(
+#                 {'error': "action doit être 'valider' ou 'rejeter'"},
+#                 status=400
+#             )
+
+#         if action == 'rejeter' and not commentaire:
+#             return Response(
+#                 {'error': "Le commentaire est obligatoire pour un rejet"},
+#                 status=400
+#             )
+
+#         statut_workflow_ok = record.statut_workflow in self.ALLOWED_WORKFLOW
+#         statut_final_ok = record.statut_final in self.ALLOWED_FINAL
+
+#         if not (statut_workflow_ok or statut_final_ok):
+#             return Response({
+#                 'error': (
+#                     f"Statut non autorisé. Workflow: {record.statut_workflow}, Final: {record.statut_final}"
+#                 )
+#             }, status=400)
+
+#         if action == 'valider':
+#             record.statut_final = 'valide_directeur_direction'  # Nouveau statut
+#             record.statut_workflow = None
+#             record.valide_par_directeur_direction = request.user.nom_complet
+#             record.date_validation_directeur_direction = timezone.now()
+#             record.commentaire_directeur_direction = commentaire or None
+#             message = 'Projet validé par le directeur direction'
+#         else:
+#             record.statut_final = 'rejete_directeur_direction'  # Nouveau statut
+#             record.statut_workflow = None
+#             record.rejete_par_directeur_direction = request.user.nom_complet
+#             record.date_rejet_directeur_direction = timezone.now()
+#             record.motif_rejet_directeur_direction = commentaire
+#             record.rejete_par = request.user.nom_complet
+#             record.date_rejet = timezone.now()
+#             record.motif_rejet = commentaire
+#             message = 'Projet rejeté par le directeur direction'
+
+#         record.save()
+#         return Response({
+#             'success': True,
+#             'message': message,
+#             'statut_final': record.statut_final,
+#             'statut_workflow': record.statut_workflow,
+#         })
 class ValiderDirecteurDirectionView(APIView):
     """
     POST /recap/budget/valider/directeur-direction/<id>/
@@ -8319,11 +8582,11 @@ class ValiderDirecteurDirectionView(APIView):
     Uniquement pour les projets de TYPE DÉPARTEMENT (qui ont une direction)
     Le directeur direction ne peut valider que les projets de SA direction
     
-    Actions : valider | rejeter
+    Actions : valider | rejeter | reserver
     """
 
     authentication_classes = [RemoteJWTAuthentication]
-    permission_classes = [IsDirecteurDirection]  # Nouvelle permission
+    permission_classes = [IsDirecteurDirection]
 
     ALLOWED_WORKFLOW = {'soumis', 'reserve_directeur'}
     ALLOWED_FINAL = {'annule_divisionnaire', 'rejete_divisionnaire'}
@@ -8350,9 +8613,10 @@ class ValiderDirecteurDirectionView(APIView):
         action = request.data.get('action')
         commentaire = request.data.get('commentaire', '')
 
-        if action not in ('valider', 'rejeter'):
+        # ✅ Ajout de 'reserver' dans les actions autorisées
+        if action not in ('valider', 'rejeter', 'reserver'):
             return Response(
-                {'error': "action doit être 'valider' ou 'rejeter'"},
+                {'error': "action doit être 'valider', 'rejeter' ou 'reserver'"},
                 status=400
             )
 
@@ -8373,14 +8637,15 @@ class ValiderDirecteurDirectionView(APIView):
             }, status=400)
 
         if action == 'valider':
-            record.statut_final = 'valide_directeur_direction'  # Nouveau statut
+            record.statut_final = 'valide_directeur_direction'
             record.statut_workflow = None
             record.valide_par_directeur_direction = request.user.nom_complet
             record.date_validation_directeur_direction = timezone.now()
             record.commentaire_directeur_direction = commentaire or None
             message = 'Projet validé par le directeur direction'
-        else:
-            record.statut_final = 'rejete_directeur_direction'  # Nouveau statut
+        
+        elif action == 'rejeter':
+            record.statut_final = 'rejete_directeur_direction'
             record.statut_workflow = None
             record.rejete_par_directeur_direction = request.user.nom_complet
             record.date_rejet_directeur_direction = timezone.now()
@@ -8389,6 +8654,15 @@ class ValiderDirecteurDirectionView(APIView):
             record.date_rejet = timezone.now()
             record.motif_rejet = commentaire
             message = 'Projet rejeté par le directeur direction'
+        
+        # ✅ Ajout du bloc pour l'action reserver
+        elif action == 'reserver':
+            record.statut_final = 'reserve_directeur_direction'
+            record.statut_workflow = None
+            record.reserve_par_directeur_direction = request.user.nom_complet
+            record.date_reserve_directeur_direction = timezone.now()
+            record.commentaire_reserve_directeur_direction = commentaire or None
+            message = 'Projet réservé par le directeur direction'
 
         record.save()
         return Response({
@@ -8397,7 +8671,6 @@ class ValiderDirecteurDirectionView(APIView):
             'statut_final': record.statut_final,
             'statut_workflow': record.statut_workflow,
         })
-
 
 # ================================================================== #
 # 3. CHEF (pré-approuve / réserve) - MÊME POUR LES 2 FLUX
@@ -9255,7 +9528,59 @@ class ProjetsSoumisParRegionFiltreView(APIView):
 # ================================================================== #
 #  RESPONSABLE STRUCTURE - LISTE DE SES PROJETS (corrigé)
 # ================================================================== #
+class ListeProjetsParResponsableStructureView(APIView):
+    """
+    GET /api/budget/responsable/structure/projets/
+    
+    Liste tous les projets créés par le responsable structure connecté.
+    Sans paramètres - retourne tous les projets du responsable.
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableStructure]
 
+    def get(self, request):
+        user_id = request.user.id
+        
+        if not user_id:
+            return Response(
+                {'error': "Utilisateur non identifié."},
+                status=403
+            )
+
+        # Filtrer par created_by (le responsable qui a créé le projet)
+        qs = BudgetRecord.objects.filter(created_by=user_id).order_by('-id')
+
+        from django.db.models import Count
+        
+        # Compteurs par statut_workflow
+        compteurs_workflow = {
+            item['statut_workflow']: item['total']
+            for item in qs.values('statut_workflow').annotate(total=Count('id'))
+            if item['statut_workflow']
+        }
+        
+        # Compteurs par statut_final
+        compteurs_final = {
+            item['statut_final']: item['total']
+            for item in qs.values('statut_final').annotate(total=Count('id'))
+            if item['statut_final']
+        }
+
+        # Récupérer les infos de la structure du responsable
+        structure_id = getattr(request.user, 'structure_id', None)
+        region_id = getattr(request.user, 'region_id', None)
+
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'responsable_id': user_id,
+            'structure_id': structure_id,
+            'region_id': region_id,
+            'compteurs_par_statut_workflow': compteurs_workflow,
+            'compteurs_par_statut_final': compteurs_final,
+            'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
+        })
+    
 class ListeProjetsResponsableView(APIView):
     """
     GET /recap/budget/projets/responsable-structure/
@@ -9322,6 +9647,529 @@ class ListeProjetsResponsableView(APIView):
             'compteurs_par_statut_final': compteurs_final,
             'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
         })
+class ListeProjetsReserveDirecteurRegionView(APIView):
+    """
+    GET /recap/budget/projets/reserve-directeur-region/
+    
+    Liste tous les projets ayant le statut 'reserve_directeur_region'
+    Accessible uniquement au responsable structure
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableStructure]
+
+    def get(self, request):
+        structure_id = getattr(request.user, 'structure_id', None)
+        region_id = getattr(request.user, 'region_id', None)
+
+        if not structure_id:
+            return Response(
+                {'error': "Votre token ne contient pas de structure_id."},
+                status=403
+            )
+
+        qs = BudgetRecord.objects.filter(
+            structure_id=structure_id,
+            statut_final='reserve_directeur_region'
+        )
+
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        qs = qs.order_by('-id')
+
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'structure_id': structure_id,
+            'region_id': region_id,
+            'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
+        })
+# class PatchProjetStructureReserveDirecteurRegionView(APIView):
+#     """
+#     PATCH /api/budget/responsable/patch-projet/structure/reserve/{code_division}/
+    
+#     Permet au responsable structure de modifier les champs d'un projet
+#     à condition qu'il soit en statut 'reserve_directeur_region'.
+    
+#     Le responsable structure ne peut modifier que les projets de SA structure.
+    
+#     Champs modifiables :
+#     - libelle
+#     - description_technique
+#     - opportunite_projet
+#     - version_comment
+#     - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+#     Champs NON modifiables :
+#     - region, perimetre, famille, activite (champs identitaires)
+#     - code_division, annee_debut_pmt, annee_fin_pmt
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsResponsableStructure]
+
+#     PATCHABLE_FIELDS = {
+#         # Identitaires
+#         'libelle',
+#         'description_technique', 
+#         'opportunite_projet',
+#         'version_comment',
+#         # Financiers — prévisions
+#         'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+#         'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+#         'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+#         'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+#         # Financiers — mois
+#         'janvier_total',   'janvier_dont_dex',
+#         'fevrier_total',   'fevrier_dont_dex',
+#         'mars_total',      'mars_dont_dex',
+#         'avril_total',     'avril_dont_dex',
+#         'mai_total',       'mai_dont_dex',
+#         'juin_total',      'juin_dont_dex',
+#         'juillet_total',   'juillet_dont_dex',
+#         'aout_total',      'aout_dont_dex',
+#         'septembre_total', 'septembre_dont_dex',
+#         'octobre_total',   'octobre_dont_dex',
+#         'novembre_total',  'novembre_dont_dex',
+#         'decembre_total',  'decembre_dont_dex',
+#         # Réalisations
+#         'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+#         'real_s1_n_total',  'real_s1_n_dont_dex',
+#         'prev_s2_n_total',  'prev_s2_n_dont_dex',
+#     }
+    
+#     READONLY_FIELDS = {
+#         'id', 'version', 'is_active', 'parent_id',
+#         'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+#         'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+#         'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+#         'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+#         'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+#         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+#         'cout_initial_total', 'cout_initial_dont_dex',
+#         'statut_workflow', 'statut_final',
+#         # Champs de réservation (ne peuvent pas être modifiés directement)
+#         'reserve_par_directeur_region', 'date_reserve_directeur_region', 'commentaire_reserve_directeur_region',
+#     }
+    
+#     DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+#     @staticmethod
+#     def _to_decimal_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return Decimal(str(val))
+#         except (ValueError, TypeError):
+#             return None
+
+#     def patch(self, request, code_division):
+#         data = request.data
+
+#         if not data:
+#             return Response(
+#                 {'error': 'Aucun champ fourni.'},
+#                 status=400
+#             )
+
+#         # Récupérer la version active
+#         actif = (
+#             BudgetRecord.objects.filter(
+#                 code_division=code_division, is_active=True
+#             ).first()
+#             or BudgetRecord.objects.filter(
+#                 code_division=code_division
+#             ).order_by('-version').first()
+#         )
+#         if not actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+
+#         # ✅ Vérifier que le projet est en statut 'reserve_directeur_region'
+#         if actif.statut_final != 'reserve_directeur_region':
+#             return Response(
+#                 {
+#                     'error': f'Le projet doit être en statut "reserve_directeur_region" pour être modifié.',
+#                     'statut_actuel': actif.statut_workflow or actif.statut_final,
+#                     'statut_attendu': 'reserve_directeur_region'
+#                 },
+#                 status=403
+#             )
+
+#         # ✅ Vérifier que le responsable structure est bien celui de la structure du projet
+#         structure_id = getattr(request.user, 'structure_id', None)
+#         if not structure_id or actif.structure_id != structure_id:
+#             return Response(
+#                 {
+#                     'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+#                     'detail': 'Ce projet n\'appartient pas à votre structure.'
+#                 },
+#                 status=403
+#             )
+
+#         # Vérifier les champs envoyés
+#         unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+#         readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+#         if readonly_sent:
+#             return Response(
+#                 {
+#                     'error': 'Champs système non modifiables par les responsables.',
+#                     'champs': list(readonly_sent),
+#                 },
+#                 status=400
+#             )
+
+#         if unknown_fields:
+#             return Response(
+#                 {
+#                     'error': 'Champs inconnus ou non modifiables.',
+#                     'champs': list(unknown_fields),
+#                 },
+#                 status=400
+#             )
+
+#         # Appliquer les modifications
+#         updated_fields = []
+
+#         for field, value in data.items():
+#             if field not in self.PATCHABLE_FIELDS:
+#                 continue
+
+#             if field in self.DECIMAL_FIELDS:
+#                 value = self._to_decimal_or_none(value)
+
+#             setattr(actif, field, value)
+#             updated_fields.append(field)
+
+#         if not updated_fields:
+#             return Response(
+#                 {'error': 'Aucun champ valide à mettre à jour.'},
+#                 status=400
+#             )
+
+#         # Optionnel: Ajouter automatiquement un commentaire dans version_comment
+#         if updated_fields and 'version_comment' not in data:
+#             commentaire = f"[{timezone.now()}] Modification après réservation par {request.user.nom_complet}\n"
+#             actif.version_comment = (actif.version_comment or '') + commentaire
+#             updated_fields.append('version_comment')
+
+#         actif.save(update_fields=updated_fields)
+
+#         serializer = BudgetRecordSerializer(
+#             actif,
+#             context={'request': request}
+#         )
+
+#         return Response(
+#             {
+#                 'success': True,
+#                 'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet (statut: reserve_directeur_region).',
+#                 'version': actif.version,
+#                 'champs_modifies': updated_fields,
+#                 'data': serializer.data,
+#             },
+#             status=200,
+#         )
+class PatchProjetStructureReserveDirecteurRegionView(APIView):
+    """
+    PATCH /api/budget/responsable/patch-projet/structure/reserve/{code_division}/
+    
+    Permet au responsable structure de modifier les champs d'un projet
+    à condition qu'il soit en statut 'reserve_directeur_region'.
+    
+    APRÈS MODIFICATION, le projet revient automatiquement au statut 'soumis'
+    pour que le directeur région puisse le re-valider.
+    
+    Le responsable structure ne peut modifier que les projets de SA structure.
+    
+    Champs modifiables :
+    - libelle
+    - description_technique
+    - opportunite_projet
+    - version_comment
+    - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+    Champs NON modifiables :
+    - region, perimetre, famille, activite (champs identitaires)
+    - code_division, annee_debut_pmt, annee_fin_pmt
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableStructure]
+
+    PATCHABLE_FIELDS = {
+        # Identitaires
+        'libelle',
+        'description_technique', 
+        'opportunite_projet',
+        'version_comment',
+        # Financiers — prévisions
+        'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+        'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+        'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+        'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+        # Financiers — mois
+        'janvier_total',   'janvier_dont_dex',
+        'fevrier_total',   'fevrier_dont_dex',
+        'mars_total',      'mars_dont_dex',
+        'avril_total',     'avril_dont_dex',
+        'mai_total',       'mai_dont_dex',
+        'juin_total',      'juin_dont_dex',
+        'juillet_total',   'juillet_dont_dex',
+        'aout_total',      'aout_dont_dex',
+        'septembre_total', 'septembre_dont_dex',
+        'octobre_total',   'octobre_dont_dex',
+        'novembre_total',  'novembre_dont_dex',
+        'decembre_total',  'decembre_dont_dex',
+        # Réalisations
+        'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+        'real_s1_n_total',  'real_s1_n_dont_dex',
+        'prev_s2_n_total',  'prev_s2_n_dont_dex',
+    }
+    
+    READONLY_FIELDS = {
+        'id', 'version', 'is_active', 'parent_id',
+        'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+        'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+        'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+        'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+        'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+        'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+        'cout_initial_total', 'cout_initial_dont_dex',
+        'statut_workflow', 'statut_final',
+        # Champs de réservation (ne peuvent pas être modifiés directement)
+        'reserve_par_directeur_region', 'date_reserve_directeur_region', 'commentaire_reserve_directeur_region',
+    }
+    
+    DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+    @staticmethod
+    def _to_decimal_or_none(val):
+        if val in (None, '', 'null', 'None'):
+            return None
+        try:
+            return Decimal(str(val))
+        except (ValueError, TypeError):
+            return None
+
+    def patch(self, request, code_division):
+        data = request.data
+
+        if not data:
+            return Response(
+                {'error': 'Aucun champ fourni.'},
+                status=400
+            )
+
+        # Récupérer la version active
+        actif = (
+            BudgetRecord.objects.filter(
+                code_division=code_division, is_active=True
+            ).first()
+            or BudgetRecord.objects.filter(
+                code_division=code_division
+            ).order_by('-version').first()
+        )
+        if not actif:
+            return Response(
+                {'error': f'Projet {code_division} introuvable.'},
+                status=404
+            )
+
+        # ✅ Vérifier que le projet est en statut 'reserve_directeur_region'
+        if actif.statut_final != 'reserve_directeur_region':
+            return Response(
+                {
+                    'error': f'Le projet doit être en statut "reserve_directeur_region" pour être modifié.',
+                    'statut_actuel': actif.statut_workflow or actif.statut_final,
+                    'statut_attendu': 'reserve_directeur_region'
+                },
+                status=403
+            )
+
+        # ✅ Vérifier que le responsable structure est bien celui de la structure du projet
+        structure_id = getattr(request.user, 'structure_id', None)
+        if not structure_id or actif.structure_id != structure_id:
+            return Response(
+                {
+                    'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+                    'detail': 'Ce projet n\'appartient pas à votre structure.'
+                },
+                status=403
+            )
+
+        # Vérifier les champs envoyés
+        unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+        readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+        if readonly_sent:
+            return Response(
+                {
+                    'error': 'Champs système non modifiables par les responsables.',
+                    'champs': list(readonly_sent),
+                },
+                status=400
+            )
+
+        if unknown_fields:
+            return Response(
+                {
+                    'error': 'Champs inconnus ou non modifiables.',
+                    'champs': list(unknown_fields),
+                },
+                status=400
+            )
+
+        # Appliquer les modifications
+        updated_fields = []
+
+        for field, value in data.items():
+            if field not in self.PATCHABLE_FIELDS:
+                continue
+
+            if field in self.DECIMAL_FIELDS:
+                value = self._to_decimal_or_none(value)
+
+            setattr(actif, field, value)
+            updated_fields.append(field)
+
+        if not updated_fields:
+            return Response(
+                {'error': 'Aucun champ valide à mettre à jour.'},
+                status=400
+            )
+
+        # ✅ CHANGEMENT IMPORTANT: Après modification, retour au statut 'soumis'
+        # et nettoyage des champs de réservation
+        actif.statut_final = None
+        actif.statut_workflow = 'soumis'
+        
+        # Nettoyer les champs de réservation du directeur région
+        actif.reserve_par_directeur_region = None
+        actif.date_reserve_directeur_region = None
+        actif.commentaire_reserve_directeur_region = None
+        
+        updated_fields.extend(['statut_final', 'statut_workflow', 
+                               'reserve_par_directeur_region', 
+                               'date_reserve_directeur_region', 
+                               'commentaire_reserve_directeur_region'])
+
+        # Ajouter un commentaire automatique dans version_comment
+        commentaire = f"[{timezone.now()}] Modification après réservation par {request.user.nom_complet}. Retour au statut 'soumis'.\n"
+        actif.version_comment = (actif.version_comment or '') + commentaire
+        updated_fields.append('version_comment')
+
+        actif.save(update_fields=updated_fields)
+
+        serializer = BudgetRecordSerializer(
+            actif,
+            context={'request': request}
+        )
+
+        return Response(
+            {
+                'success': True,
+                'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet. Statut retourné à "soumis".',
+                'version': actif.version,
+                'champs_modifies': updated_fields,
+                'nouveau_statut': 'soumis',
+                'data': serializer.data,
+            },
+            status=200,
+        )
+class ListeProjetsValideDirecteurRegionView(APIView):
+    """
+    GET /recap/budget/projets/valide-directeur-region/
+    
+    Liste tous les projets ayant le statut 'valide_directeur_region'
+    Accessible uniquement au responsable structure
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableStructure]
+
+    def get(self, request):
+        structure_id = getattr(request.user, 'structure_id', None)
+        region_id = getattr(request.user, 'region_id', None)
+
+        if not structure_id:
+            return Response(
+                {'error': "Votre token ne contient pas de structure_id."},
+                status=403
+            )
+
+        qs = BudgetRecord.objects.filter(
+            structure_id=structure_id,
+            statut_final='valide_directeur_region'
+        )
+
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        qs = qs.order_by('-id')
+
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'structure_id': structure_id,
+            'region_id': region_id,
+            'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
+        })
+class ListeProjetsRejeteDirecteurRegionView(APIView):
+    """
+    GET /recap/budget/projets/rejete-directeur-region/
+    
+    Liste tous les projets ayant le statut 'rejete_directeur_region'
+    Accessible uniquement au responsable structure
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableStructure]
+
+    def get(self, request):
+        structure_id = getattr(request.user, 'structure_id', None)
+        region_id = getattr(request.user, 'region_id', None)
+
+        if not structure_id:
+            return Response(
+                {'error': "Votre token ne contient pas de structure_id."},
+                status=403
+            )
+
+        qs = BudgetRecord.objects.filter(
+            structure_id=structure_id,
+            statut_final='rejete_directeur_region'
+        )
+
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        qs = qs.order_by('-id')
+
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'structure_id': structure_id,
+            'region_id': region_id,
+            'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
+        })
 # ================================================================== #
 #  RESPONSABLE DÉPARTEMENT - LISTE DE SES PROJETS
 # ================================================================== #
@@ -9329,6 +10177,59 @@ class ListeProjetsResponsableView(APIView):
 # ================================================================== #
 #  RESPONSABLE DÉPARTEMENT - LISTE DE SES PROJETS
 # ================================================================== #
+class ListeProjetsParResponsableDepartementView(APIView):
+    """
+    GET /api/budget/responsable/departement/projets/
+    
+    Liste tous les projets créés par le responsable département connecté.
+    Sans paramètres - retourne tous les projets du responsable.
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableDepartement]
+
+    def get(self, request):
+        user_id = request.user.id
+        
+        if not user_id:
+            return Response(
+                {'error': "Utilisateur non identifié."},
+                status=403
+            )
+
+        # Filtrer par created_by (le responsable qui a créé le projet)
+        qs = BudgetRecord.objects.filter(created_by=user_id).order_by('-id')
+
+        from django.db.models import Count
+        
+        # Compteurs par statut_workflow
+        compteurs_workflow = {
+            item['statut_workflow']: item['total']
+            for item in qs.values('statut_workflow').annotate(total=Count('id'))
+            if item['statut_workflow']
+        }
+        
+        # Compteurs par statut_final
+        compteurs_final = {
+            item['statut_final']: item['total']
+            for item in qs.values('statut_final').annotate(total=Count('id'))
+            if item['statut_final']
+        }
+
+        # Récupérer les infos du département du responsable
+        departement_id = getattr(request.user, 'departement_id', None)
+        direction_id = getattr(request.user, 'direction_id', None)
+
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'responsable_id': user_id,
+            'departement_id': departement_id,
+            'direction_id': direction_id,
+            'compteurs_par_statut_workflow': compteurs_workflow,
+            'compteurs_par_statut_final': compteurs_final,
+            'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
+        })
+    
 
 class ListeProjetsResponsableDepartementView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
@@ -9431,6 +10332,428 @@ class ListeProjetsResponsableDepartementView(APIView):
             'compteurs_par_statut_final': compteurs_final,
             'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
         })
+class ListeProjetsReserveDirecteurDirectionView(APIView):
+    """
+    GET /recap/budget/projets/reserve-directeur-direction/
+    
+    Liste tous les projets ayant le statut 'reserve_directeur_direction'
+    Accessible uniquement au responsable département
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableDepartement]
+
+    def get(self, request):
+        departement_id = request.query_params.get('departement_id')
+        direction_id = request.query_params.get('direction_id')
+        
+        if not departement_id:
+            departement_id = getattr(request.user, 'departement_id', None)
+        if not direction_id:
+            direction_id = getattr(request.user, 'direction_id', None)
+        
+        if not departement_id and not direction_id:
+            token = request.headers.get('Authorization', '')
+            user_id = getattr(request.user, 'id', None)
+            
+            if user_id:
+                service_url = get_service_param_url()
+                try:
+                    url = f"{service_url}/users/{user_id}/"
+                    response = requests.get(url, headers={'Authorization': token}, timeout=3)
+                    if response.status_code == 200:
+                        user_data = response.json().get('data', {})
+                        departement_id = user_data.get('departement_id')
+                        direction_id = user_data.get('direction_id')
+                except Exception as e:
+                    logger.error(f"Erreur récupération user: {e}")
+        
+        if not departement_id:
+            return Response(
+                {'error': "Impossible de déterminer le département. Veuillez contacter l'administrateur."},
+                status=400
+            )
+
+        # Filtrer par departement_id ET statut reserve_directeur_direction
+        qs = BudgetRecord.objects.filter(
+            departement_id=departement_id,
+            statut_final='reserve_directeur_direction'
+        )
+
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        qs = qs.order_by('-id')
+
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'departement_id': departement_id,
+            'direction_id': direction_id,
+            'statut': 'reserve_directeur_direction',
+            'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
+        })
+class ListeProjetsValideDirecteurDirectionView(APIView):
+    """
+    GET /recap/budget/projets/valide-directeur-direction/
+    
+    Liste tous les projets ayant le statut 'valide_directeur_direction'
+    Accessible uniquement au responsable département
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableDepartement]
+
+    def get(self, request):
+        departement_id = request.query_params.get('departement_id')
+        direction_id = request.query_params.get('direction_id')
+        
+        if not departement_id:
+            departement_id = getattr(request.user, 'departement_id', None)
+        if not direction_id:
+            direction_id = getattr(request.user, 'direction_id', None)
+        
+        if not departement_id and not direction_id:
+            token = request.headers.get('Authorization', '')
+            user_id = getattr(request.user, 'id', None)
+            
+            if user_id:
+                service_url = get_service_param_url()
+                try:
+                    url = f"{service_url}/users/{user_id}/"
+                    response = requests.get(url, headers={'Authorization': token}, timeout=3)
+                    if response.status_code == 200:
+                        user_data = response.json().get('data', {})
+                        departement_id = user_data.get('departement_id')
+                        direction_id = user_data.get('direction_id')
+                except Exception as e:
+                    logger.error(f"Erreur récupération user: {e}")
+        
+        if not departement_id:
+            return Response(
+                {'error': "Impossible de déterminer le département. Veuillez contacter l'administrateur."},
+                status=400
+            )
+
+        # Filtrer par departement_id ET statut valide_directeur_direction
+        qs = BudgetRecord.objects.filter(
+            departement_id=departement_id,
+            statut_final='valide_directeur_direction'
+        )
+
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        qs = qs.order_by('-id')
+
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'departement_id': departement_id,
+            'direction_id': direction_id,
+            'statut': 'valide_directeur_direction',
+            'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
+        })
+class ListeProjetsRejeteDirecteurDirectionView(APIView):
+    """
+    GET /recap/budget/projets/rejete-directeur-direction/
+    
+    Liste tous les projets ayant le statut 'rejete_directeur_direction'
+    Accessible uniquement au responsable département
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableDepartement]
+
+    def get(self, request):
+        departement_id = request.query_params.get('departement_id')
+        direction_id = request.query_params.get('direction_id')
+        
+        if not departement_id:
+            departement_id = getattr(request.user, 'departement_id', None)
+        if not direction_id:
+            direction_id = getattr(request.user, 'direction_id', None)
+        
+        if not departement_id and not direction_id:
+            token = request.headers.get('Authorization', '')
+            user_id = getattr(request.user, 'id', None)
+            
+            if user_id:
+                service_url = get_service_param_url()
+                try:
+                    url = f"{service_url}/users/{user_id}/"
+                    response = requests.get(url, headers={'Authorization': token}, timeout=3)
+                    if response.status_code == 200:
+                        user_data = response.json().get('data', {})
+                        departement_id = user_data.get('departement_id')
+                        direction_id = user_data.get('direction_id')
+                except Exception as e:
+                    logger.error(f"Erreur récupération user: {e}")
+        
+        if not departement_id:
+            return Response(
+                {'error': "Impossible de déterminer le département. Veuillez contacter l'administrateur."},
+                status=400
+            )
+
+        # Filtrer par departement_id ET statut rejete_directeur_direction
+        qs = BudgetRecord.objects.filter(
+            departement_id=departement_id,
+            statut_final='rejete_directeur_direction'
+        )
+
+        # Filtres optionnels
+        type_projet = request.query_params.get('type_projet')
+        code_division = request.query_params.get('code_division')
+
+        if type_projet:
+            qs = qs.filter(type_projet=type_projet)
+        if code_division:
+            qs = qs.filter(code_division__icontains=code_division)
+
+        qs = qs.order_by('-id')
+
+        return Response({
+            'success': True,
+            'count': qs.count(),
+            'departement_id': departement_id,
+            'direction_id': direction_id,
+            'statut': 'rejete_directeur_direction',
+            'projets': BudgetRecordSerializer(qs, many=True, context={'request': request}).data,
+        })
+
+class PatchProjetDepartementReserveDirecteurDirectionView(APIView):
+    """
+    PATCH /api/budget/responsable/patch-projet/departement/reserve/{code_division}/
+    
+    Permet au responsable département de modifier les champs d'un projet
+    à condition qu'il soit en statut 'reserve_directeur_direction'.
+    
+    APRÈS MODIFICATION, le projet revient automatiquement au statut 'soumis'
+    pour que le directeur direction puisse le re-valider.
+    
+    Le responsable département ne peut modifier que les projets de SON département.
+    
+    Champs modifiables :
+    - libelle
+    - description_technique
+    - opportunite_projet
+    - version_comment
+    - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+    Champs NON modifiables :
+    - region, direction, perimetre, famille, activite (champs identitaires)
+    - code_division, annee_debut_pmt, annee_fin_pmt
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsResponsableDepartement]
+
+    PATCHABLE_FIELDS = {
+        # Identitaires
+        'libelle',
+        'description_technique', 
+        'opportunite_projet',
+        'version_comment',
+        # Financiers — prévisions
+        'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+        'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+        'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+        'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+        # Financiers — mois
+        'janvier_total',   'janvier_dont_dex',
+        'fevrier_total',   'fevrier_dont_dex',
+        'mars_total',      'mars_dont_dex',
+        'avril_total',     'avril_dont_dex',
+        'mai_total',       'mai_dont_dex',
+        'juin_total',      'juin_dont_dex',
+        'juillet_total',   'juillet_dont_dex',
+        'aout_total',      'aout_dont_dex',
+        'septembre_total', 'septembre_dont_dex',
+        'octobre_total',   'octobre_dont_dex',
+        'novembre_total',  'novembre_dont_dex',
+        'decembre_total',  'decembre_dont_dex',
+        # Réalisations
+        'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+        'real_s1_n_total',  'real_s1_n_dont_dex',
+        'prev_s2_n_total',  'prev_s2_n_dont_dex',
+    }
+    
+    READONLY_FIELDS = {
+        'id', 'version', 'is_active', 'parent_id',
+        'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+        'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+        'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+        'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+        'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+        'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+        'cout_initial_total', 'cout_initial_dont_dex',
+        'statut_workflow', 'statut_final',
+        # Champs de réservation (ne peuvent pas être modifiés directement)
+        'reserve_par_directeur_direction', 'date_reserve_directeur_direction', 'commentaire_reserve_directeur_direction',
+    }
+    
+    DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+    @staticmethod
+    def _to_decimal_or_none(val):
+        if val in (None, '', 'null', 'None'):
+            return None
+        try:
+            return Decimal(str(val))
+        except (ValueError, TypeError):
+            return None
+
+    def patch(self, request, code_division):
+        data = request.data
+
+        if not data:
+            return Response(
+                {'error': 'Aucun champ fourni.'},
+                status=400
+            )
+
+        # Récupérer la version active
+        actif = (
+            BudgetRecord.objects.filter(
+                code_division=code_division, is_active=True
+            ).first()
+            or BudgetRecord.objects.filter(
+                code_division=code_division
+            ).order_by('-version').first()
+        )
+        if not actif:
+            return Response(
+                {'error': f'Projet {code_division} introuvable.'},
+                status=404
+            )
+
+        # ✅ Vérifier que le projet est en statut 'reserve_directeur_direction'
+        if actif.statut_final != 'reserve_directeur_direction':
+            return Response(
+                {
+                    'error': f'Le projet doit être en statut "reserve_directeur_direction" pour être modifié.',
+                    'statut_actuel': actif.statut_workflow or actif.statut_final,
+                    'statut_attendu': 'reserve_directeur_direction'
+                },
+                status=403
+            )
+
+        # ✅ Vérifier que le responsable département est bien celui du département du projet
+        departement_id = getattr(request.user, 'departement_id', None)
+        
+        # Si pas dans le token, essayer de récupérer via le service param
+        if not departement_id:
+            token = request.headers.get('Authorization', '')
+            user_id = getattr(request.user, 'id', None)
+            
+            if user_id:
+                service_url = get_service_param_url()
+                try:
+                    url = f"{service_url}/users/{user_id}/"
+                    response = requests.get(url, headers={'Authorization': token}, timeout=3)
+                    if response.status_code == 200:
+                        user_data = response.json().get('data', {})
+                        departement_id = user_data.get('departement_id')
+                except Exception as e:
+                    logger.error(f"Erreur récupération user: {e}")
+        
+        if not departement_id or actif.departement_id != departement_id:
+            return Response(
+                {
+                    'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+                    'detail': 'Ce projet n\'appartient pas à votre département.'
+                },
+                status=403
+            )
+
+        # Vérifier les champs envoyés
+        unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+        readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+        if readonly_sent:
+            return Response(
+                {
+                    'error': 'Champs système non modifiables par les responsables.',
+                    'champs': list(readonly_sent),
+                },
+                status=400
+            )
+
+        if unknown_fields:
+            return Response(
+                {
+                    'error': 'Champs inconnus ou non modifiables.',
+                    'champs': list(unknown_fields),
+                },
+                status=400
+            )
+
+        # Appliquer les modifications
+        updated_fields = []
+
+        for field, value in data.items():
+            if field not in self.PATCHABLE_FIELDS:
+                continue
+
+            if field in self.DECIMAL_FIELDS:
+                value = self._to_decimal_or_none(value)
+
+            setattr(actif, field, value)
+            updated_fields.append(field)
+
+        if not updated_fields:
+            return Response(
+                {'error': 'Aucun champ valide à mettre à jour.'},
+                status=400
+            )
+
+        # ✅ Après modification, retour au statut 'soumis'
+        # et nettoyage des champs de réservation du directeur direction
+        actif.statut_final = None
+        actif.statut_workflow = 'soumis'
+        
+        # Nettoyer les champs de réservation du directeur direction
+        actif.reserve_par_directeur_direction = None
+        actif.date_reserve_directeur_direction = None
+        actif.commentaire_reserve_directeur_direction = None
+        
+        updated_fields.extend(['statut_final', 'statut_workflow', 
+                               'reserve_par_directeur_direction', 
+                               'date_reserve_directeur_direction', 
+                               'commentaire_reserve_directeur_direction'])
+
+        # Ajouter un commentaire automatique dans version_comment
+        commentaire = f"[{timezone.now()}] Modification après réservation par {request.user.nom_complet}. Retour au statut 'soumis'.\n"
+        actif.version_comment = (actif.version_comment or '') + commentaire
+        updated_fields.append('version_comment')
+
+        actif.save(update_fields=updated_fields)
+
+        serializer = BudgetRecordSerializer(
+            actif,
+            context={'request': request}
+        )
+
+        return Response(
+            {
+                'success': True,
+                'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet. Statut retourné à "soumis".',
+                'version': actif.version,
+                'champs_modifies': updated_fields,
+                'nouveau_statut': 'soumis',
+                'data': serializer.data,
+            },
+            status=200,
+        )
 # ================================================================== #
 #  DIRECTEUR RÉGION
 #  Filtre auto : region_id du token
@@ -11672,6 +12995,222 @@ class ProjetAvecVersionPrecedenteView(APIView):
         
         return Response(response_data, status=200)
 
+# views.py
+# class ProjetChampsModifiablesView(APIView):
+#     """
+#     GET /api/budget/projet/{code_division}/champs-modifiables/
+    
+#     Retourne uniquement les champs modifiés entre la version active et la version précédente
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request, code_division):
+#         # Récupérer la version active
+#         projet_actif = BudgetRecord.objects.filter(
+#             code_division=code_division, 
+#             is_active=True
+#         ).first()
+        
+#         if not projet_actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+        
+#         # Récupérer la version précédente (N-1)
+#         version_precedente = BudgetRecord.objects.filter(
+#             code_division=code_division,
+#             version=projet_actif.version - 1
+#         ).first()
+        
+#         # Fallback avec parent_id
+#         if not version_precedente and projet_actif.parent_id:
+#             version_precedente = BudgetRecord.objects.filter(
+#                 id=projet_actif.parent_id
+#             ).first()
+        
+#         # Si pas de version précédente
+#         if not version_precedente:
+#             return Response({
+#                 'success': True,
+#                 'code_division': code_division,
+#                 'message': 'Aucune version précédente (version initiale)',
+#                 'champs_modifiables': [],
+#                 'total_modifications': 0
+#             }, status=200)
+        
+#         # Comparer et extraire les champs modifiés
+#         champs_modifiables = self._get_champs_modifies(version_precedente, projet_actif)
+        
+#         return Response({
+#             'success': True,
+#             'code_division': code_division,
+#             'version_actuelle': projet_actif.version,
+#             'version_precedente': version_precedente.version,
+#             'total_modifications': len(champs_modifiables),
+#             'champs_modifiables': champs_modifiables
+#         }, status=200)
+    
+#     def _get_champs_modifies(self, ancienne_version, nouvelle_version):
+#         """
+#         Compare deux instances et retourne les champs modifiés
+#         """
+#         champs_modifies = []
+        
+#         # Exclure les champs système
+#         exclude_fields = ['id', 'created_at', 'updated_at', 'is_active', 'parent_id', 'version']
+        
+#         # Récupérer tous les champs du modèle
+#         for field in ancienne_version._meta.get_fields():
+#             field_name = field.name
+            
+#             # Skip les champs exclus et les relations
+#             if field_name in exclude_fields or field.is_relation:
+#                 continue
+            
+#             ancienne_valeur = getattr(ancienne_version, field_name)
+#             nouvelle_valeur = getattr(nouvelle_version, field_name)
+            
+#             # Si la valeur a changé
+#             if ancienne_valeur != nouvelle_valeur:
+#                 champs_modifies.append({
+#                     'champ': field_name,
+#                     'ancienne_valeur': self._format_valeur(ancienne_valeur),
+#                     'nouvelle_valeur': self._format_valeur(nouvelle_valeur)
+#                 })
+        
+#         return champs_modifies
+    
+#     def _format_valeur(self, valeur):
+#         """Formate la valeur pour la sérialisation JSON"""
+#         if valeur is None:
+#             return None
+#         if hasattr(valeur, 'strftime'):  # Date/DateTime
+#             return valeur.strftime('%Y-%m-%d %H:%M:%S')
+#         if hasattr(valeur, 'quantize'):  # Decimal
+#             return float(valeur)
+#         return valeur
+# views.py
+class ProjetChampsModifiablesView(APIView):
+    """
+    GET /api/budget/projet/{code_division}/champs-modifiables/
+    
+    Retourne uniquement les champs modifiés (exclut les champs de validation/workflow)
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, code_division):
+        # Récupérer la version active
+        projet_actif = BudgetRecord.objects.filter(
+            code_division=code_division, 
+            is_active=True
+        ).first()
+        
+        if not projet_actif:
+            return Response(
+                {'error': f'Projet {code_division} introuvable.'},
+                status=404
+            )
+        
+        # Récupérer la version précédente (N-1)
+        version_precedente = BudgetRecord.objects.filter(
+            code_division=code_division,
+            version=projet_actif.version - 1
+        ).first()
+        
+        # Fallback avec parent_id
+        if not version_precedente and projet_actif.parent_id:
+            version_precedente = BudgetRecord.objects.filter(
+                id=projet_actif.parent_id
+            ).first()
+        
+        # Si pas de version précédente
+        if not version_precedente:
+            return Response({
+                'success': True,
+                'code_division': code_division,
+                'message': 'Aucune version précédente (version initiale)',
+                'champs_modifiables': [],
+                'total_modifications': 0
+            }, status=200)
+        
+        # Comparer et extraire les champs modifiés
+        champs_modifiables = self._get_champs_modifies(version_precedente, projet_actif)
+        
+        return Response({
+            'success': True,
+            'code_division': code_division,
+            'version_actuelle': projet_actif.version,
+            'version_precedente': version_precedente.version,
+            'total_modifications': len(champs_modifiables),
+            'champs_modifiables': champs_modifiables
+        }, status=200)
+    
+    def _get_champs_modifies(self, ancienne_version, nouvelle_version):
+        """
+        Compare deux instances et retourne les champs modifiés
+        EXCLUT tous les champs de validation/workflow
+        """
+        champs_modifies = []
+        
+        # 🔥 Liste des champs à EXCLURE (non nécessaires pour l'utilisateur)
+        exclude_fields = [
+            # Champs système de versionnement
+            'id', 'created_at', 'updated_at', 'is_active', 'parent_id', 'version',
+            'version_comment', 'created_by',
+            
+            # Champs de validation workflow (pas nécessaires pour voir les modifications)
+            'date_maj_point_situation','commentaire_point_situation'
+            'type_projet',
+            'valide_par_directeur_direction', 'date_validation_directeur_direction', 'commentaire_directeur_direction',
+            'rejete_par_directeur_direction', 'date_rejet_directeur_direction', 'motif_rejet_directeur_direction',
+            'valide_par_directeur_region', 'date_validation_directeur_region', 'commentaire_directeur_region',
+            'rejete_par_directeur_region', 'date_rejet_directeur_region', 'motif_rejet_directeur_region',
+            'preapprouve_par_chef', 'date_preapprouve_chef', 'commentaire_preapprouve_chef',
+            'reserve_par_chef', 'date_reserve_chef', 'commentaire_reserve_chef',
+            'approuve_par_directeur', 'date_approuve_directeur', 'commentaire_approuve_directeur',
+            'reserve_par_directeur', 'date_reserve_directeur', 'commentaire_reserve_directeur',
+            'valide_par_divisionnaire', 'date_validation_divisionnaire', 'commentaire_divisionnaire',
+            'rejete_par_divisionnaire', 'date_rejet_divisionnaire', 'motif_rejet_divisionnaire',
+            'annule_par_divisionnaire', 'date_annulation_divisionnaire', 'motif_annulation_divisionnaire',
+            'rejete_par', 'date_rejet', 'motif_rejet',
+            
+            # IDs techniques
+            'region_id', 'structure_id', 'direction_id', 'departement_id'
+        ]
+        
+        # Récupérer tous les champs du modèle
+        for field in ancienne_version._meta.get_fields():
+            field_name = field.name
+            
+            # Skip les champs exclus et les relations
+            if field_name in exclude_fields or field.is_relation:
+                continue
+            
+            ancienne_valeur = getattr(ancienne_version, field_name)
+            nouvelle_valeur = getattr(nouvelle_version, field_name)
+            
+            # Si la valeur a changé
+            if ancienne_valeur != nouvelle_valeur:
+                champs_modifies.append({
+                    'champ': field_name,
+                    'ancienne_valeur': self._format_valeur(ancienne_valeur),
+                    'nouvelle_valeur': self._format_valeur(nouvelle_valeur)
+                })
+        
+        return champs_modifies
+    
+    def _format_valeur(self, valeur):
+        """Formate la valeur pour la sérialisation JSON"""
+        if valeur is None:
+            return None
+        if hasattr(valeur, 'strftime'):  # Date/DateTime
+            return valeur.strftime('%Y-%m-%d %H:%M:%S')
+        if hasattr(valeur, 'quantize'):  # Decimal
+            return float(valeur)
+        return valeur
 # # ================================================================== #
 # # EXPORT EXCEL - PROJETS VALIDÉS PAR DIVISIONNAIRE
 # # ================================================================== #
