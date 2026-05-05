@@ -8893,7 +8893,7 @@ class ValiderTousProjetsDivisionnaireView(APIView):
     permission_classes     = [IsDivisionnaire]
 
     def get(self, request):
-        next_year = datetime.now().year + 1
+        next_year = datetime.now().year 
 
         projets = BudgetRecord.objects.filter(
             statut_workflow='approuve_directeur',
@@ -8921,7 +8921,7 @@ class ValiderTousProjetsDivisionnaireView(APIView):
         })
 
     def post(self, request):
-        next_year = datetime.now().year + 1
+        next_year = datetime.now().year 
         action = request.data.get('action')
         commentaire = request.data.get('commentaire', '')
 
