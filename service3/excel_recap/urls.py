@@ -42,6 +42,7 @@ urlpatterns = [
     path('budget/historique/<str:code_division>/',HistoriqueProjetView.as_view(),name='historique-projet'),#valider
     path('budget/historique/<str:code_division>/actif/',HistoriqueProjetView.as_view(),{'mode': 'actif'},name='historique-projet-actif'),#valider
     path('budget/projet/<str:code_division>/with-previous/',ProjetAvecVersionPrecedenteView.as_view(),name='version-precedent-projet-actif'),
+    path('budget/projet/<str:code_division>/champs-modifiables/',ProjetChampsModifiablesView.as_view(),name='projet-champs-modifiables'),
 
 
 
@@ -61,10 +62,30 @@ urlpatterns = [
 
     # Listes par rôle
     #http://localhost:8083/recap/budget/projets/responsable/?statut_workflow=soumis
+    # 1. Projets créés par le responsable structure
+    path('responsable-structure/mes-projets/', ListeProjetsParResponsableStructureView.as_view(), name='liste_mes_projets_structure'),
     path('budget/projets/responsable/',ListeProjetsResponsableView.as_view()),#valider
-    #http://localhost:8083/recap/budget/projets/responsable-departement/?statut_workflow=soumis
-    path('budget/projets/responsable-departement/', ListeProjetsResponsableDepartementView.as_view(), name='responsable-departement-projets'),
+    path('budget/projets/responsable/reserve-directeur-region/', ListeProjetsReserveDirecteurRegionView.as_view(), name='liste_projets_reserve_directeur_region'),
+    path('budget/projets/responsable/valide-directeur-region/',ListeProjetsValideDirecteurRegionView.as_view(), name='liste_projets_valide_directeur_region'),
+    path('budget/projets/responsable/rejete-directeur-region/',ListeProjetsRejeteDirecteurRegionView.as_view(), name='liste_projets_rejete_directeur_region'),
+    #patch pour un projet reserver 
+    path('responsable/patch-projet/structure/reserve/<str:code_division>/',PatchProjetStructureReserveDirecteurRegionView.as_view(), name='patch_projet_structure_reserve'),
 
+
+
+
+    
+    
+    #http://localhost:8083/recap/budget/projets/responsable-departement/?statut_workflow=soumis
+    # 2. Projets créés par le responsable département
+    path('responsable-departement/mes-projets/', ListeProjetsParResponsableDepartementView.as_view(), name='liste_mes_projets_departement'),
+    path('budget/projets/responsable-departement/', ListeProjetsResponsableDepartementView.as_view(), name='responsable-departement-projets'),
+    path('budget/projets/responsable-departement/reserve-directeur-direction/', ListeProjetsReserveDirecteurDirectionView.as_view(), name='liste_projets_reserve_directeur_direction'),
+    path('budget/projets/responsable-departement/valide-directeur-direction/', ListeProjetsValideDirecteurDirectionView.as_view(), name='liste_projets_valide_directeur_direction'),
+    path('budget/projets/responsable-departement/rejete-directeur-direction/', ListeProjetsRejeteDirecteurDirectionView.as_view(), name='liste_projets_rejete_directeur_direction'),
+    
+    #patch pour un projet reserver
+    path('responsable/patch-projet/departement/reserve/<str:code_division>/', PatchProjetDepartementReserveDirecteurDirectionView.as_view(), name='patch_projet_departement_reserve'),
     #http://localhost:8083/recap/budget/projets/directeur-region/?statut=soumis
     # path('budget/projets/directeur-region/',ListeProjetsDirecteurRegionView.as_view()),#valider
     
