@@ -6656,12 +6656,195 @@ class PatchProjetAdminView(APIView):
 # Condition : statut_workflow = 'soumis'
 # ================================================================== #
 
+# class PatchProjetStructureView(APIView):
+#     """
+#     PATCH /api/budget/responsable/patch-projet/structure/{code_division}/
+    
+#     Permet au responsable structure de modifier les champs d'un projet
+#     à condition qu'il soit en statut 'soumis'.
+    
+#     Le responsable structure ne peut modifier que les projets de SA structure.
+    
+#     Champs modifiables :
+#     - libelle
+#     - description_technique
+#     - opportunite_projet
+#     - version_comment
+#     - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+#     Champs NON modifiables :
+#     - region, perimetre, famille, activite (champs identitaires)
+#     - code_division, annee_debut_pmt, annee_fin_pmt
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsResponsableStructure]
+
+#     PATCHABLE_FIELDS = {
+#         # Identitaires
+#         'libelle',
+#         'description_technique', 
+#         'opportunite_projet',
+#         'version_comment',
+#         # Financiers — prévisions
+#         'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+#         'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+#         'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+#         'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+#         # Financiers — mois
+#         'janvier_total',   'janvier_dont_dex',
+#         'fevrier_total',   'fevrier_dont_dex',
+#         'mars_total',      'mars_dont_dex',
+#         'avril_total',     'avril_dont_dex',
+#         'mai_total',       'mai_dont_dex',
+#         'juin_total',      'juin_dont_dex',
+#         'juillet_total',   'juillet_dont_dex',
+#         'aout_total',      'aout_dont_dex',
+#         'septembre_total', 'septembre_dont_dex',
+#         'octobre_total',   'octobre_dont_dex',
+#         'novembre_total',  'novembre_dont_dex',
+#         'decembre_total',  'decembre_dont_dex',
+#         # Réalisations
+#         'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+#         'real_s1_n_total',  'real_s1_n_dont_dex',
+#         'prev_s2_n_total',  'prev_s2_n_dont_dex',
+#     }
+    
+#     READONLY_FIELDS = {
+#         'id', 'version', 'is_active', 'parent_id',
+#         'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+#         'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+#         'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+#         'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+#         'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+#         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+#         'cout_initial_total', 'cout_initial_dont_dex',
+#         'statut_workflow', 'statut_final',
+#     }
+    
+#     DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+#     @staticmethod
+#     def _to_decimal_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return Decimal(str(val))
+#         except (ValueError, TypeError):
+#             return None
+
+#     def patch(self, request, code_division):
+#         data = request.data
+
+#         if not data:
+#             return Response(
+#                 {'error': 'Aucun champ fourni.'},
+#                 status=400
+#             )
+
+#         # Récupérer la version active
+#         actif = (
+#             BudgetRecord.objects.filter(
+#                 code_division=code_division, is_active=True
+#             ).first()
+#             or BudgetRecord.objects.filter(
+#                 code_division=code_division
+#             ).order_by('-version').first()
+#         )
+#         if not actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+
+#         # ✅ Vérifier que le projet est en statut 'soumis'
+#         if actif.statut_workflow != 'soumis':
+#             return Response(
+#                 {
+#                     'error': f'Le projet doit être en statut "soumis" pour être modifié.',
+#                     'statut_actuel': actif.statut_workflow or actif.statut_final,
+#                     'statut_attendu': 'soumis'
+#                 },
+#                 status=403
+#             )
+
+#         # ✅ Vérifier que le responsable structure est bien celui de la structure du projet
+#         structure_id = getattr(request.user, 'structure_id', None)
+#         if not structure_id or actif.structure_id != structure_id:
+#             return Response(
+#                 {
+#                     'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+#                     'detail': 'Ce projet n\'appartient pas à votre structure.'
+#                 },
+#                 status=403
+#             )
+
+#         # Vérifier les champs envoyés
+#         unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+#         readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+#         if readonly_sent:
+#             return Response(
+#                 {
+#                     'error': 'Champs système non modifiables par les responsables.',
+#                     'champs': list(readonly_sent),
+#                 },
+#                 status=400
+#             )
+
+#         if unknown_fields:
+#             return Response(
+#                 {
+#                     'error': 'Champs inconnus ou non modifiables.',
+#                     'champs': list(unknown_fields),
+#                 },
+#                 status=400
+#             )
+
+#         # Appliquer les modifications
+#         updated_fields = []
+
+#         for field, value in data.items():
+#             if field not in self.PATCHABLE_FIELDS:
+#                 continue
+
+#             if field in self.DECIMAL_FIELDS:
+#                 value = self._to_decimal_or_none(value)
+
+#             setattr(actif, field, value)
+#             updated_fields.append(field)
+
+#         if not updated_fields:
+#             return Response(
+#                 {'error': 'Aucun champ valide à mettre à jour.'},
+#                 status=400
+#             )
+
+#         actif.save(update_fields=updated_fields)
+
+#         serializer = BudgetRecordSerializer(
+#             actif,
+#             context={'request': request}
+#         )
+
+#         return Response(
+#             {
+#                 'success': True,
+#                 'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet (statut: soumis).',
+#                 'version': actif.version,
+#                 'champs_modifies': updated_fields,
+#                 'data': serializer.data,
+#             },
+#             status=200,
+#         )
 class PatchProjetStructureView(APIView):
     """
     PATCH /api/budget/responsable/patch-projet/structure/{code_division}/
     
     Permet au responsable structure de modifier les champs d'un projet
-    à condition qu'il soit en statut 'soumis'.
+    à condition qu'il soit en statut 'soumis' OU 'reserve_directeur_region'.
+    
+    Si le projet est en statut 'reserve_directeur_region', après modification
+    il revient automatiquement au statut 'soumis'.
     
     Le responsable structure ne peut modifier que les projets de SA structure.
     
@@ -6678,6 +6861,12 @@ class PatchProjetStructureView(APIView):
     """
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsResponsableStructure]
+
+    # Statuts autorisés pour la modification
+    ALLOWED_STATUTS = ['soumis', 'reserve_directeur_region']
+    
+    # Statut qui déclenche un retour à 'soumis' après modification
+    STATUT_AVEC_RETOUR = 'reserve_directeur_region'
 
     PATCHABLE_FIELDS = {
         # Identitaires
@@ -6719,6 +6908,8 @@ class PatchProjetStructureView(APIView):
         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
         'cout_initial_total', 'cout_initial_dont_dex',
         'statut_workflow', 'statut_final',
+        # Champs de réservation (ne peuvent pas être modifiés directement)
+        'reserve_par_directeur_region', 'date_reserve_directeur_region', 'commentaire_reserve_directeur_region',
     }
     
     DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
@@ -6756,13 +6947,16 @@ class PatchProjetStructureView(APIView):
                 status=404
             )
 
-        # ✅ Vérifier que le projet est en statut 'soumis'
-        if actif.statut_workflow != 'soumis':
+        # Récupérer le statut actuel (privilégier statut_final pour les états de réservation)
+        statut_actuel = actif.statut_final or actif.statut_workflow or 'unknown'
+
+        # ✅ Vérifier que le projet est dans un statut autorisé
+        if statut_actuel not in self.ALLOWED_STATUTS:
             return Response(
                 {
-                    'error': f'Le projet doit être en statut "soumis" pour être modifié.',
-                    'statut_actuel': actif.statut_workflow or actif.statut_final,
-                    'statut_attendu': 'soumis'
+                    'error': f'Le projet doit être en statut "soumis" ou "reserve_directeur_region" pour être modifié.',
+                    'statut_actuel': statut_actuel,
+                    'statuts_attendus': self.ALLOWED_STATUTS
                 },
                 status=403
             )
@@ -6819,6 +7013,32 @@ class PatchProjetStructureView(APIView):
                 status=400
             )
 
+        # ✅ Gestion du retour de statut si nécessaire
+        message_suffixe = ''
+        if statut_actuel == self.STATUT_AVEC_RETOUR:
+            # Retour au statut 'soumis' et nettoyage des champs de réservation
+            actif.statut_final = None
+            actif.statut_workflow = 'soumis'
+            
+            # Nettoyer les champs de réservation du directeur région
+            actif.reserve_par_directeur_region = None
+            actif.date_reserve_directeur_region = None
+            actif.commentaire_reserve_directeur_region = None
+            
+            updated_fields.extend(['statut_final', 'statut_workflow', 
+                                   'reserve_par_directeur_region', 
+                                   'date_reserve_directeur_region', 
+                                   'commentaire_reserve_directeur_region'])
+
+            # Ajouter un commentaire automatique dans version_comment
+            commentaire = f"[{timezone.now()}] Modification après réservation par {request.user.nom_complet if hasattr(request.user, 'nom_complet') else request.user.username}. Retour au statut 'soumis'.\n"
+            actif.version_comment = (actif.version_comment or '') + commentaire
+            updated_fields.append('version_comment')
+            
+            message_suffixe = ' Statut retourné à "soumis".'
+        else:
+            message_suffixe = f' (statut: {statut_actuel})'
+
         actif.save(update_fields=updated_fields)
 
         serializer = BudgetRecordSerializer(
@@ -6829,26 +7049,211 @@ class PatchProjetStructureView(APIView):
         return Response(
             {
                 'success': True,
-                'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet (statut: soumis).',
+                'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet.{message_suffixe}',
                 'version': actif.version,
                 'champs_modifies': updated_fields,
+                'statut_original': statut_actuel,
+                'nouveau_statut': actif.statut_workflow or actif.statut_final,
                 'data': serializer.data,
             },
             status=200,
         )
-
 
 # ================================================================== #
 # PATCH PROJET POUR RESPONSABLE DÉPARTEMENT
 # Condition : statut_workflow = 'soumis'
 # ================================================================== #
 
+# class PatchProjetDepartementView(APIView):
+#     """
+#     PATCH /api/budget/responsable/patch-projet/departement/{code_division}/
+    
+#     Permet au responsable département de modifier les champs d'un projet
+#     à condition qu'il soit en statut 'soumis'.
+    
+#     Le responsable département ne peut modifier que les projets de SON département.
+    
+#     Champs modifiables :
+#     - libelle
+#     - description_technique
+#     - opportunite_projet
+#     - version_comment
+#     - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+#     Champs NON modifiables :
+#     - direction, famille, activite (champs identitaires)
+#     - code_division, annee_debut_pmt, annee_fin_pmt
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsResponsableDepartement]
+
+#     PATCHABLE_FIELDS = {
+#         # Identitaires
+#         'libelle',
+#         'description_technique', 
+#         'opportunite_projet',
+#         'version_comment',
+#         # Financiers — prévisions
+#         'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+#         'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+#         'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+#         'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+#         # Financiers — mois
+#         'janvier_total',   'janvier_dont_dex',
+#         'fevrier_total',   'fevrier_dont_dex',
+#         'mars_total',      'mars_dont_dex',
+#         'avril_total',     'avril_dont_dex',
+#         'mai_total',       'mai_dont_dex',
+#         'juin_total',      'juin_dont_dex',
+#         'juillet_total',   'juillet_dont_dex',
+#         'aout_total',      'aout_dont_dex',
+#         'septembre_total', 'septembre_dont_dex',
+#         'octobre_total',   'octobre_dont_dex',
+#         'novembre_total',  'novembre_dont_dex',
+#         'decembre_total',  'decembre_dont_dex',
+#         # Réalisations
+#         'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+#         'real_s1_n_total',  'real_s1_n_dont_dex',
+#         'prev_s2_n_total',  'prev_s2_n_dont_dex',
+#     }
+    
+#     READONLY_FIELDS = {
+#         'id', 'version', 'is_active', 'parent_id',
+#         'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+#         'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+#         'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+#         'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+#         'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+#         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+#         'cout_initial_total', 'cout_initial_dont_dex',
+#         'statut_workflow', 'statut_final',
+#     }
+    
+#     DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+#     @staticmethod
+#     def _to_decimal_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return Decimal(str(val))
+#         except (ValueError, TypeError):
+#             return None
+
+#     def patch(self, request, code_division):
+#         data = request.data
+
+#         if not data:
+#             return Response(
+#                 {'error': 'Aucun champ fourni.'},
+#                 status=400
+#             )
+
+#         # Récupérer la version active
+#         actif = (
+#             BudgetRecord.objects.filter(
+#                 # code_division=code_division, is_active=True
+#                 code_division=code_division, is_active=True
+#             ).first()
+#             or BudgetRecord.objects.filter(
+#                 code_division=code_division
+#             ).order_by('-version').first()
+#         )
+#         if not actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+
+#         # ✅ Vérifier que le projet est en statut 'soumis'
+#         if actif.statut_workflow != 'soumis':
+#             return Response(
+#                 {
+#                     'error': f'Le projet doit être en statut "soumis" pour être modifié.',
+#                     'statut_actuel': actif.statut_workflow or actif.statut_final,
+#                     'statut_attendu': 'soumis'
+#                 },
+#                 status=403
+#             )
+
+#         # ✅ Vérifier que le responsable département est bien celui du département du projet
+#         departement_id = getattr(request.user, 'departement_id', None)
+#         if not departement_id or actif.departement_id != departement_id:
+#             return Response(
+#                 {
+#                     'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+#                     'detail': 'Ce projet n\'appartient pas à votre département.'
+#                 },
+#                 status=403
+#             )
+
+#         # Vérifier les champs envoyés
+#         unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+#         readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+#         if readonly_sent:
+#             return Response(
+#                 {
+#                     'error': 'Champs système non modifiables par les responsables.',
+#                     'champs': list(readonly_sent),
+#                 },
+#                 status=400
+#             )
+
+#         if unknown_fields:
+#             return Response(
+#                 {
+#                     'error': 'Champs inconnus ou non modifiables.',
+#                     'champs': list(unknown_fields),
+#                 },
+#                 status=400
+#             )
+
+#         # Appliquer les modifications
+#         updated_fields = []
+
+#         for field, value in data.items():
+#             if field not in self.PATCHABLE_FIELDS:
+#                 continue
+
+#             if field in self.DECIMAL_FIELDS:
+#                 value = self._to_decimal_or_none(value)
+
+#             setattr(actif, field, value)
+#             updated_fields.append(field)
+
+#         if not updated_fields:
+#             return Response(
+#                 {'error': 'Aucun champ valide à mettre à jour.'},
+#                 status=400
+#             )
+
+#         actif.save(update_fields=updated_fields)
+
+#         serializer = BudgetRecordSerializer(
+#             actif,
+#             context={'request': request}
+#         )
+
+#         return Response(
+#             {
+#                 'success': True,
+#                 'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet (statut: soumis).',
+#                 'version': actif.version,
+#                 'champs_modifies': updated_fields,
+#                 'data': serializer.data,
+#             },
+#             status=200,
+#         )
 class PatchProjetDepartementView(APIView):
     """
     PATCH /api/budget/responsable/patch-projet/departement/{code_division}/
     
     Permet au responsable département de modifier les champs d'un projet
-    à condition qu'il soit en statut 'soumis'.
+    à condition qu'il soit en statut 'soumis' OU 'reserve_directeur_direction'.
+    
+    Si le projet est en statut 'reserve_directeur_direction', après modification
+    il revient automatiquement au statut 'soumis'.
     
     Le responsable département ne peut modifier que les projets de SON département.
     
@@ -6860,11 +7265,17 @@ class PatchProjetDepartementView(APIView):
     - Tous les champs financiers (prévisions, mensuels, réalisations)
     
     Champs NON modifiables :
-    - direction, famille, activite (champs identitaires)
+    - region, direction, perimetre, famille, activite (champs identitaires)
     - code_division, annee_debut_pmt, annee_fin_pmt
     """
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsResponsableDepartement]
+
+    # Statuts autorisés pour la modification
+    ALLOWED_STATUTS = ['soumis', 'reserve_directeur_direction']
+    
+    # Statut qui déclenche un retour à 'soumis' après modification
+    STATUT_AVEC_RETOUR = 'reserve_directeur_direction'
 
     PATCHABLE_FIELDS = {
         # Identitaires
@@ -6906,6 +7317,8 @@ class PatchProjetDepartementView(APIView):
         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
         'cout_initial_total', 'cout_initial_dont_dex',
         'statut_workflow', 'statut_final',
+        # Champs de réservation (ne peuvent pas être modifiés directement)
+        'reserve_par_directeur_direction', 'date_reserve_directeur_direction', 'commentaire_reserve_directeur_direction',
     }
     
     DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
@@ -6919,6 +7332,27 @@ class PatchProjetDepartementView(APIView):
         except (ValueError, TypeError):
             return None
 
+    def _get_departement_id(self, request):
+        """Récupère l'ID du département depuis le token ou via le service externe"""
+        departement_id = getattr(request.user, 'departement_id', None)
+        
+        if not departement_id:
+            token = request.headers.get('Authorization', '')
+            user_id = getattr(request.user, 'id', None)
+            
+            if user_id:
+                service_url = get_service_param_url()
+                try:
+                    url = f"{service_url}/users/{user_id}/"
+                    response = requests.get(url, headers={'Authorization': token}, timeout=3)
+                    if response.status_code == 200:
+                        user_data = response.json().get('data', {})
+                        departement_id = user_data.get('departement_id')
+                except Exception as e:
+                    logger.error(f"Erreur récupération user: {e}")
+        
+        return departement_id
+
     def patch(self, request, code_division):
         data = request.data
 
@@ -6931,7 +7365,6 @@ class PatchProjetDepartementView(APIView):
         # Récupérer la version active
         actif = (
             BudgetRecord.objects.filter(
-                # code_division=code_division, is_active=True
                 code_division=code_division, is_active=True
             ).first()
             or BudgetRecord.objects.filter(
@@ -6944,19 +7377,23 @@ class PatchProjetDepartementView(APIView):
                 status=404
             )
 
-        # ✅ Vérifier que le projet est en statut 'soumis'
-        if actif.statut_workflow != 'soumis':
+        # Récupérer le statut actuel (privilégier statut_final pour les états de réservation)
+        statut_actuel = actif.statut_final or actif.statut_workflow or 'unknown'
+
+        # ✅ Vérifier que le projet est dans un statut autorisé
+        if statut_actuel not in self.ALLOWED_STATUTS:
             return Response(
                 {
-                    'error': f'Le projet doit être en statut "soumis" pour être modifié.',
-                    'statut_actuel': actif.statut_workflow or actif.statut_final,
-                    'statut_attendu': 'soumis'
+                    'error': f'Le projet doit être en statut "soumis" ou "reserve_directeur_direction" pour être modifié.',
+                    'statut_actuel': statut_actuel,
+                    'statuts_attendus': self.ALLOWED_STATUTS
                 },
                 status=403
             )
 
         # ✅ Vérifier que le responsable département est bien celui du département du projet
-        departement_id = getattr(request.user, 'departement_id', None)
+        departement_id = self._get_departement_id(request)
+        
         if not departement_id or actif.departement_id != departement_id:
             return Response(
                 {
@@ -7007,6 +7444,32 @@ class PatchProjetDepartementView(APIView):
                 status=400
             )
 
+        # ✅ Gestion du retour de statut si nécessaire
+        message_suffixe = ''
+        if statut_actuel == self.STATUT_AVEC_RETOUR:
+            # Retour au statut 'soumis' et nettoyage des champs de réservation
+            actif.statut_final = None
+            actif.statut_workflow = 'soumis'
+            
+            # Nettoyer les champs de réservation du directeur direction
+            actif.reserve_par_directeur_direction = None
+            actif.date_reserve_directeur_direction = None
+            actif.commentaire_reserve_directeur_direction = None
+            
+            updated_fields.extend(['statut_final', 'statut_workflow', 
+                                   'reserve_par_directeur_direction', 
+                                   'date_reserve_directeur_direction', 
+                                   'commentaire_reserve_directeur_direction'])
+
+            # Ajouter un commentaire automatique dans version_comment
+            commentaire = f"[{timezone.now()}] Modification après réservation par {request.user.nom_complet if hasattr(request.user, 'nom_complet') else request.user.username}. Retour au statut 'soumis'.\n"
+            actif.version_comment = (actif.version_comment or '') + commentaire
+            updated_fields.append('version_comment')
+            
+            message_suffixe = ' Statut retourné à "soumis".'
+        else:
+            message_suffixe = f' (statut: {statut_actuel})'
+
         actif.save(update_fields=updated_fields)
 
         serializer = BudgetRecordSerializer(
@@ -7017,14 +7480,15 @@ class PatchProjetDepartementView(APIView):
         return Response(
             {
                 'success': True,
-                'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet (statut: soumis).',
+                'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet.{message_suffixe}',
                 'version': actif.version,
                 'champs_modifies': updated_fields,
+                'statut_original': statut_actuel,
+                'nouveau_statut': actif.statut_workflow or actif.statut_final,
                 'data': serializer.data,
             },
             status=200,
         )
-
 # class PatchProjetAdminView(APIView):
 #     """
 #     PATCH /api/budget/admin/patch-projet/{code_division}/
