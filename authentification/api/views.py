@@ -102,7 +102,7 @@ def api_login(request):
         "role": getattr(user, 'role', None),
         "refresh": str(refresh),
         "access": str(refresh.access_token),
-        "user_id": str(user.id),
+        "user_id":str(user.id),
         "message": f"Logged in as {nom_complet(user)}",
         "nom_complet": nom_complet(user),
         "photo_profil": user.photo_profil.url if user.photo_profil else None,   # ✅
