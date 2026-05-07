@@ -41,7 +41,6 @@ app.use('/api/perimetres', perimetreRoutes);
 app.use('/api/structures', structureRoutes);
 app.use('/api/directions', directionRoutes);
 app.use('/api/departements', departementRoutes);
-// app.use('/api//direction/', familleDirectionRoutes); ??
 app.use('/api/familles-direction/', familleDirectionRoutes);
 
 // Health check endpoint
