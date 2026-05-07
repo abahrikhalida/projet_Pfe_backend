@@ -168,6 +168,8 @@ urlpatterns = [
     path('budget/export/valides-divisionnaire/',ExportProjetsValidesDivisionnaireView.as_view(), name='export_valides_divisionnaire'),
     
     # path('budget/export/filtres/',ExportProjetsFiltresView.as_view(),name='export_filtres'),
+    path('dashboard/counters/', DashboardCountersView.as_view(), name='dashboard-counters'),
+    path('dashboard/projets-pmt/', ProjetsPMTStatsView.as_view(), name='dashboard-projets-pmt'),
     
     
 ]

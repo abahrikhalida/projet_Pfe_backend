@@ -6836,6 +6836,228 @@ class PatchProjetAdminView(APIView):
 #             },
 #             status=200,
 #         )
+# class PatchProjetStructureView(APIView):
+#     """
+#     PATCH /api/budget/responsable/patch-projet/structure/{code_division}/
+    
+#     Permet au responsable structure de modifier les champs d'un projet
+#     à condition qu'il soit en statut 'soumis' OU 'reserve_directeur_region'.
+    
+#     Si le projet est en statut 'reserve_directeur_region', après modification
+#     il revient automatiquement au statut 'soumis'.
+    
+#     Le responsable structure ne peut modifier que les projets de SA structure.
+    
+#     Champs modifiables :
+#     - libelle
+#     - description_technique
+#     - opportunite_projet
+#     - version_comment
+#     - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+#     Champs NON modifiables :
+#     - region, perimetre, famille, activite (champs identitaires)
+#     - code_division, annee_debut_pmt, annee_fin_pmt
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsResponsableStructure]
+
+#     # Statuts autorisés pour la modification
+#     ALLOWED_STATUTS = ['soumis', 'reserve_directeur_region']
+    
+#     # Statut qui déclenche un retour à 'soumis' après modification
+#     STATUT_AVEC_RETOUR = 'reserve_directeur_region'
+
+#     PATCHABLE_FIELDS = {
+#         # Identitaires
+#         'libelle',
+#         'description_technique', 
+#         'opportunite_projet',
+#         'version_comment',
+#         # Financiers — prévisions
+#         'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+#         'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+#         'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+#         'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+#         # Financiers — mois
+#         'janvier_total',   'janvier_dont_dex',
+#         'fevrier_total',   'fevrier_dont_dex',
+#         'mars_total',      'mars_dont_dex',
+#         'avril_total',     'avril_dont_dex',
+#         'mai_total',       'mai_dont_dex',
+#         'juin_total',      'juin_dont_dex',
+#         'juillet_total',   'juillet_dont_dex',
+#         'aout_total',      'aout_dont_dex',
+#         'septembre_total', 'septembre_dont_dex',
+#         'octobre_total',   'octobre_dont_dex',
+#         'novembre_total',  'novembre_dont_dex',
+#         'decembre_total',  'decembre_dont_dex',
+#         # Réalisations
+#         'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+#         'real_s1_n_total',  'real_s1_n_dont_dex',
+#         'prev_s2_n_total',  'prev_s2_n_dont_dex',
+#     }
+    
+#     READONLY_FIELDS = {
+#         'id', 'version', 'is_active', 'parent_id',
+#         'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+#         'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+#         'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+#         'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+#         'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+#         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+#         'cout_initial_total', 'cout_initial_dont_dex',
+#         'statut_workflow', 'statut_final',
+#         # Champs de réservation (ne peuvent pas être modifiés directement)
+#         'reserve_par_directeur_region', 'date_reserve_directeur_region', 'commentaire_reserve_directeur_region',
+#     }
+    
+#     DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+#     @staticmethod
+#     def _to_decimal_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return Decimal(str(val))
+#         except (ValueError, TypeError):
+#             return None
+
+#     def patch(self, request, code_division):
+#         data = request.data
+
+#         if not data:
+#             return Response(
+#                 {'error': 'Aucun champ fourni.'},
+#                 status=400
+#             )
+
+#         # Récupérer la version active
+#         actif = (
+#             BudgetRecord.objects.filter(
+#                 code_division=code_division, is_active=True
+#             ).first()
+#             or BudgetRecord.objects.filter(
+#                 code_division=code_division
+#             ).order_by('-version').first()
+#         )
+#         if not actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+
+#         # Récupérer le statut actuel (privilégier statut_final pour les états de réservation)
+#         statut_actuel = actif.statut_final or actif.statut_workflow or 'unknown'
+
+#         # ✅ Vérifier que le projet est dans un statut autorisé
+#         if statut_actuel not in self.ALLOWED_STATUTS:
+#             return Response(
+#                 {
+#                     'error': f'Le projet doit être en statut "soumis" ou "reserve_directeur_region" pour être modifié.',
+#                     'statut_actuel': statut_actuel,
+#                     'statuts_attendus': self.ALLOWED_STATUTS
+#                 },
+#                 status=403
+#             )
+
+#         # ✅ Vérifier que le responsable structure est bien celui de la structure du projet
+#         structure_id = getattr(request.user, 'structure_id', None)
+#         if not structure_id or actif.structure_id != structure_id:
+#             return Response(
+#                 {
+#                     'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+#                     'detail': 'Ce projet n\'appartient pas à votre structure.'
+#                 },
+#                 status=403
+#             )
+
+#         # Vérifier les champs envoyés
+#         unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+#         readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+#         if readonly_sent:
+#             return Response(
+#                 {
+#                     'error': 'Champs système non modifiables par les responsables.',
+#                     'champs': list(readonly_sent),
+#                 },
+#                 status=400
+#             )
+
+#         if unknown_fields:
+#             return Response(
+#                 {
+#                     'error': 'Champs inconnus ou non modifiables.',
+#                     'champs': list(unknown_fields),
+#                 },
+#                 status=400
+#             )
+
+#         # Appliquer les modifications
+#         updated_fields = []
+
+#         for field, value in data.items():
+#             if field not in self.PATCHABLE_FIELDS:
+#                 continue
+
+#             if field in self.DECIMAL_FIELDS:
+#                 value = self._to_decimal_or_none(value)
+
+#             setattr(actif, field, value)
+#             updated_fields.append(field)
+
+#         if not updated_fields:
+#             return Response(
+#                 {'error': 'Aucun champ valide à mettre à jour.'},
+#                 status=400
+#             )
+
+#         # ✅ Gestion du retour de statut si nécessaire
+#         message_suffixe = ''
+#         if statut_actuel == self.STATUT_AVEC_RETOUR:
+#             # Retour au statut 'soumis' et nettoyage des champs de réservation
+#             actif.statut_final = None
+#             actif.statut_workflow = 'soumis'
+            
+#             # Nettoyer les champs de réservation du directeur région
+#             actif.reserve_par_directeur_region = None
+#             actif.date_reserve_directeur_region = None
+#             actif.commentaire_reserve_directeur_region = None
+            
+#             updated_fields.extend(['statut_final', 'statut_workflow', 
+#                                    'reserve_par_directeur_region', 
+#                                    'date_reserve_directeur_region', 
+#                                    'commentaire_reserve_directeur_region'])
+
+#             # Ajouter un commentaire automatique dans version_comment
+#             commentaire = f"[{timezone.now()}] Modification après réservation par {request.user.nom_complet if hasattr(request.user, 'nom_complet') else request.user.username}. Retour au statut 'soumis'.\n"
+#             actif.version_comment = (actif.version_comment or '') + commentaire
+#             updated_fields.append('version_comment')
+            
+#             message_suffixe = ' Statut retourné à "soumis".'
+#         else:
+#             message_suffixe = f' (statut: {statut_actuel})'
+
+#         actif.save(update_fields=updated_fields)
+
+#         serializer = BudgetRecordSerializer(
+#             actif,
+#             context={'request': request}
+#         )
+
+#         return Response(
+#             {
+#                 'success': True,
+#                 'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet.{message_suffixe}',
+#                 'version': actif.version,
+#                 'champs_modifies': updated_fields,
+#                 'statut_original': statut_actuel,
+#                 'nouveau_statut': actif.statut_workflow or actif.statut_final,
+#                 'data': serializer.data,
+#             },
+#             status=200,
+#         )
 class PatchProjetStructureView(APIView):
     """
     PATCH /api/budget/responsable/patch-projet/structure/{code_division}/
@@ -6853,6 +7075,9 @@ class PatchProjetStructureView(APIView):
     - description_technique
     - opportunite_projet
     - version_comment
+    - commentaire_point_situation
+    - point_situation
+    - duree_realisation
     - Tous les champs financiers (prévisions, mensuels, réalisations)
     
     Champs NON modifiables :
@@ -6874,6 +7099,9 @@ class PatchProjetStructureView(APIView):
         'description_technique', 
         'opportunite_projet',
         'version_comment',
+        'commentaire_point_situation',
+        'point_situation',
+        'duree_realisation',
         # Financiers — prévisions
         'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
         'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
@@ -7058,7 +7286,6 @@ class PatchProjetStructureView(APIView):
             },
             status=200,
         )
-
 # ================================================================== #
 # PATCH PROJET POUR RESPONSABLE DÉPARTEMENT
 # Condition : statut_workflow = 'soumis'
@@ -7245,6 +7472,252 @@ class PatchProjetStructureView(APIView):
 #             },
 #             status=200,
 #         )
+
+
+# class PatchProjetDepartementView(APIView):
+#     """
+#     PATCH /api/budget/responsable/patch-projet/departement/{code_division}/
+    
+#     Permet au responsable département de modifier les champs d'un projet
+#     à condition qu'il soit en statut 'soumis' OU 'reserve_directeur_direction'.
+    
+#     Si le projet est en statut 'reserve_directeur_direction', après modification
+#     il revient automatiquement au statut 'soumis'.
+    
+#     Le responsable département ne peut modifier que les projets de SON département.
+    
+#     Champs modifiables :
+#     - libelle
+#     - description_technique
+#     - opportunite_projet
+#     - version_comment
+#     - Tous les champs financiers (prévisions, mensuels, réalisations)
+    
+#     Champs NON modifiables :
+#     - region, direction, perimetre, famille, activite (champs identitaires)
+#     - code_division, annee_debut_pmt, annee_fin_pmt
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsResponsableDepartement]
+
+#     # Statuts autorisés pour la modification
+#     ALLOWED_STATUTS = ['soumis', 'reserve_directeur_direction']
+    
+#     # Statut qui déclenche un retour à 'soumis' après modification
+#     STATUT_AVEC_RETOUR = 'reserve_directeur_direction'
+
+#     PATCHABLE_FIELDS = {
+#         # Identitaires
+#         'libelle',
+#         'description_technique', 
+#         'opportunite_projet',
+#         'version_comment',
+#         # Financiers — prévisions
+#         'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
+#         'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
+#         'prev_n_plus4_total', 'prev_n_plus4_dont_dex',
+#         'prev_n_plus5_total', 'prev_n_plus5_dont_dex',
+#         # Financiers — mois
+#         'janvier_total',   'janvier_dont_dex',
+#         'fevrier_total',   'fevrier_dont_dex',
+#         'mars_total',      'mars_dont_dex',
+#         'avril_total',     'avril_dont_dex',
+#         'mai_total',       'mai_dont_dex',
+#         'juin_total',      'juin_dont_dex',
+#         'juillet_total',   'juillet_dont_dex',
+#         'aout_total',      'aout_dont_dex',
+#         'septembre_total', 'septembre_dont_dex',
+#         'octobre_total',   'octobre_dont_dex',
+#         'novembre_total',  'novembre_dont_dex',
+#         'decembre_total',  'decembre_dont_dex',
+#         # Réalisations
+#         'realisation_cumul_n_mins1_total', 'realisation_cumul_n_mins1_dont_dex',
+#         'real_s1_n_total',  'real_s1_n_dont_dex',
+#         'prev_s2_n_total',  'prev_s2_n_dont_dex',
+#     }
+    
+#     READONLY_FIELDS = {
+#         'id', 'version', 'is_active', 'parent_id',
+#         'created_by', 'region_id', 'structure_id', 'direction_id', 'departement_id',
+#         'upload', 'code_division', 'region', 'direction', 'perm', 'famille', 'activite',
+#         'annee_debut_pmt', 'annee_fin_pmt', 'type_projet',
+#         'prev_n_plus1_total', 'prev_n_plus1_dont_dex',
+#         'reste_a_realiser_total', 'reste_a_realiser_dont_dex',
+#         'prev_cloture_n_total', 'prev_cloture_n_dont_dex',
+#         'cout_initial_total', 'cout_initial_dont_dex',
+#         'statut_workflow', 'statut_final',
+#         # Champs de réservation (ne peuvent pas être modifiés directement)
+#         'reserve_par_directeur_direction', 'date_reserve_directeur_direction', 'commentaire_reserve_directeur_direction',
+#     }
+    
+#     DECIMAL_FIELDS = {f for f in PATCHABLE_FIELDS if '_total' in f or '_dont_dex' in f}
+
+#     @staticmethod
+#     def _to_decimal_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return Decimal(str(val))
+#         except (ValueError, TypeError):
+#             return None
+
+#     def _get_departement_id(self, request):
+#         """Récupère l'ID du département depuis le token ou via le service externe"""
+#         departement_id = getattr(request.user, 'departement_id', None)
+        
+#         if not departement_id:
+#             token = request.headers.get('Authorization', '')
+#             user_id = getattr(request.user, 'id', None)
+            
+#             if user_id:
+#                 service_url = get_service_param_url()
+#                 try:
+#                     url = f"{service_url}/users/{user_id}/"
+#                     response = requests.get(url, headers={'Authorization': token}, timeout=3)
+#                     if response.status_code == 200:
+#                         user_data = response.json().get('data', {})
+#                         departement_id = user_data.get('departement_id')
+#                 except Exception as e:
+#                     logger.error(f"Erreur récupération user: {e}")
+        
+#         return departement_id
+
+#     def patch(self, request, code_division):
+#         data = request.data
+
+#         if not data:
+#             return Response(
+#                 {'error': 'Aucun champ fourni.'},
+#                 status=400
+#             )
+
+#         # Récupérer la version active
+#         actif = (
+#             BudgetRecord.objects.filter(
+#                 code_division=code_division, is_active=True
+#             ).first()
+#             or BudgetRecord.objects.filter(
+#                 code_division=code_division
+#             ).order_by('-version').first()
+#         )
+#         if not actif:
+#             return Response(
+#                 {'error': f'Projet {code_division} introuvable.'},
+#                 status=404
+#             )
+
+#         # Récupérer le statut actuel (privilégier statut_final pour les états de réservation)
+#         statut_actuel = actif.statut_final or actif.statut_workflow or 'unknown'
+
+#         # ✅ Vérifier que le projet est dans un statut autorisé
+#         if statut_actuel not in self.ALLOWED_STATUTS:
+#             return Response(
+#                 {
+#                     'error': f'Le projet doit être en statut "soumis" ou "reserve_directeur_direction" pour être modifié.',
+#                     'statut_actuel': statut_actuel,
+#                     'statuts_attendus': self.ALLOWED_STATUTS
+#                 },
+#                 status=403
+#             )
+
+#         # ✅ Vérifier que le responsable département est bien celui du département du projet
+#         departement_id = self._get_departement_id(request)
+        
+#         if not departement_id or actif.departement_id != departement_id:
+#             return Response(
+#                 {
+#                     'error': 'Vous n\'êtes pas autorisé à modifier ce projet.',
+#                     'detail': 'Ce projet n\'appartient pas à votre département.'
+#                 },
+#                 status=403
+#             )
+
+#         # Vérifier les champs envoyés
+#         unknown_fields = set(data.keys()) - self.PATCHABLE_FIELDS - self.READONLY_FIELDS
+#         readonly_sent = set(data.keys()) & self.READONLY_FIELDS
+
+#         if readonly_sent:
+#             return Response(
+#                 {
+#                     'error': 'Champs système non modifiables par les responsables.',
+#                     'champs': list(readonly_sent),
+#                 },
+#                 status=400
+#             )
+
+#         if unknown_fields:
+#             return Response(
+#                 {
+#                     'error': 'Champs inconnus ou non modifiables.',
+#                     'champs': list(unknown_fields),
+#                 },
+#                 status=400
+#             )
+
+#         # Appliquer les modifications
+#         updated_fields = []
+
+#         for field, value in data.items():
+#             if field not in self.PATCHABLE_FIELDS:
+#                 continue
+
+#             if field in self.DECIMAL_FIELDS:
+#                 value = self._to_decimal_or_none(value)
+
+#             setattr(actif, field, value)
+#             updated_fields.append(field)
+
+#         if not updated_fields:
+#             return Response(
+#                 {'error': 'Aucun champ valide à mettre à jour.'},
+#                 status=400
+#             )
+
+#         # ✅ Gestion du retour de statut si nécessaire
+#         message_suffixe = ''
+#         if statut_actuel == self.STATUT_AVEC_RETOUR:
+#             # Retour au statut 'soumis' et nettoyage des champs de réservation
+#             actif.statut_final = None
+#             actif.statut_workflow = 'soumis'
+            
+#             # Nettoyer les champs de réservation du directeur direction
+#             actif.reserve_par_directeur_direction = None
+#             actif.date_reserve_directeur_direction = None
+#             actif.commentaire_reserve_directeur_direction = None
+            
+#             updated_fields.extend(['statut_final', 'statut_workflow', 
+#                                    'reserve_par_directeur_direction', 
+#                                    'date_reserve_directeur_direction', 
+#                                    'commentaire_reserve_directeur_direction'])
+
+#             # Ajouter un commentaire automatique dans version_comment
+#             commentaire = f"[{timezone.now()}] Modification après réservation par {request.user.nom_complet if hasattr(request.user, 'nom_complet') else request.user.username}. Retour au statut 'soumis'.\n"
+#             actif.version_comment = (actif.version_comment or '') + commentaire
+#             updated_fields.append('version_comment')
+            
+#             message_suffixe = ' Statut retourné à "soumis".'
+#         else:
+#             message_suffixe = f' (statut: {statut_actuel})'
+
+#         actif.save(update_fields=updated_fields)
+
+#         serializer = BudgetRecordSerializer(
+#             actif,
+#             context={'request': request}
+#         )
+
+#         return Response(
+#             {
+#                 'success': True,
+#                 'message': f'{len(updated_fields)} champ(s) mis à jour sur le projet.{message_suffixe}',
+#                 'version': actif.version,
+#                 'champs_modifies': updated_fields,
+#                 'statut_original': statut_actuel,
+#                 'nouveau_statut': actif.statut_workflow or actif.statut_final,
+#                 'data': serializer.data,
+#             },
+#             status=200,
+#         )
 class PatchProjetDepartementView(APIView):
     """
     PATCH /api/budget/responsable/patch-projet/departement/{code_division}/
@@ -7262,6 +7735,9 @@ class PatchProjetDepartementView(APIView):
     - description_technique
     - opportunite_projet
     - version_comment
+    - commentaire_point_situation
+    - point_situation
+    - duree_realisation
     - Tous les champs financiers (prévisions, mensuels, réalisations)
     
     Champs NON modifiables :
@@ -7283,6 +7759,9 @@ class PatchProjetDepartementView(APIView):
         'description_technique', 
         'opportunite_projet',
         'version_comment',
+        'commentaire_point_situation',
+        'point_situation',
+        'duree_realisation',
         # Financiers — prévisions
         'prev_n_plus2_total', 'prev_n_plus2_dont_dex',
         'prev_n_plus3_total', 'prev_n_plus3_dont_dex',
@@ -16713,3 +17192,254 @@ class ExportProjetsValidesDivisionnaireView(APIView):
             return float(value)
         except (ValueError, TypeError):
             return 0
+        
+# class DashboardStatsView(APIView):
+#     """
+#     GET /recap/dashboard/stats/
+    
+#     Retourne les statistiques générales pour le dashboard :
+#     - Nombre de régions
+#     - Nombre de directions
+#     - Nombre de périmètres (activités distinctes)
+#     - Nombre de familles
+#     - Nombre de départements
+#     - Nombre total de projets
+#     - Nombre de projets validés par divisionnaire
+#     - Nombre de projets soumis
+#     - Coût total
+#     - etc.
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         # Récupérer l'année cible
+#         annee_cible = datetime.now().year + 1
+        
+#         # Base queryset filtrée par année PMT
+#         qs = BudgetRecord.objects.filter(
+#             annee_debut_pmt=annee_cible
+#         )
+        
+#         # Stats des projets
+#         projets_total = qs.count()
+#         projets_valides = qs.filter(statut_final='valide_divisionnaire').count()
+#         projets_soumis = qs.filter(statut_workflow='soumis').count()
+#         projets_pre_approuves = qs.filter(statut_workflow='pre_approuve_chef').count()
+#         projets_approuves = qs.filter(statut_workflow='approuve_directeur').count()
+#         projets_reserves = qs.filter(
+#             Q(statut_workflow='reserve_directeur') | 
+#             Q(statut_workflow='reserve_chef') |
+#             Q(statut_final='reserve_directeur_region') |
+#             Q(statut_final='reserve_directeur_direction')
+#         ).count()
+        
+#         # Calcul du coût total
+#         cout_total = qs.aggregate(total=Sum('cout_initial_total'))['total'] or 0
+        
+#         # Récupérer les mappings depuis le service param
+#         token = request.headers.get('Authorization', '')
+#         service_url = get_service_param_url()
+        
+#         regions_count = 0
+#         directions_count = 0
+#         familles_count = 0
+#         departements_count = 0
+        
+#         try:
+#             headers = {'Authorization': token} if token else {}
+            
+#             # Compter les régions
+#             regions_resp = requests.get(
+#                 f"{service_url}/params/regions", 
+#                 headers=headers, 
+#                 timeout=5
+#             )
+#             if regions_resp.status_code == 200:
+#                 regions_data = regions_resp.json().get('data', [])
+#                 regions_count = len(regions_data)
+            
+#             # Compter les directions
+#             directions_resp = requests.get(
+#                 f"{service_url}/params/directions", 
+#                 headers=headers, 
+#                 timeout=5
+#             )
+#             if directions_resp.status_code == 200:
+#                 directions_data = directions_resp.json().get('data', [])
+#                 directions_count = len(directions_data)
+            
+#             # Compter les familles (structure + département)
+#             familles_resp = requests.get(
+#                 f"{service_url}/params/familles", 
+#                 headers=headers, 
+#                 timeout=5
+#             )
+#             familles_count = 0
+#             if familles_resp.status_code == 200:
+#                 familles_data = familles_resp.json().get('data', [])
+#                 familles_count += len(familles_data)
+            
+#             familles_dir_resp = requests.get(
+#                 f"{service_url}/params/familles-direction", 
+#                 headers=headers, 
+#                 timeout=5
+#             )
+#             if familles_dir_resp.status_code == 200:
+#                 familles_dir_data = familles_dir_resp.json().get('data', [])
+#                 familles_count += len(familles_dir_data)
+            
+#             # Compter les départements
+#             depts_resp = requests.get(
+#                 f"{service_url}/params/departements", 
+#                 headers=headers, 
+#                 timeout=5
+#             )
+#             if depts_resp.status_code == 200:
+#                 depts_data = depts_resp.json().get('data', [])
+#                 departements_count = len(depts_data)
+                
+#         except Exception as e:
+#             print(f"Erreur récupération stats depuis service param: {e}")
+        
+#         # Compter les périmètres (activités distinctes dans BudgetRecord)
+#         perimetres_count = qs.values('activite').distinct().count()
+        
+#         return Response({
+#             'success': True,
+#             'data': {
+#                 'regions': regions_count,
+#                 'directions': directions_count,
+#                 'perimetres': perimetres_count,
+#                 'familles': familles_count,
+#                 'departements': departements_count,
+#                 'cout_total': round(cout_total / 1000, 2),  # En milliers DA
+#                 'projets_total': projets_total,
+#                 'projets_valides': projets_valides,
+#                 'projets_soumis': projets_soumis,
+#                 'projets_pre_approuves': projets_pre_approuves,
+#                 'projets_approuves': projets_approuves,
+#                 'projets_reserves': projets_reserves,
+#                 'annee_cible': annee_cible,
+#             }
+#         }) 
+
+class DashboardCountersView(APIView):
+    """
+    GET /recap/dashboard/counters/
+    
+    Compte le nombre de régions, directions, familles, départements, périmètres
+    Uniquement depuis le service param
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import concurrent.futures
+        
+        token = request.headers.get('Authorization', '')
+        service_url = get_service_param_url()
+        
+        headers = {'Authorization': token} if token else {}
+        
+        def get_count(endpoint):
+            """Récupère le count depuis un endpoint"""
+            try:
+                response = requests.get(
+                    f"{service_url}{endpoint}", 
+                    headers=headers, 
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    # Gérer différents formats de réponse
+                    if 'count' in data:
+                        return data['count']
+                    elif 'data' in data and isinstance(data['data'], list):
+                        return len(data['data'])
+                    elif isinstance(data, list):
+                        return len(data)
+                return 0
+            except Exception as e:
+                print(f"[ERROR] {endpoint}: {e}")
+                return 0
+        
+        # Appels parallèles
+        endpoints = {
+            'regions': '/params/regions',
+            'directions': '/params/directions',
+            'familles': '/params/familles',
+            'departements': '/params/departements',
+            'perimetres': '/params/perimetres',
+            'structures': '/params/structures',
+            'familledirections': '/params/familles-direction',
+
+        }
+        
+        results = {}
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_key = {
+                executor.submit(get_count, endpoint): key 
+                for key, endpoint in endpoints.items()
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_key):
+                key = future_to_key[future]
+                try:
+                    results[key] = future.result()
+                except Exception as e:
+                    print(f"[ERROR] {key}: {e}")
+                    results[key] = 0
+        
+        return Response({
+            'success': True,
+            'data': {
+                'regions': results.get('regions', 0),
+                'directions': results.get('directions', 0),
+                'familles': results.get('familles', 0),
+                'departements': results.get('departements', 0),
+                'perimetres': results.get('perimetres', 0),
+                'structures': results.get('structures', 0),
+                'familles de directions': results.get('familledirections', 0),
+            },
+            'source': 'service_param',
+            'service_url': service_url
+        })
+# views.py - Vue renommée
+
+class ProjetsPMTStatsView(APIView):
+    """
+    GET /recap/dashboard/projets-pmt/
+    
+    Retourne les statistiques des projets PMT :
+    - nombre total de projets
+    - coût total
+    - nombre de projets validés (divisionnaire)
+    - nombre de projets soumis
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import datetime
+        from django.db.models import Sum
+        
+        annee_cible = datetime.now().year + 1
+        qs = BudgetRecord.objects.filter(annee_debut_pmt=annee_cible)
+        
+        projets_total = qs.count()
+        cout_total = qs.aggregate(total=Sum('cout_initial_total'))['total'] or 0
+        projets_valides = qs.filter(statut_final='valide_divisionnaire').count()
+        projets_soumis = qs.filter(statut_workflow='soumis').count()
+        
+        return Response({
+            'success': True,
+            'data': {
+                'annee_pmt': annee_cible,
+                'projets_total': projets_total,
+                'cout_total': cout_total ,
+                'projets_valides': projets_valides,
+                'projets_soumis': projets_soumis,
+            }
+        })
