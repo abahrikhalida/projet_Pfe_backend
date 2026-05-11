@@ -19,7 +19,10 @@ urlpatterns = [
     path('famille-par-activite/', RecapFamilleParActiviteView.as_view()),#valider
     path('export/pdf/<int:pk>/', BudgetRecordPDFView.as_view(), name='budget-pdf'),#valider
     path('region-famille/', RecapRegionFamilleView.as_view(), name='recap-region-famille'),#valider
+    path('region-famille/regional/', RecapRegionFamilleRegionalView.as_view()),
+
     path('direction-famille/',  RecapDirectionFamilleView.as_view()),
+    path('direction-famille/directeur/', RecapDirectionFamilleDirecteurView.as_view(), name='recap-direction-famille-directeur'),
     path('toutes-familles/',    RecapToutesFamillesView.as_view()),
     path('toutes-activites/',   RecapToutesActivitesView.as_view()),
     path('direction-activite/', RecapDirectionActiviteView.as_view()),
@@ -170,6 +173,9 @@ urlpatterns = [
     # path('budget/export/filtres/',ExportProjetsFiltresView.as_view(),name='export_filtres'),
     path('dashboard/counters/', DashboardCountersView.as_view(), name='dashboard-counters'),
     path('dashboard/projets-pmt/', ProjetsPMTStatsView.as_view(), name='dashboard-projets-pmt'),
+    path('dashboard/projects-by-pmt-year/', ProjectsByPMTYearView.as_view(), name='projects-by-pmt-year'),
+    path('dashboard/top-5-regions/', Top5RegionsBudgetView.as_view(), name='top-5-regions'),
+    path('ProjetsDashboard/', ListeProjetsDashboardView.as_view(), name='dashboard-projets')
     
     
 ]

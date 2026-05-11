@@ -1528,10 +1528,10 @@ class RecapParDirectionView(APIView):
 
     def get(self, request):
         from datetime import datetime
+        from django.db.models import Sum, Count
 
         qs = BudgetRecord.objects.filter(
             annee_debut_pmt=datetime.now().year + 1,
-            # statut_final='valide_divisionnaire'
             direction__isnull=False,
             region__isnull=True,
         ).exclude(direction__in=['', '-', 'None', 'null'])
@@ -1542,34 +1542,84 @@ class RecapParDirectionView(APIView):
             return Response({
                 "success": True,
                 "directions": [],
-                "total_division": build_aggregation(),  # ou {} selon besoin
+                "total_division": {
+                    'budget_total': 0,
+                    'projets_count': 0,
+                    'budget_dex': 0,
+                }
             })
 
         # 🔥 Agrégation
         data = list(
             qs.values('direction')
-            .annotate(**build_aggregation())
+            .annotate(
+                budget_total=Sum('cout_initial_total'),
+                projets_count=Count('id'),
+                budget_dex=Sum('cout_initial_dont_dex')
+            )
             .order_by('direction')
         )
 
+        # 🔥 Convertir les valeurs en nombres
+        for row in data:
+            row['budget_total'] = float(row['budget_total'] or 0)
+            row['projets_count'] = int(row['projets_count'] or 0)
+            row['budget_dex'] = float(row['budget_dex'] or 0)
 
-        # 🔥 Mapping
-        token = _get_token(request)
-        token = _get_token(request)
-        direction_mapping, _ = _get_region_mapping(token), None
-        direction_mapping = _get_region_mapping(token)
+        # 🔥 Mapping des directions
+        token = request.headers.get('Authorization', '')
+        service_url = get_service_param_url()
+        direction_mapping = {}
+
+        # Récupérer les noms des directions
+        for row in data:
+            code = str(row.get('direction', '') or '').strip()
+            if code and code not in ['', '-', 'None']:
+                try:
+                    resp = requests.get(
+                        f"{service_url}/params/directions/{code}",
+                        headers={'Authorization': token},
+                        timeout=5
+                    )
+                    if resp.status_code == 200:
+                        resp_data = resp.json().get('data', {})
+                        direction_mapping[code] = resp_data.get('nom', code)
+                except:
+                    direction_mapping[code] = code
+
+        # Formater le résultat
         result = []
         for row in data:
             code = str(row.get('direction', '') or '').strip()
-            row['direction'] = direction_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
-            result.append(row)
+            name = direction_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
+            result.append({
+                'direction': name,
+                'code_direction': code,
+                'budget_total': row['budget_total'],
+                'projets_count': row['projets_count'],
+                'budget_dex': row['budget_dex'],
+            })
 
+        # Total global
+        total = qs.aggregate(
+            budget_total=Sum('cout_initial_total'),
+            projets_count=Count('id'),
+            budget_dex=Sum('cout_initial_dont_dex')
+        )
 
-        total = qs.aggregate(**build_aggregation())
+        # Convertir les totaux
+        total_budget = float(total.get('budget_total') or 0)
+        total_projets = int(total.get('projets_count') or 0)
+        total_dex = float(total.get('budget_dex') or 0)
 
         return Response({
+            "success": True,
             "directions": result,
-            "total_division": total,
+            "total_division": {
+                'budget_total': total_budget,
+                'projets_count': total_projets,
+                'budget_dex': total_dex,
+            }
         })
 class RecapParRegionView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
@@ -1833,6 +1883,259 @@ class RecapRegionFamilleView(APIView):
             'detail': result,
             'total_global': total_global,
         })
+def _get_user_region_from_token(token):
+    """
+    Extrait la région de l'utilisateur depuis le token JWT
+    """
+    try:
+        # Le token contient region_id
+        region_id = token.get('region_id')
+        return region_id
+    except Exception:
+        return None
+
+
+import logging
+import jwt
+from rest_framework.response import Response
+from rest_framework import status
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+
+# class RecapRegionFamilleRegionalView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         try:
+#             qs = clean_queryset(_base_qs())
+            
+#             # Récupérer et décoder le token
+#             token_string = _get_token(request)
+            
+#             # Décoder le token JWT
+#             if isinstance(token_string, str):
+#                 token_data = jwt.decode(token_string, options={"verify_signature": False})
+#             else:
+#                 token_data = token_string
+            
+#             # Récupérer l'ID MongoDB de la région depuis le token
+#             user_region_id = token_data.get('region_id')
+            
+#             if not user_region_id:
+#                 return Response(
+#                     {'error': 'Région non trouvée pour cet utilisateur'},
+#                     status=status.HTTP_400_BAD_REQUEST
+#                 )
+            
+#             # Obtenir le code_region à partir de l'ID MongoDB
+#             service_url = get_service_param_url()
+#             region_code = None
+#             try:
+#                 headers = {'Authorization': f'Bearer {token_string}'} if token_string else {}
+#                 response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
+#                 if response.status_code == 200:
+#                     for region in response.json().get('data', []):
+#                         # Chercher la région avec l'ID MongoDB correspondant
+#                         if str(region.get('_id')) == str(user_region_id):
+#                             region_code = region.get('code_region')
+#                             break
+#             except Exception as e:
+#                 print(f"Error fetching region code: {e}")
+            
+#             # Si on a trouvé le code_region, l'utiliser pour le filtrage
+#             # Sinon, utiliser l'ID directement
+#             filter_value = region_code if region_code else user_region_id
+#             print(f"Filtrage par région: ID={user_region_id}, Code={region_code}, Utilisé={filter_value}")
+            
+#             # Filtrer par région
+#             qs = qs.filter(region=filter_value)
+            
+#             # Vérifier si des données existent
+#             if qs.count() == 0:
+#                 return Response({
+#                     'region_code': str(user_region_id),
+#                     'region_nom': str(user_region_id),
+#                     'familles': [],
+#                     'total_region': {f: 0 for f in NUMERIC_FIELDS},
+#                     'message': 'Aucune donnée trouvée pour cette région'
+#                 })
+            
+#             data = list(
+#                 qs.values('region', 'famille')
+#                 .annotate(**build_aggregation())
+#                 .order_by('famille')
+#             )
+            
+#             region_mapping = _get_region_mapping(token_string)
+#             famille_mapping, famille_order = _get_famille_mapping(token_string)
+            
+#             # Construire l'ordre des familles
+#             famille_ordre_dict = {}
+#             for idx, fam in enumerate(famille_order):
+#                 famille_ordre_dict[fam['nom']] = idx
+#                 famille_ordre_dict[fam['code']] = idx
+            
+#             # Récupérer le nom de la région (utiliser le code_region ou l'ID)
+#             lookup_key = str(region_code) if region_code else str(user_region_id)
+#             reg_nom = region_mapping.get(lookup_key, str(user_region_id))
+            
+#             # Agrégation des familles
+#             familles_dict = {}
+#             total_region = {f: 0 for f in NUMERIC_FIELDS}
+            
+#             for row in data:
+#                 fam_code = str(row.get('famille') or '').strip()
+#                 fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code not in ['', '-', 'None'] else '-'
+                
+#                 if fam_code not in familles_dict:
+#                     familles_dict[fam_code] = {
+#                         'famille_code': fam_code,
+#                         'famille_nom': fam_nom,
+#                         **{f: 0 for f in NUMERIC_FIELDS}
+#                     }
+                
+#                 for field in NUMERIC_FIELDS:
+#                     val = float(row.get(field) or 0)
+#                     familles_dict[fam_code][field] += val
+#                     total_region[field] += val
+            
+#             # Trier les familles
+#             familles_triees = sorted(
+#                 familles_dict.values(),
+#                 key=lambda x: famille_ordre_dict.get(x['famille_nom'], 999)
+#             )
+            
+#             return Response({
+#                 'region_code': str(user_region_id),
+#                 'region_nom': reg_nom,
+#                 'familles': familles_triees,
+#                 'total_region': total_region,
+#             })
+            
+#         except Exception as e:
+#             return Response(
+#                 {'error': f'Erreur interne: {str(e)}'},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
+class RecapRegionFamilleRegionalView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            qs = clean_queryset(_base_qs())
+            
+            # Récupérer et décoder le token
+            token_string = _get_token(request)
+            
+            # Décoder le token JWT
+            if isinstance(token_string, str):
+                token_data = jwt.decode(token_string, options={"verify_signature": False})
+            else:
+                token_data = token_string
+            
+            # Récupérer l'ID MongoDB de la région depuis le token
+            user_region_id = token_data.get('region_id')
+            
+            if not user_region_id:
+                return Response(
+                    {'error': 'Région non trouvée pour cet utilisateur'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Obtenir le code_region à partir de l'ID MongoDB
+            service_url = get_service_param_url()
+            region_code = None
+            try:
+                headers = {'Authorization': f'Bearer {token_string}'} if token_string else {}
+                response = requests.get(f"{service_url}/params/regions", headers=headers, timeout=5)
+                if response.status_code == 200:
+                    for region in response.json().get('data', []):
+                        # Chercher la région avec l'ID MongoDB correspondant
+                        if str(region.get('_id')) == str(user_region_id):
+                            region_code = region.get('code_region')
+                            break
+            except Exception as e:
+                print(f"Error fetching region code: {e}")
+            
+            # Si on a trouvé le code_region, l'utiliser pour le filtrage
+            # Sinon, utiliser l'ID directement
+            filter_value = region_code if region_code else user_region_id
+            print(f"Filtrage par région: ID={user_region_id}, Code={region_code}, Utilisé={filter_value}")
+            
+            # Filtrer par région
+            qs = qs.filter(region=filter_value)
+            
+            # Vérifier si des données existent
+            if qs.count() == 0:
+                return Response({
+                    'region_code': str(user_region_id),
+                    'region_nom': str(user_region_id),
+                    'familles': [],
+                    'total_region': {f: 0 for f in NUMERIC_FIELDS},
+                    'message': 'Aucune donnée trouvée pour cette région'
+                })
+            
+            data = list(
+                qs.values('region', 'famille')
+                .annotate(**build_aggregation())
+                .order_by('famille')
+            )
+            
+            region_mapping = _get_region_mapping(token_string)
+            famille_mapping, famille_order = _get_famille_mapping(token_string)
+            
+            # Construire l'ordre des familles
+            famille_ordre_dict = {}
+            for idx, fam in enumerate(famille_order):
+                famille_ordre_dict[fam['nom']] = idx
+                famille_ordre_dict[fam['code']] = idx
+            
+            # Récupérer le nom de la région (utiliser le code_region ou l'ID)
+            lookup_key = str(region_code) if region_code else str(user_region_id)
+            reg_nom = region_mapping.get(lookup_key, str(user_region_id))
+            
+            # Agrégation des familles
+            familles_dict = {}
+            total_region = {f: 0 for f in NUMERIC_FIELDS}
+            
+            for row in data:
+                fam_code = str(row.get('famille') or '').strip()
+                fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code not in ['', '-', 'None'] else '-'
+                
+                if fam_code not in familles_dict:
+                    familles_dict[fam_code] = {
+                        'famille_code': fam_code,
+                        'famille_nom': fam_nom,
+                        **{f: 0 for f in NUMERIC_FIELDS}
+                    }
+                
+                for field in NUMERIC_FIELDS:
+                    val = float(row.get(field) or 0)
+                    familles_dict[fam_code][field] += val
+                    total_region[field] += val
+            
+            # Trier les familles
+            familles_triees = sorted(
+                familles_dict.values(),
+                key=lambda x: famille_ordre_dict.get(x['famille_nom'], 999)
+            )
+            
+            return Response({
+                'region_code': str(user_region_id),
+                'region_nom': reg_nom,
+                'familles': familles_triees,
+                'total_region': total_region,
+            })
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Erreur interne: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 # ─────────────────────────────────────────────────────────────────
 # 1. Récap Direction × Famille  (nested)
 # ─────────────────────────────────────────────────────────────────
@@ -1920,7 +2223,162 @@ class RecapDirectionFamilleView(APIView):
             'detail':       result,
             'total_global': total_global,
         })
+class RecapDirectionFamilleDirecteurView(APIView):
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        try:
+            qs = clean_queryset(_base_qs())
+            
+    
+            
+            # Récupérer et décoder le token
+            token_string = _get_token(request)
+            
+            # Décoder le token JWT
+            if isinstance(token_string, str):
+                token_data = jwt.decode(token_string, options={"verify_signature": False})
+            else:
+                token_data = token_string
+            
+            # Récupérer l'ID MongoDB de la direction depuis le token
+            user_direction_id = token_data.get('direction_id')
+            
+            if not user_direction_id:
+                return Response(
+                    {'error': 'Direction non trouvée pour cet utilisateur'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Obtenir le code_direction à partir de l'ID MongoDB
+            service_url = get_service_param_url()
+            direction_code = None
+            direction_nom_trouve = None
+            try:
+                headers = {'Authorization': f'Bearer {token_string}'} if token_string else {}
+                response = requests.get(f"{service_url}/params/directions", headers=headers, timeout=5)
+                if response.status_code == 200:
+                    for direction in response.json().get('data', []):
+                        # Chercher la direction avec l'ID MongoDB correspondant
+                        if str(direction.get('_id')) == str(user_direction_id):
+                            direction_code = direction.get('code_direction')
+                            direction_nom_trouve = direction.get('nom_direction')
+                            break
+                        # Aussi chercher par code_direction si l'ID ne correspond pas
+                        if str(direction.get('code_direction')) == str(user_direction_id):
+                            direction_code = direction.get('code_direction')
+                            direction_nom_trouve = direction.get('nom_direction')
+                            break
+            except Exception as e:
+                print(f"Error fetching direction code: {e}")
+            
+            # Récupérer les mappings
+            direction_mapping, direction_order = _get_direction_mapping(token_string)
+            famille_mapping, famille_order = _get_famille_direction_mapping(token_string)
+            
+            # Déterminer le nom de la direction
+            lookup_key = str(direction_code) if direction_code else str(user_direction_id)
+            
+            # Essayer plusieurs méthodes pour obtenir le nom
+            if direction_nom_trouve:
+                dir_nom = direction_nom_trouve
+            else:
+                dir_nom = direction_mapping.get(lookup_key)
+                if not dir_nom:
+                    # Chercher dans direction_order
+                    for d in direction_order:
+                        if d.get('code') == lookup_key or d.get('nom') == lookup_key:
+                            dir_nom = d.get('nom')
+                            break
+                if not dir_nom:
+                    dir_nom = str(user_direction_id)
+            
+            print(f"Direction: ID={user_direction_id}, Code={direction_code}, Nom={dir_nom}")
+            
+            # Si on a trouvé le code_direction, l'utiliser pour le filtrage
+            filter_value = direction_code if direction_code else user_direction_id
+            print(f"Filtrage par direction: {filter_value}")
+            
+            # Filtrer par direction
+            qs = qs.filter(direction=filter_value)
+            print(f"Nombre d'enregistrements trouvés: {qs.count()}")
+            
+            # Si aucune donnée, essayer avec l'autre valeur
+            if qs.count() == 0 and direction_code and direction_code != user_direction_id:
+                print(f"Essai avec l'ID directement: {user_direction_id}")
+                qs_alt = clean_queryset(_base_qs()).filter(
+                    statut_final='valide_divisionnaire',
+                    direction=user_direction_id
+                )
+                print(f"Enregistrements avec ID: {qs_alt.count()}")
+                if qs_alt.count() > 0:
+                    qs = qs_alt
+                    filter_value = user_direction_id
+            
+            # Vérifier si des données existent
+            if qs.count() == 0:
+                return Response({
+                    'direction_code': str(user_direction_id),
+                    'direction_nom': dir_nom,
+                    'familles': [],
+                    'total_direction': {f: 0 for f in NUMERIC_FIELDS},
+                    'message': 'Aucune donnée trouvée pour cette direction'
+                })
+            
+            data = list(
+                qs.values('direction', 'famille')
+                .annotate(**build_aggregation())
+                .order_by('famille')
+            )
+            
+            # Construire l'ordre des familles
+            famille_ordre_dict = {}
+            for idx, fam in enumerate(famille_order):
+                famille_ordre_dict[fam['nom']] = idx
+                famille_ordre_dict[fam['code']] = idx
+            
+            # Agrégation des familles
+            familles_dict = {}
+            total_direction = {f: 0 for f in NUMERIC_FIELDS}
+            
+            for row in data:
+                fam_code = str(row.get('famille') or '').strip()
+                fam_nom = famille_mapping.get(fam_code, fam_code) if fam_code not in ['', '-', 'None'] else '-'
+                
+                if fam_code not in familles_dict:
+                    familles_dict[fam_code] = {
+                        'famille_code': fam_code,
+                        'famille_nom': fam_nom,
+                        **{f: 0 for f in NUMERIC_FIELDS}
+                    }
+                
+                for field in NUMERIC_FIELDS:
+                    val = float(row.get(field) or 0)
+                    familles_dict[fam_code][field] += val
+                    total_direction[field] += val
+            
+            # Trier les familles
+            familles_triees = sorted(
+                familles_dict.values(),
+                key=lambda x: famille_ordre_dict.get(x['famille_nom'], 999)
+            )
+            
+            return Response({
+                'direction_code': str(user_direction_id),
+                'direction_nom': dir_nom,
+                'familles': familles_triees,
+                'total_direction': total_direction,
+            })
+            
+        except Exception as e:
+            print(f"Erreur: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'error': f'Erreur interne: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # ─────────────────────────────────────────────────────────────────
 # 2. Récap Toutes Familles
@@ -3994,6 +4452,354 @@ logger = logging.getLogger(__name__)
 # CLASSE DE BASE — logique partagée
 # ══════════════════════════════════════════════════════════════════════════════
 
+# class BaseNouveauProjetView(APIView):
+
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes     = [IsAuthenticated]
+
+#     PREVISIONS_KEYS = [
+#         'prev_n_plus2', 'prev_n_plus3', 'prev_n_plus4', 'prev_n_plus5'
+#     ]
+#     MOIS_KEYS = [
+#         'janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+#         'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'
+#     ]
+
+#     # ─────────────────────────────────────────────────────────────────
+#     # UTILITAIRES FINANCIERS
+#     # ─────────────────────────────────────────────────────────────────
+
+#     @staticmethod
+#     def _to_float_or_none(val):
+#         if val in (None, '', 'null', 'None'):
+#             return None
+#         try:
+#             return float(val)
+#         except (ValueError, TypeError):
+#             return None
+
+#     @staticmethod
+#     def _safe_sum(values):
+#         filtered = [v for v in values if v is not None]
+#         return round(sum(filtered), 2) if filtered else None
+
+#     def _validate_total_ge_dex(self, total, dex, field_name):
+#         if total is not None and dex is not None and total < dex:
+#             raise ValidationError(
+#                 f"{field_name} : le total ({total}) ne peut pas être "
+#                 f"inférieur au DEX ({dex})."
+#             )
+
+#     def _validate_all_totals(self, v,
+#                               prev_n1_t, prev_n1_d,
+#                               rar_t, rar_d,
+#                               cout_t, cout_d):
+#         errors = []
+#         for key in self.MOIS_KEYS + self.PREVISIONS_KEYS:
+#             try:
+#                 self._validate_total_ge_dex(
+#                     v.get(f'{key}_total'),
+#                     v.get(f'{key}_dont_dex'),
+#                     key
+#                 )
+#             except ValidationError as e:
+#                 errors.append(str(e))
+
+#         for total, dex, label in [
+#             (prev_n1_t, prev_n1_d, "Prévision N+1"),
+#             (rar_t,     rar_d,     "Reste à réaliser (RAR)"),
+#             (cout_t,    cout_d,    "Coût initial"),
+#         ]:
+#             try:
+#                 self._validate_total_ge_dex(total, dex, label)
+#             except ValidationError as e:
+#                 errors.append(str(e))
+
+#         if errors:
+#             raise ValidationError({"total_dex_mismatches": errors})
+
+#     # ─────────────────────────────────────────────────────────────────
+#     # CHAMPS COMMUNS OBLIGATOIRES
+#     # ─────────────────────────────────────────────────────────────────
+
+#     def _validate_common_fields(self, data):
+#         """
+#         Valide activite, famille, code_division, libelle.
+#         Retourne (code_division, libelle, activite, famille).
+#         """
+#         fields = {
+#             'activite':      data.get('activite'),
+#             'famille':       data.get('famille'),
+#             'code_division': data.get('code_division'),
+#             'libelle':       data.get('libelle'),
+#         }
+#         missing = [k for k, v in fields.items() if not v]
+#         if missing:
+#             raise ValidationError(
+#                 f"Champs obligatoires manquants : {', '.join(missing)}"
+#             )
+#         return (
+#             fields['code_division'],
+#             fields['libelle'],
+#             fields['activite'],
+#             fields['famille'],
+#         )
+
+#     # ─────────────────────────────────────────────────────────────────
+#     # INTERVALLE PMT
+#     # ─────────────────────────────────────────────────────────────────
+
+#     # def _parse_pmt(self, data):
+#     #     intervalle = data.get('intervalle_pmt')
+#     #     if isinstance(intervalle, list) and len(intervalle) == 2:
+#     #         annee_debut = int(intervalle[0])
+#     #         annee_fin   = int(intervalle[1])
+#     #     else:
+#     #         annee_debut = data.get('annee_debut_pmt')
+#     #         annee_fin   = data.get('annee_fin_pmt')
+
+#     #     if annee_debut and annee_fin:
+#     #         if int(annee_debut) > int(annee_fin):
+#     #             raise ValidationError(
+#     #                 "L'année début PMT ne peut pas être supérieure à l'année fin PMT."
+#     #             )
+#     #     return annee_debut, annee_fin
+#     def _parse_pmt(self, data):
+#         """Parse l'intervalle PMT et calcule automatiquement fin = debut + 4 si nécessaire"""
+        
+#         intervalle = data.get('intervalle_pmt')
+        
+#         # Cas 1: intervalle_pmt = [debut, fin]
+#         if isinstance(intervalle, list) and len(intervalle) == 2:
+#             annee_debut = int(intervalle[0])
+#             annee_fin = int(intervalle[1])
+            
+#         # Cas 2: intervalle_pmt = [debut] seulement
+#         elif isinstance(intervalle, list) and len(intervalle) == 1:
+#             annee_debut = int(intervalle[0])
+#             annee_fin = annee_debut + 4  # ← +4 ans
+            
+#         # Cas 3: annee_debut_pmt directement
+#         else:
+#             annee_debut = data.get('annee_debut_pmt')
+#             annee_fin = data.get('annee_fin_pmt')
+            
+#             # Si fin est null mais debut existe, calculer fin = debut + 4
+#             if annee_debut and not annee_fin:
+#                 annee_fin = annee_debut + 4
+        
+#         if annee_debut and annee_fin:
+#             if int(annee_debut) > int(annee_fin):
+#                 raise ValidationError(
+#                     "L'année début PMT ne peut pas être supérieure à l'année fin PMT."
+#                 )
+        
+#         return annee_debut, annee_fin
+
+#     # ─────────────────────────────────────────────────────────────────
+#     # CHAMPS FINANCIERS + CALCULS
+#     # ─────────────────────────────────────────────────────────────────
+
+#     def _load_financials(self, data):
+#         v = {}
+#         for key in self.PREVISIONS_KEYS + self.MOIS_KEYS:
+#             v[f'{key}_total']    = self._to_float_or_none(data.get(f'{key}_total'))
+#             v[f'{key}_dont_dex'] = self._to_float_or_none(data.get(f'{key}_dont_dex'))
+
+#         # prev_n_plus1 = somme des 12 mois
+#         prev_n1_t = self._safe_sum([v[f'{m}_total']    for m in self.MOIS_KEYS])
+#         prev_n1_d = self._safe_sum([v[f'{m}_dont_dex'] for m in self.MOIS_KEYS])
+
+#         # RAR = N+2 → N+5
+#         rar_t = self._safe_sum([v[f'{k}_total']    for k in self.PREVISIONS_KEYS])
+#         rar_d = self._safe_sum([v[f'{k}_dont_dex'] for k in self.PREVISIONS_KEYS])
+
+#         # Coût initial = prev_n+1 + RAR
+#         cout_t = self._safe_sum([prev_n1_t, rar_t])
+#         cout_d = self._safe_sum([prev_n1_d, rar_d])
+
+#         logger.info(
+#             f"🧮 prev_n+1={prev_n1_t}/{prev_n1_d} | "
+#             f"RAR={rar_t}/{rar_d} | Coût={cout_t}/{cout_d}"
+#         )
+
+#         self._validate_all_totals(v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d)
+#         return v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d
+
+#     # ─────────────────────────────────────────────────────────────────
+#     # UNICITÉ code_division
+#     # ─────────────────────────────────────────────────────────────────
+
+#     def _check_code_division_unique(self, code_division):
+#         if BudgetRecord.objects.filter(code_division=code_division).exists():
+#             raise ValidationError(
+#                 f"Le code_division '{code_division}' existe déjà. "
+#                 f"Utilisez l'API de modification."
+#             )
+
+#     # ─────────────────────────────────────────────────────────────────
+#     # RÉSOLUTION CODE VIA SERVICE PARAM
+#     # ─────────────────────────────────────────────────────────────────
+
+#     def _resolve_code(self, lookup_id, source, token, service_url):
+#         """
+#         source='region'    → GET /params/regions/id/{id}    → retourne code_region
+#         source='direction' → GET /params/directions/id/{id} → retourne code_direction
+#         Retourne (code_value, label).
+#         """
+#         if source == 'region':
+#             endpoint = f"{service_url}/params/regions/id/{lookup_id}"
+#             code_key = 'code_region'
+#         else:
+#             endpoint = f"{service_url}/params/directions/{lookup_id}"
+#             code_key = 'code_direction'
+
+#         logger.info(f"📡 Résolution {source} → {endpoint}")
+
+#         try:
+#             resp = requests.get(
+#                 endpoint,
+#                 headers={'Authorization': token},
+#                 timeout=5
+#             )
+#             if resp.status_code != 200:
+#                 raise ValidationError(
+#                     f"Service '{source}' : HTTP {resp.status_code} — {resp.text[:200]}"
+#                 )
+
+#             data_resp  = resp.json().get('data', {})
+#             code_value = data_resp.get(code_key)
+#             label      = data_resp.get('nom')
+
+#             if not code_value:
+#                 raise ValidationError(
+#                     f"Champ '{code_key}' absent ou vide dans la réponse du service '{source}'."
+#                 )
+
+#             logger.info(f"✅ {source} résolu : {code_value} (label={label})")
+#             return code_value, label
+
+#         except requests.exceptions.Timeout:
+#             raise ValidationError(f"Timeout (5s) — service '{source}'.")
+#         except ValidationError:
+#             raise
+#         except Exception as e:
+#             logger.error(traceback.format_exc())
+#             raise ValidationError(f"Exception inattendue service '{source}' : {e}")
+
+#     # ─────────────────────────────────────────────────────────────────
+#     # ÉCRITURE EN BASE (commune)
+#     # ─────────────────────────────────────────────────────────────────
+
+#     def _create_budget_record(
+#         self, request,
+#         code_division, libelle, activite, famille,
+#         region,        # code_region résolu   | None pour département
+#         direction,     # code_direction résolu | None pour structure
+#         perm,          # périmètre             | None pour département
+#         region_id, structure_id, direction_id, departement_id,
+#         annee_debut_pmt, annee_fin_pmt,
+#         v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d,
+#     ):
+#         data = request.data
+
+#         upload = ExcelUpload.objects.create(
+#             file_name=f"nouveau_projet_{code_division}",
+#             status='processed'
+#         )
+#         logger.info(f"📁 ExcelUpload id={upload.id}")
+
+#         financials_keys = (
+#             [f'{k}_total'    for k in self.PREVISIONS_KEYS] +
+#             [f'{k}_dont_dex' for k in self.PREVISIONS_KEYS] +
+#             [f'{m}_total'    for m in self.MOIS_KEYS]       +
+#             [f'{m}_dont_dex' for m in self.MOIS_KEYS]
+#         )
+
+#         # 🔥 Récupérer les nouveaux champs (utiliser des noms différents)
+#         duree_realisation_val = data.get('duree_realisation')
+#         point_situation_val = data.get('point_situation')
+#         commentaire_point_situation_val = data.get('commentaire_point_situation')
+#         annee_debut_projet_val = data.get('annee_debut_projet')
+#         mois_debut_projet_val = data.get('mois_debut_projet')
+
+#         record = BudgetRecord.objects.create(
+#             upload = upload,
+
+#             # Identité
+#             code_division         = code_division,
+#             libelle               = libelle,
+#             description_technique = data.get('description_technique'),
+#             opportunite_projet    = data.get('opportunite_projet'),
+#             type_projet           = 'nouveau',
+
+#             # ── Champs séparés région / direction ─────────────────────
+#             region    = region,       # rempli pour structure,   None pour département
+#             direction = direction,    # rempli pour département, None pour structure
+
+#             # Métier
+#             famille  = famille,
+#             activite = activite,
+#             perm     = perm,          # None pour département
+
+#             # IDs utilisateur
+#             region_id      = region_id,
+#             structure_id   = structure_id,    # None pour département
+#             direction_id   = direction_id,    # None pour structure
+#             departement_id = departement_id,  # None pour structure
+#             created_by     = request.user.id,
+
+#             # PMT
+#             annee_debut_pmt = annee_debut_pmt,
+#             annee_fin_pmt   = annee_fin_pmt,
+
+#             # Versionnement
+#             parent_id       = None,
+#             version         = 1,
+#             is_active       = True,
+#             version_comment = "Création initiale",
+#             statut_workflow = 'soumis',
+#             statut_final    = None,
+
+#             # 🔥 NOUVEAUX CHAMPS (avec les bonnes variables)
+#             duree_realisation = duree_realisation_val,
+#             point_situation = point_situation_val,
+#             commentaire_point_situation = commentaire_point_situation_val,
+#             annee_debut_projet = annee_debut_projet_val,
+#             mois_debut_projet = mois_debut_projet_val,
+
+#             # Réalisation NULL (nouveau projet)
+#             realisation_cumul_n_mins1_total    = None,
+#             realisation_cumul_n_mins1_dont_dex = None,
+#             real_s1_n_total                    = None,
+#             real_s1_n_dont_dex                 = None,
+#             prev_s2_n_total                    = None,
+#             prev_s2_n_dont_dex                 = None,
+#             prev_cloture_n_total               = None,
+#             prev_cloture_n_dont_dex            = None,
+
+#             # Champs calculés
+#             prev_n_plus1_total        = prev_n1_t,
+#             prev_n_plus1_dont_dex     = prev_n1_d,
+#             reste_a_realiser_total    = rar_t,
+#             reste_a_realiser_dont_dex = rar_d,
+#             cout_initial_total        = cout_t,
+#             cout_initial_dont_dex     = cout_d,
+
+#             # Prévisions mensuelles + annuelles
+#             **{k: v[k] for k in financials_keys}
+#         )
+
+#         logger.info(
+#             f"✅ BudgetRecord id={record.id} | "
+#             f"code_division={code_division} | "
+#             f"region={region} | direction={direction} | "
+#             f"duree={duree_realisation_val} | point={point_situation_val}"
+#             f"annee={annee_debut_projet_val} | mois={mois_debut_projet_val}"
+
+#         )
+#         return record
+
 class BaseNouveauProjetView(APIView):
 
     authentication_classes = [RemoteJWTAuthentication]
@@ -4091,21 +4897,6 @@ class BaseNouveauProjetView(APIView):
     # INTERVALLE PMT
     # ─────────────────────────────────────────────────────────────────
 
-    # def _parse_pmt(self, data):
-    #     intervalle = data.get('intervalle_pmt')
-    #     if isinstance(intervalle, list) and len(intervalle) == 2:
-    #         annee_debut = int(intervalle[0])
-    #         annee_fin   = int(intervalle[1])
-    #     else:
-    #         annee_debut = data.get('annee_debut_pmt')
-    #         annee_fin   = data.get('annee_fin_pmt')
-
-    #     if annee_debut and annee_fin:
-    #         if int(annee_debut) > int(annee_fin):
-    #             raise ValidationError(
-    #                 "L'année début PMT ne peut pas être supérieure à l'année fin PMT."
-    #             )
-    #     return annee_debut, annee_fin
     def _parse_pmt(self, data):
         """Parse l'intervalle PMT et calcule automatiquement fin = debut + 4 si nécessaire"""
         
@@ -4230,7 +5021,7 @@ class BaseNouveauProjetView(APIView):
             raise ValidationError(f"Exception inattendue service '{source}' : {e}")
 
     # ─────────────────────────────────────────────────────────────────
-    # ÉCRITURE EN BASE (commune)
+    # ÉCRITURE EN BASE (commune) - AVEC VALIDATION AMÉLIORÉE
     # ─────────────────────────────────────────────────────────────────
 
     def _create_budget_record(
@@ -4243,8 +5034,105 @@ class BaseNouveauProjetView(APIView):
         annee_debut_pmt, annee_fin_pmt,
         v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d,
     ):
-        data = request.data
-
+        """
+        Crée un enregistrement budget avec validation stricte pour éviter
+        les mélanges entre projets structure et département.
+        """
+        
+        # ─────────────────────────────────────────────────────────────
+        # 🔥 VALIDATION CRITIQUE - Éviter les mélanges
+        # ─────────────────────────────────────────────────────────────
+        
+        # Un projet ne peut pas avoir à la fois region ET direction
+        if region is not None and direction is not None:
+            raise ValidationError(
+                f"Erreur interne: Un projet ne peut pas avoir à la fois "
+                f"une région ({region}) et une direction ({direction})"
+            )
+        
+        # Validation et correction pour les projets STRUCTURE
+        if region is not None:
+            # Vérifier que structure_id est présent
+            if structure_id is None:
+                raise ValidationError(
+                    "Projet structure: structure_id est requis quand region est défini"
+                )
+            
+            # Forcer direction à None si ce n'est pas déjà fait
+            if direction is not None:
+                logger.warning(
+                    f"⚠️ Projet structure: direction devrait être None mais vaut "
+                    f"'{direction}' - correction automatique"
+                )
+                direction = None
+            
+            # Forcer direction_id à None
+            if direction_id is not None:
+                logger.warning(
+                    f"⚠️ Projet structure: direction_id devrait être None mais vaut "
+                    f"{direction_id} - correction automatique"
+                )
+                direction_id = None
+            
+            # Forcer departement_id à None
+            if departement_id is not None:
+                logger.warning(
+                    f"⚠️ Projet structure: departement_id devrait être None mais vaut "
+                    f"{departement_id} - correction automatique"
+                )
+                departement_id = None
+            
+            logger.info(f"✅ Projet STRUCTURE validé: region={region}, structure_id={structure_id}")
+        
+        # Validation et correction pour les projets DÉPARTEMENT
+        elif direction is not None:
+            # Vérifier que direction_id est présent
+            if direction_id is None:
+                raise ValidationError(
+                    "Projet département: direction_id est requis quand direction est défini"
+                )
+            
+            # Forcer region à None
+            if region is not None:
+                logger.warning(
+                    f"⚠️ Projet département: region devrait être None mais vaut "
+                    f"'{region}' - correction automatique"
+                )
+                region = None
+            
+            # Forcer structure_id à None
+            if structure_id is not None:
+                logger.warning(
+                    f"⚠️ Projet département: structure_id devrait être None mais vaut "
+                    f"{structure_id} - correction automatique"
+                )
+                structure_id = None
+            
+            logger.info(f"✅ Projet DÉPARTEMENT validé: direction={direction}, direction_id={direction_id}")
+        
+        else:
+            # Ni region ni direction - erreur
+            raise ValidationError(
+                "Erreur interne: Un projet doit avoir soit une région, soit une direction"
+            )
+        
+        # Logging final avant création
+        logger.info("=" * 50)
+        logger.info("📝 CRÉATION BUDGET RECORD - RÉSUMÉ:")
+        logger.info(f"   code_division: {code_division}")
+        logger.info(f"   libelle: {libelle}")
+        logger.info(f"   region: {region}")
+        logger.info(f"   direction: {direction}")
+        logger.info(f"   structure_id: {structure_id}")
+        logger.info(f"   direction_id: {direction_id}")
+        logger.info(f"   departement_id: {departement_id}")
+        logger.info(f"   region_id: {region_id}")
+        logger.info("=" * 50)
+        
+        # ─────────────────────────────────────────────────────────────
+        # CRÉATION EN BASE
+        # ─────────────────────────────────────────────────────────────
+        
         upload = ExcelUpload.objects.create(
             file_name=f"nouveau_projet_{code_division}",
             status='processed'
@@ -4258,12 +5146,12 @@ class BaseNouveauProjetView(APIView):
             [f'{m}_dont_dex' for m in self.MOIS_KEYS]
         )
 
-        # 🔥 Récupérer les nouveaux champs (utiliser des noms différents)
-        duree_realisation_val = data.get('duree_realisation')
-        point_situation_val = data.get('point_situation')
-        commentaire_point_situation_val = data.get('commentaire_point_situation')
-        annee_debut_projet_val = data.get('annee_debut_projet')
-        mois_debut_projet_val = data.get('mois_debut_projet')
+        # Récupérer les nouveaux champs
+        duree_realisation_val = request.data.get('duree_realisation')
+        point_situation_val = request.data.get('point_situation')
+        commentaire_point_situation_val = request.data.get('commentaire_point_situation')
+        annee_debut_projet_val = request.data.get('annee_debut_projet')
+        mois_debut_projet_val = request.data.get('mois_debut_projet')
 
         record = BudgetRecord.objects.create(
             upload = upload,
@@ -4271,24 +5159,24 @@ class BaseNouveauProjetView(APIView):
             # Identité
             code_division         = code_division,
             libelle               = libelle,
-            description_technique = data.get('description_technique'),
-            opportunite_projet    = data.get('opportunite_projet'),
+            description_technique = request.data.get('description_technique'),
+            opportunite_projet    = request.data.get('opportunite_projet'),
             type_projet           = 'nouveau',
 
-            # ── Champs séparés région / direction ─────────────────────
-            region    = region,       # rempli pour structure,   None pour département
-            direction = direction,    # rempli pour département, None pour structure
+            # Champs séparés région / direction
+            region    = region,
+            direction = direction,
 
             # Métier
             famille  = famille,
             activite = activite,
-            perm     = perm,          # None pour département
+            perm     = perm,
 
             # IDs utilisateur
             region_id      = region_id,
-            structure_id   = structure_id,    # None pour département
-            direction_id   = direction_id,    # None pour structure
-            departement_id = departement_id,  # None pour structure
+            structure_id   = structure_id,
+            direction_id   = direction_id,
+            departement_id = departement_id,
             created_by     = request.user.id,
 
             # PMT
@@ -4303,7 +5191,7 @@ class BaseNouveauProjetView(APIView):
             statut_workflow = 'soumis',
             statut_final    = None,
 
-            # 🔥 NOUVEAUX CHAMPS (avec les bonnes variables)
+            # Nouveaux champs
             duree_realisation = duree_realisation_val,
             point_situation = point_situation_val,
             commentaire_point_situation = commentaire_point_situation_val,
@@ -4333,162 +5221,15 @@ class BaseNouveauProjetView(APIView):
         )
 
         logger.info(
-            f"✅ BudgetRecord id={record.id} | "
-            f"code_division={code_division} | "
-            f"region={region} | direction={direction} | "
-            f"duree={duree_realisation_val} | point={point_situation_val}"
-            f"annee={annee_debut_projet_val} | mois={mois_debut_projet_val}"
-
+            f"✅ BudgetRecord id={record.id} créé avec succès | "
+            f"region={region} | direction={direction}"
         )
+        
         return record
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # ENDPOINT 1 — STRUCTURE
 # POST /api/budget/nouveau-projet/structure/
 # ══════════════════════════════════════════════════════════════════════════════
-
-# class NouveauProjetView(BaseNouveauProjetView):
-#     """
-#     Crée un nouveau projet pour un responsable_structure.
-
-#     JWT requis  : region_id, structure_id
-#     Body requis : activite, famille, code_division, libelle, perimetre
-#     En base     : region = code_region résolu | direction = None
-#     """
-
-#     ROLE_REQUIS = 'responsable_structure'
-
-#     def post(self, request):
-#         logger.info("=" * 60)
-#         logger.info("🔵 CRÉATION PROJET [STRUCTURE]")
-#         logger.info(f"👤 {request.user} | rôle={getattr(request.user, 'role', '?')}")
-#         data = request.data
-
-#         # ── 1. Vérification du rôle ───────────────────────────────────
-#         role = getattr(request.user, 'role', None)
-#         if role != self.ROLE_REQUIS:
-#             return Response(
-#                 {'error': f"Rôle '{role}' non autorisé. Attendu : '{self.ROLE_REQUIS}'"},
-#                 status=403
-#             )
-
-#         # ── 2. IDs depuis le token JWT ────────────────────────────────
-#         region_id    = getattr(request.user, 'region_id',    None)
-#         structure_id = getattr(request.user, 'structure_id', None)
-
-#         if not region_id:
-#             return Response({'error': "region_id manquant dans le token JWT."}, status=400)
-#         if not structure_id:
-#             return Response({'error': "structure_id manquant dans le token JWT."}, status=400)
-
-#         # ── 3. Périmètre (obligatoire pour structure) ─────────────────
-#         perimetre = data.get('perimetre')
-#         if not perimetre:
-#             return Response(
-#                 {'error': "'perimetre' est obligatoire pour responsable_structure."},
-#                 status=400
-#             )
-
-#         # ── 4. Champs communs ─────────────────────────────────────────
-#         try:
-#             code_division, libelle, activite, famille = \
-#                 self._validate_common_fields(data)
-#         except ValidationError as e:
-#             return Response({'error': e.detail}, status=400)
-
-#         # ── 5. Unicité code_division ──────────────────────────────────
-#         try:
-#             self._check_code_division_unique(code_division)
-#         except ValidationError as e:
-#             return Response({'error': e.detail}, status=400)
-
-#         # ── 6. PMT ────────────────────────────────────────────────────
-#         try:
-#             annee_debut_pmt, annee_fin_pmt = self._parse_pmt(data)
-#         except ValidationError as e:
-#             return Response({'error': e.detail}, status=400)
-
-#         # ── 7. Résolution code_region via service param ───────────────
-#         token       = request.headers.get('Authorization', '')
-#         service_url = get_service_param_url()
-#         try:
-#             code_region, label = self._resolve_code(
-#                 region_id, 'region', token, service_url
-#             )
-#         except ValidationError as e:
-#             return Response({'error': e.detail}, status=503)
-
-#         # ── 8. Champs financiers ──────────────────────────────────────
-#         try:
-#             v, prev_n1_t, prev_n1_d, rar_t, rar_d, cout_t, cout_d = \
-#                 self._load_financials(data)
-#         except ValidationError as e:
-#             return Response(
-#                 {'error': 'Incohérence montants financiers.', 'details': e.detail},
-#                 status=400
-#             )
-
-#         # ── 9. Création en base ───────────────────────────────────────
-#         try:
-#             record = self._create_budget_record(
-#                 request,
-#                 code_division   = code_division,
-#                 libelle         = libelle,
-#                 activite        = activite,
-#                 famille         = famille,
-#                 region          = code_region,   # ← champ region rempli
-#                 direction       = None,           # ← champ direction vide
-#                 perm            = perimetre,
-#                 region_id       = region_id,
-#                 structure_id    = structure_id,
-#                 direction_id    = None,
-#                 departement_id  = None,
-#                 annee_debut_pmt = annee_debut_pmt,
-#                 annee_fin_pmt   = annee_fin_pmt,
-#                 v=v,
-#                 prev_n1_t=prev_n1_t, prev_n1_d=prev_n1_d,
-#                 rar_t=rar_t,         rar_d=rar_d,
-#                 cout_t=cout_t,       cout_d=cout_d,
-#             )
-#         except Exception as e:
-#             logger.error(traceback.format_exc())
-#             return Response({'error': f'Erreur création en base : {e}'}, status=500)
-
-#         # ── 10. Sérialisation ─────────────────────────────────────────
-#         try:
-#             serialized = BudgetRecordSerializer(
-#                 record, context={'request': request}
-#             ).data
-#         except Exception as e:
-#             logger.error(traceback.format_exc())
-#             return Response({'error': f'Erreur sérialisation : {e}'}, status=500)
-
-#         logger.info(f"🎉 STRUCTURE créé — id={record.id} | region={code_region}")
-#         logger.info("=" * 60)
-
-#         return Response(
-#             {
-#                 'success': True,
-#                 'message': "Projet créé (version 1 | responsable_structure)",
-#                 'data':    serialized,
-#                 'meta': {
-#                     'role':         self.ROLE_REQUIS,
-#                     'region_id':    region_id,
-#                     'structure_id': structure_id,
-#                     'region':       code_region,
-#                     'label':        label,
-#                     'record_id':    record.id,
-#                 },
-#             },
-#             status=201
-#         )
-
-
-# # ══════════════════════════════════════════════════════════════════════════════
-# # ENDPOINT 2 — DÉPARTEMENT
-# # POST /api/budget/nouveau-projet/departement/
-# # ══════════════════════════════════════════════════════════════════════════════
 
 # class NouveauProjetDepartementView(BaseNouveauProjetView):
 class NouveauProjetView(BaseNouveauProjetView):
@@ -13787,6 +14528,7 @@ class ListeProjetsDivisionnaireTousView(APIView):
             'par_region': par_region,
             'projets': BudgetRecordSerializer(qs, many=True).data
         })
+
 # class ListeProjetsDivisionnaireHistoriqueView(APIView):
 #     """
 #     GET /recap/budget/divisionnaire/historique/
@@ -17441,5 +18183,408 @@ class ProjetsPMTStatsView(APIView):
                 'cout_total': cout_total ,
                 'projets_valides': projets_valides,
                 'projets_soumis': projets_soumis,
+            }
+        })
+# views.py - Ajoutez cette vue
+
+class ProjectsByPMTYearView(APIView):
+    """
+    GET /recap/dashboard/projects-by-pmt-year/
+    
+    Retourne le nombre de projets pour chaque année de début de projet
+    Basé sur annee_debut_projet dans BudgetRecord
+    
+    Exemple de réponse :
+    {
+        "success": true,
+        "data": [
+            {"year": 2027, "count": 25},
+            {"year": 2028, "count": 18},
+            {"year": 2029, "count": 12},
+            {"year": 2030, "count": 8},
+            {"year": 2031, "count": 3}
+        ]
+    }
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Count
+        from datetime import datetime
+        
+        # Année de base (année actuelle + 1)
+        annee_base = datetime.now().year + 1
+        
+        # Générer les 5 prochaines années
+        projet_years = [annee_base + i for i in range(5)]
+        
+        # Récupérer le nombre de projets par année
+        results = []
+        
+        for year in projet_years:
+            count = BudgetRecord.objects.filter(
+                annee_debut_projet=year,  # ✅ Changé: annee_debut_projet au lieu de annee_debut_pmt
+                is_active=True  # ✅ Ajouté: filtrer uniquement les projets actifs
+            ).count()
+            
+            results.append({
+                'year': year,
+                'count': count
+            })
+        
+        return Response({
+            'success': True,
+            'data': results,
+            'metadata': {
+                'base_year': annee_base,
+                'years_range': f"{projet_years[0]} - {projet_years[-1]}",
+                'field_used': 'annee_debut_projet'  # Pour clarifier quel champ est utilisé
+            }
+        })
+class Top5RegionsBudgetView(APIView):
+    """
+    GET /api/dashboard/top-5-regions/
+    
+    Retourne le Top 5 des régions par budget total
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Sum, Count
+        # Année cible = année actuelle + 1
+        annee_cible = datetime.now().year + 1
+        
+        # Récupérer les projets actifs validés
+        qs = BudgetRecord.objects.filter(
+            is_active=True,
+            annee_debut_pmt=annee_cible 
+            # statut_workflow='valide_divisionnaire'
+        )
+        
+        # Agrégation par région (ajouter Count('id') pour le nombre de projets)
+        regions_data = list(
+            qs.values('region')
+            .annotate(
+                budget_total=Sum('cout_initial_total'),
+                projets_count=Count('id')  # ← AJOUTER CETTE LIGNE
+            )
+            .filter(budget_total__gt=0)
+            .order_by('-budget_total')[:5]
+        )
+        
+        # Service pour les noms des régions
+        token = request.headers.get('Authorization', '')
+        service_url = get_service_param_url()
+        region_mapping = {}
+        
+        # Récupérer les noms des régions
+        for region in regions_data:
+            code = region['region']
+            if code:
+                try:
+                    resp = requests.get(
+                        f"{service_url}/params/regions/{code}",
+                        headers={'Authorization': token},
+                        timeout=5
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json().get('data', {})
+                        region_mapping[code] = data.get('nom_region', code)
+                except:
+                    region_mapping[code] = code
+        
+        # Formater la réponse
+        result = []
+        for idx, region in enumerate(regions_data, 1):
+            code = region['region']
+            result.append({
+                'name': region_mapping.get(code, code),
+                'budget': region['budget_total'],
+                'projets': region['projets_count'],  # ← Maintenant ça fonctionne
+                'rank': idx
+            })
+        
+        return Response({
+            'success': True,
+            'data': result
+        })
+# class ListeProjetsDashboardView(APIView):
+#     """
+#     GET /recap/ProjetsDashboard
+#     """
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     STATUTS_FINAL = [
+#         'valide_divisionnaire',
+#         'rejete_divisionnaire',
+#         'annule_divisionnaire',
+#     ]
+
+#     def get(self, request):
+#         from django.db.models import Sum, Count, Q
+#         from datetime import datetime
+
+#         # qs = BudgetRecord.objects.filter(
+#         #     Q(statut_workflow='approuve_directeur') |
+#         #     Q(statut_final__in=self.STATUTS_FINAL)
+#         # ).order_by('-id')
+#         qs = BudgetRecord.objects
+
+#         type_projet = request.query_params.get('type_projet')
+#         code_division = request.query_params.get('code_division')
+
+#         if type_projet:
+#             qs = qs.filter(type_projet=type_projet)
+
+#         if code_division:
+#             qs = qs.filter(code_division__icontains=code_division)
+
+#         # ✅ Statistiques pour le dashboard
+#         annee_cible = datetime.now().year + 1
+        
+#         # Projets pour l'année PMT N+1
+#         qs_pmt = qs.filter(annee_debut_projet=annee_cible)
+        
+#         # Calculs pour le taux d'avancement
+#         projets_valides = qs_pmt.filter(statut_final='valide_divisionnaire').count()
+#         projets_soumis = qs_pmt.filter(statut_workflow='approuve_directeur').count()
+#         projets_total = qs_pmt.count()
+        
+#         # Budget total
+#         budget_total = qs_pmt.aggregate(total=Sum('cout_initial_total'))['total'] or 0
+        
+#         # Budget des projets validés
+#         budget_valides = qs_pmt.filter(statut_final='valide_divisionnaire').aggregate(
+#             total=Sum('cout_initial_total')
+#         )['total'] or 0
+        
+#         # Budget des projets en cours (soumis non validés)
+#         budget_en_cours = qs_pmt.filter(statut_workflow='approuve_directeur').exclude(
+#             statut_final='valide_divisionnaire'
+#         ).aggregate(total=Sum('cout_initial_total'))['total'] or 0
+
+#         # Compteurs par statut
+#         compteurs = {
+#             item['statut_final']: item['total']
+#             for item in qs.values('statut_final').annotate(total=Count('id'))
+#             if item['statut_final'] is not None
+#         }
+
+#         par_region = {
+#             item['region_id']: item['total']
+#             for item in qs.values('region_id').annotate(total=Count('id'))
+#         }
+
+#         return Response({
+#             'count': qs.count(),
+#             'compteurs_par_statut_final': compteurs,
+#             'par_region': par_region,
+#             'projets': BudgetRecordSerializer(qs, many=True).data,
+#             # ✅ NOUVELLES STATS POUR DASHBOARD
+#             'dashboard_stats': {
+#                 'pmt_year': annee_cible,
+#                 'projets_total': projets_total,
+#                 'projets_valides': projets_valides,
+#                 'projets_soumis': projets_soumis,
+#                 'projets_en_cours': projets_soumis - projets_valides,
+#                 'budget_total': round(budget_total, 2),
+#                 'budget_valides': round(budget_valides, 2),
+#                 'budget_en_cours': round(budget_en_cours, 2),
+#                 'budget_restant': round(budget_total - budget_valides, 2),
+#                 'taux_avancement': round((projets_valides / projets_total * 100), 1) if projets_total > 0 else 0,
+#                 'taux_budget_utilise': round((budget_valides / budget_total * 100), 1) if budget_total > 0 else 0,
+#             }
+#         })
+class ListeProjetsDashboardView(APIView):
+    """
+    GET /api/recap/region/simple/
+    
+    Vue simplifiée pour récupérer le nombre de projets par région
+    avec les statuts séparés.
+    Par défaut, filtre sur l'année actuelle (N).
+    """
+    authentication_classes = [RemoteJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Count, Q, Sum
+        from datetime import datetime
+        
+        # Récupérer le paramètre optionnel d'année
+        annee_param = request.query_params.get('annee')
+        
+        # Année actuelle
+        annee_actuelle = datetime.now().year
+        
+        # Si année spécifiée, l'utiliser, sinon utiliser l'année actuelle
+        if annee_param:
+            annee = int(annee_param)
+        else:
+            annee = annee_actuelle +1
+        
+        # Requête de base: projets actifs filtrés par année
+        qs = BudgetRecord.objects.filter(
+            is_active=True,
+            annee_debut_pmt=annee
+        )
+        
+        # Si tu veux aussi inclure les projets sans année (optionnel)
+        # qs = BudgetRecord.objects.filter(is_active=True)
+        # qs = qs.filter(Q(annee_debut_projet=annee) | Q(annee_debut_projet__isnull=True))
+        
+        # ================================================================
+        # DÉFINITION DES STATUTS SÉPARÉS
+        # ================================================================
+        
+        # 1. SOUMIS STRUCTURE (responsable_structure)
+        condition_soumis_structure = Q(
+            statut_workflow='soumis',
+            region__isnull=False,
+            direction__isnull=True
+        )
+        
+        # 2. SOUMIS DÉPARTEMENT (responsable_departement)
+        condition_soumis_departement = Q(
+            statut_workflow='soumis',
+            direction__isnull=False,
+            region__isnull=True
+        )
+        
+        # 3. VALIDÉS DIVISIONNAIRE
+        condition_valides = Q(statut_final='valide_divisionnaire')
+        
+        # 4. REJETÉS DIRECTEUR RÉGION
+        condition_rejetes_region = Q(statut_final='rejete_directeur_region')
+        
+        # 5. REJETÉS DIRECTEUR DIRECTION
+        condition_rejetes_direction = Q(statut_final='rejete_directeur_direction')
+        
+        # 6. REJETÉS DIVISIONNAIRE
+        condition_rejetes_divisionnaire = Q(statut_final='rejete_divisionnaire')
+        
+        # ================================================================
+        # AGRÉGATION PAR RÉGION
+        # ================================================================
+        
+        regions_data = list(
+            qs.values('region')
+            .annotate(
+                total=Count('id'),
+                soumis_structure=Count('id', filter=condition_soumis_structure),
+                soumis_departement=Count('id', filter=condition_soumis_departement),
+                valides=Count('id', filter=condition_valides),
+                rejetes_region=Count('id', filter=condition_rejetes_region),
+                rejetes_direction=Count('id', filter=condition_rejetes_direction),
+                rejetes_divisionnaire=Count('id', filter=condition_rejetes_divisionnaire),
+                budget_total=Sum('cout_initial_total')
+            )
+            .filter(region__isnull=False)
+            .exclude(region__in=['', '-', 'None', 'null'])
+            .order_by('-total')
+        )
+        
+        # ================================================================
+        # RÉCUPÉRATION DES NOMS DES RÉGIONS
+        # ================================================================
+        
+        token = request.headers.get('Authorization', '')
+        service_url = get_service_param_url()
+        region_mapping = {}
+        
+        codes_uniques = list(set([r['region'] for r in regions_data if r['region']]))
+        
+        for code in codes_uniques:
+            if code:
+                try:
+                    resp = requests.get(
+                        f"{service_url}/params/regions/{code}",
+                        headers={'Authorization': token},
+                        timeout=5
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json().get('data', {})
+                        region_mapping[code] = data.get('nom_region', code)
+                except:
+                    region_mapping[code] = code
+        
+        # ================================================================
+        # FORMATAGE DE LA RÉPONSE
+        # ================================================================
+        
+        result = []
+        for region in regions_data:
+            code = region['region']
+            total = region['total']
+            valides = region['valides']
+            soumis_total = region['soumis_structure'] + region['soumis_departement']
+            rejetes_total = region['rejetes_region'] + region['rejetes_direction'] + region['rejetes_divisionnaire']
+            
+            result.append({
+                'code': code,
+                'nom': region_mapping.get(code, code),
+                'total': total,
+                'soumis': {
+                    'total': soumis_total,
+                    'structure': region['soumis_structure'],
+                    'departement': region['soumis_departement']
+                },
+                'valides': valides,
+                'rejetes': {
+                    'total': rejetes_total,
+                    'directeur_region': region['rejetes_region'],
+                    'directeur_direction': region['rejetes_direction'],
+                    'divisionnaire': region['rejetes_divisionnaire']
+                },
+                'budget_total': float(region['budget_total'] or 0),
+                'taux_validation': round((valides / total * 100), 1) if total > 0 else 0
+            })
+        
+        # ================================================================
+        # TOTAUX GÉNÉRAUX
+        # ================================================================
+        
+        total_projets = qs.count()
+        total_soumis_structure = qs.filter(condition_soumis_structure).count()
+        total_soumis_departement = qs.filter(condition_soumis_departement).count()
+        total_valides = qs.filter(condition_valides).count()
+        total_rejetes_region = qs.filter(condition_rejetes_region).count()
+        total_rejetes_direction = qs.filter(condition_rejetes_direction).count()
+        total_rejetes_divisionnaire = qs.filter(condition_rejetes_divisionnaire).count()
+        budget_global = qs.aggregate(total=Sum('cout_initial_total'))['total'] or 0
+        
+        total_soumis = total_soumis_structure + total_soumis_departement
+        total_rejetes = total_rejetes_region + total_rejetes_direction + total_rejetes_divisionnaire
+        total_en_cours = total_projets - total_soumis - total_valides - total_rejetes
+        
+        return Response({
+            'success': True,
+            'data': {
+                'regions': result,
+                'total_general': {
+                    'projets': total_projets,
+                    'soumis': {
+                        'total': total_soumis,
+                        'structure': total_soumis_structure,
+                        'departement': total_soumis_departement
+                    },
+                    'valides': total_valides,
+                    'rejetes': {
+                        'total': total_rejetes,
+                        'directeur_region': total_rejetes_region,
+                        'directeur_direction': total_rejetes_direction,
+                        'divisionnaire': total_rejetes_divisionnaire
+                    },
+                    'en_cours': total_en_cours,
+                    'budget_total': float(budget_global),
+                    'taux_validation': round((total_valides / total_projets * 100), 1) if total_projets > 0 else 0
+                },
+                'filtres': {
+                
+                    'annee_actuelle': annee_actuelle,
+                    'pmt_year': annee_actuelle + 1
+                }
             }
         })
