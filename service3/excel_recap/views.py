@@ -1384,7 +1384,7 @@ def _base_qs():
     next_year = datetime.now().year + 1
     return BudgetRecord.objects.filter(
         annee_debut_pmt=next_year,
-        # statut_final='valide_divisionnaire'
+        statut_final='valide_divisionnaire'
     )
 # def _base_qs_structure():
 #     """Projets STRUCTURE (ceux qui ont une région)"""
@@ -1685,7 +1685,10 @@ class RecapParActiviteView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = clean_queryset(_base_qs())
+        # qs = clean_queryset(_base_qs())
+        qs = clean_queryset(_base_qs()).filter(
+                    statut_final='valide_divisionnaire'
+                )
 
         data = list(
             qs.values('activite')
