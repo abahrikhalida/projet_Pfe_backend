@@ -100,16 +100,16 @@ DATABASES = {
     }
 }
 #database de lamia
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'test3',
-        'USER': 'root',  # Ou un autre utilisateur
-        'PASSWORD': 'root',
-        'HOST': 'localhost',
-        'PORT': '3306',  # Port par défaut de MySQL
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': 'test3',
+#         'USER': 'root',  # Ou un autre utilisateur
+#         'PASSWORD': 'root',
+#         'HOST': 'localhost',
+#         'PORT': '3306',  # Port par défaut de MySQL
+#     }
+# }
 #database de lamia
 # DATABASES = {
 #     'default': {
