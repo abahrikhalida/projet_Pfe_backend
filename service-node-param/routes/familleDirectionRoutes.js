@@ -9,12 +9,13 @@ const {
     updateFamilleDirection,
     deleteFamilleDirection,
     hardDeleteFamilleDirection,
-    getFamillesDirectionByDirectionCode
+    getFamillesDirectionByDirectionCode,
+    // getFamillesByDirection
 } = require('../controllers/familleDirectionController');
 
 router.post('/', createFamilleDirection);
 router.get('/', getAllFamillesDirection);
-// router.get('/direction/:directionId', getFamillesByDirection);
+router.get('/direction/:directionId', getFamillesByDirection);
 router.get('/direction/:directionCode', getFamillesDirectionByDirectionCode);
 
 router.get('/:id', getFamilleDirectionById);
