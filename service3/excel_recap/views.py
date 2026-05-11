@@ -1522,6 +1522,55 @@ def _base_qs():
 #             "data": list(data),
 #             "count": qs.count()
 #         })
+# class RecapParDirectionView(APIView):
+#     authentication_classes = [RemoteJWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         from datetime import datetime
+
+#         qs = BudgetRecord.objects.filter(
+#             annee_debut_pmt=datetime.now().year + 1,
+#             # statut_final='valide_divisionnaire'
+#             direction__isnull=False,
+#             region__isnull=True,
+#         ).exclude(direction__in=['', '-', 'None', 'null'])
+
+#         print(f"[DEBUG] Total projets département: {qs.count()}")
+
+#         if qs.count() == 0:
+#             return Response({
+#                 "success": True,
+#                 "directions": [],
+#                 "total_division": build_aggregation(),  # ou {} selon besoin
+#             })
+
+#         # 🔥 Agrégation
+#         data = list(
+#             qs.values('direction')
+#             .annotate(**build_aggregation())
+#             .order_by('direction')
+#         )
+
+
+#         # 🔥 Mapping
+#         token = _get_token(request)
+#         token = _get_token(request)
+#         direction_mapping, _ = _get_region_mapping(token), None
+#         direction_mapping = _get_region_mapping(token)
+#         result = []
+#         for row in data:
+#             code = str(row.get('direction', '') or '').strip()
+#             row['direction'] = direction_mapping.get(code, code) if code and code not in ['', '-', 'None'] else '-'
+#             result.append(row)
+
+
+#         total = qs.aggregate(**build_aggregation())
+
+#         return Response({
+#             "directions": result,
+#             "total_division": total,
+#         })
 class RecapParDirectionView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -1538,7 +1587,10 @@ class RecapParDirectionView(APIView):
 
         print(f"[DEBUG] Total projets département: {qs.count()}")
 
+        # Si aucun résultat, retourner des valeurs par défaut (zéro pour les totaux)
         if qs.count() == 0:
+            # Créer un dictionnaire de zéros pour tous les champs numériques
+            zero_totals = {field: 0 for field in NUMERIC_FIELDS}
             return Response({
                 "success": True,
                 "directions": [],
@@ -1547,6 +1599,7 @@ class RecapParDirectionView(APIView):
                     'projets_count': 0,
                     'budget_dex': 0,
                 }
+                "total_division": zero_totals,  # ← Fix: utiliser des zéros au lieu de build_aggregation()
             })
 
         # 🔥 Agrégation
@@ -1588,6 +1641,10 @@ class RecapParDirectionView(APIView):
                     direction_mapping[code] = code
 
         # Formater le résultat
+        # 🔥 Mapping (correction des lignes en double)
+        token = _get_token(request)
+        direction_mapping = _get_region_mapping(token)  # ← Supprimé les doublons et None
+        
         result = []
         for row in data:
             code = str(row.get('direction', '') or '').strip()
@@ -1611,6 +1668,17 @@ class RecapParDirectionView(APIView):
         total_budget = float(total.get('budget_total') or 0)
         total_projets = int(total.get('projets_count') or 0)
         total_dex = float(total.get('budget_dex') or 0)
+        # Récupérer les totaux
+        total = qs.aggregate(**build_aggregation())
+        
+        # 🔥 FIX CRITICAL: Convertir les objets Sum en nombres JSON-serializable
+        total_converted = {}
+        for key, value in total.items():
+            if value is None:
+                total_converted[key] = 0
+            else:
+                # Convertir l'objet Sum en float (ou int selon votre besoin)
+                total_converted[key] = float(value) if hasattr(value, 'resolve_expression') else value
 
         return Response({
             "success": True,
@@ -1620,6 +1688,7 @@ class RecapParDirectionView(APIView):
                 'projets_count': total_projets,
                 'budget_dex': total_dex,
             }
+            "total_division": total_converted,  # ← Maintenant sérialisable en JSON
         })
 class RecapParRegionView(APIView):
     authentication_classes = [RemoteJWTAuthentication]
