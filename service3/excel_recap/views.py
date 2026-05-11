@@ -1626,7 +1626,12 @@ class RecapParRegionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = clean_queryset(_base_qs())
+        qs = BudgetRecord.objects.filter(
+            annee_debut_pmt=datetime.now().year + 1,
+            direction__isnull=True,
+            region__isnull=False,
+        ).exclude(region__in=['', '-', 'None', 'null'])
+
 
         data = list(
             qs.values('region')
@@ -1685,10 +1690,13 @@ class RecapParActiviteView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # qs = clean_queryset(_base_qs())
-        qs = clean_queryset(_base_qs()).filter(
-                    statut_final='valide_divisionnaire'
-                )
+        qs = clean_queryset(_base_qs())
+        # qs = BudgetRecord.objects.filter(
+        #     annee_debut_pmt=datetime.now().year + 1,
+        #     statut_final='valide_divisionnaire'
+           
+            
+        # )
 
         data = list(
             qs.values('activite')
@@ -2570,10 +2578,11 @@ class RecapToutesFamillesView(APIView):
             for idx, f in enumerate(merged_order)
         }
 
-        # 🔥 queryset global (comme tu veux)
         qs = BudgetRecord.objects.filter(
             annee_debut_pmt=datetime.now().year + 1,
+            statut_final='valide_divisionnaire'
         )
+        # qs = clean_queryset(_base_qs())
 
         data = list(
             qs.values('famille')
@@ -2651,8 +2660,9 @@ class RecapToutesActivitesView(APIView):
 
         qs = BudgetRecord.objects.filter(
             annee_debut_pmt=datetime.now().year + 1,
-            # statut_final='valide_divisionnaire'
+            statut_final='valide_divisionnaire'
         )
+        # qs = clean_queryset(_base_qs())
 
         data = list(
             qs.values('activite')
